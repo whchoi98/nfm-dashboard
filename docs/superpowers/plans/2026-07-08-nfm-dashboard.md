@@ -118,7 +118,7 @@ SSE 이벤트 규약(app 공통): `event: status|chunk|done|error`, data는 JSON
 **Interfaces:**
 - Produces: npm workspaces(`infra`,`app`,`collector`), `npm -w collector test` 실행 가능 상태.
 
-- [ ] **Step 1: 루트 파일 생성**
+- [x] **Step 1: 루트 파일 생성**
 
 ```jsonc
 // package.json
@@ -134,7 +134,7 @@ SSE 이벤트 규약(app 공통): `event: status|chunk|done|error`, data는 JSON
 `.gitignore`: `node_modules/`, `.next/`, `cdk.out/`, `dist/`, `__pycache__/`, `.pytest_cache/`, `test-results/`, `*.tsbuildinfo`, `.env*`
 `.nvmrc`: `22`
 
-- [ ] **Step 2: collector 워크스페이스**
+- [x] **Step 2: collector 워크스페이스**
 
 ```jsonc
 // collector/package.json
@@ -156,11 +156,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { include: ['src/**/*.test.ts'] } });
 ```
 
-- [ ] **Step 3: 설치 및 확인**
+- [x] **Step 3: 설치 및 확인**
 
 Run: `npm install` → lockfile 생성. `npx -w collector vitest run` → "No test files found" (정상 — 아직 테스트 없음).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A && git commit -m "chore: monorepo scaffold (workspaces: infra/app/collector)"
@@ -179,7 +179,7 @@ git add -A && git commit -m "chore: monorepo scaffold (workspaces: infra/app/col
   `dedupeEdges(edges: FlowEdge[]): FlowEdge[]` (같은 sk 조합이면 value 큰 쪽 유지).
 - `RawRow`는 `GetQueryResultsMonitorTopContributors`의 `MonitorTopContributorsRow` shape (camelCase: `localIp, localInstanceId, localSubnetId, localAz, localVpcId, localRegion, remote*, snatIp, dnatIp, targetPort, value, traversedConstructs, kubernetesMetadata:{localPodName,localPodNamespace,localServiceName,remotePodName,remotePodNamespace,remoteServiceName}`).
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```ts
 // collector/src/normalize.test.ts
@@ -238,9 +238,9 @@ it('dedupeEdges keeps max value per (metric,category,edgeHash)', () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** — Run: `npx -w collector vitest run` / Expected: FAIL `Cannot find module './normalize.js'`
+- [x] **Step 2: 실패 확인** — Run: `npx -w collector vitest run` / Expected: FAIL `Cannot find module './normalize.js'`
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```ts
 // collector/src/normalize.ts
@@ -305,8 +305,8 @@ export function dedupeEdges(edges: FlowEdge[]): FlowEdge[] {
 
 `collector/src/types.ts`는 본 문서 "공유 인터페이스" 블록을 그대로 생성.
 
-- [ ] **Step 4: 통과 확인** — Run: `npx -w collector vitest run` / Expected: 5 passed
-- [ ] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): flow normalization with direction-independent edge hash"`
+- [x] **Step 4: 통과 확인** — Run: `npx -w collector vitest run` / Expected: 5 passed
+- [x] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): flow normalization with direction-independent edge hash"`
 
 ### Task 3: Collector — NFM 쿼리 오케스트레이터
 
@@ -321,7 +321,7 @@ export function dedupeEdges(edges: FlowEdge[]): FlowEdge[] {
   - `CycleStats = { started: number; succeeded: number; failed: number; throttled: number; rows: number }`
 - 내부 규칙: 쿼리당 `StartQueryMonitorTopContributors`(limit 100) → 2초 간격 `GetQueryStatus...` 폴링(최대 60회) → SUCCEEDED 시 `GetQueryResults...`(nextToken 루프) → 행마다 normalizeRow. FAILED/타임아웃이면 stats.failed 증가 후 계속. ThrottlingException은 1s→2s→4s→8s(+jitter) 재시도 4회 후 failed 처리, stats.throttled 집계. 동시 실행은 `concurrency` 슬롯 풀로 제한. RTT 쿼리의 unit은 응답의 `unit` 필드 사용(기본 'Count').
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```ts
 // collector/src/nfm-query.test.ts
@@ -380,9 +380,9 @@ it('paginates results with nextToken', async () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** — Run: `npx -w collector vitest run nfm-query` / Expected: FAIL (module not found)
+- [x] **Step 2: 실패 확인** — Run: `npx -w collector vitest run nfm-query` / Expected: FAIL (module not found)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```ts
 // collector/src/nfm-query.ts
@@ -463,8 +463,8 @@ export async function runQueryMatrix(client: NetworkFlowMonitorClient, spec: Mat
 }
 ```
 
-- [ ] **Step 4: 통과 확인** — Run: `npx -w collector vitest run` / Expected: 9 passed (Task 2의 5 + 신규 4)
-- [ ] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): async NFM query orchestrator with concurrency and backoff"`
+- [x] **Step 4: 통과 확인** — Run: `npx -w collector vitest run` / Expected: 9 passed (Task 2의 5 + 신규 4)
+- [x] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): async NFM query orchestrator with concurrency and backoff"`
 
 ### Task 4: Collector — 저장 + 토폴로지 스냅샷
 
@@ -479,7 +479,7 @@ export async function runQueryMatrix(client: NetworkFlowMonitorClient, spec: Mat
   - `buildTopology(edges: FlowEdge[], monitorToCluster: Record<string,string>): TopologySnapshot` — 노드 id는 `endpointKey()` 값. pod가 아닌 endpoint는 instanceId→`node`, 그 외→`external`. 엣지는 edgeHash별로 메트릭 병합, 상위 2000개(DATA_TRANSFERRED 내림차순)로 트림. `generatedAt`은 인자 `now: string`으로 받음(테스트 가능성).
   - `writeCycle(ddb: DynamoDBDocumentClient, tables: {flows,meta}, payload: {edges, topology, stats, cycleTs, coverage}): Promise<void>` — BatchWrite 25개 단위 + `STATUS#collect/latest`·`TOPO#latest/snapshot`·`COVERAGE#latest` Put.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```ts
 // collector/src/storage.test.ts
@@ -522,9 +522,9 @@ it('buildTopology merges metrics per edge and classifies nodes', () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** — `npx -w collector vitest run storage` → FAIL
+- [x] **Step 2: 실패 확인** — `npx -w collector vitest run storage` → FAIL
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```ts
 // collector/src/storage.ts
@@ -592,8 +592,8 @@ export async function writeCycle(ddb: DynamoDBDocumentClient,
 
 주의: `buildTopology` 시그니처는 테스트와 동일하게 `(edges, monitorToCluster, now)` 3-인자.
 
-- [ ] **Step 4: 통과 확인** — `npx -w collector vitest run` → 12 passed
-- [ ] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): DDB flow items and topology snapshot aggregation"`
+- [x] **Step 4: 통과 확인** — `npx -w collector vitest run` → 12 passed
+- [x] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): DDB flow items and topology snapshot aggregation"`
 
 ### Task 5: Collector — 자동 온보딩 + Lambda 핸들러
 
@@ -606,7 +606,7 @@ export async function writeCycle(ddb: DynamoDBDocumentClient,
 - Produces: `discoverOnboarding(ec2, iam): Promise<Coverage>` — Coverage = `{ standalone: {instanceId, tagged, roleName, policyAttached}[]; eksNodeCount: number }`. 미태깅 standalone(EKS 태그 없는 인스턴스)에 `NfmAgent=managed` 태그 생성 + 인스턴스 프로파일 롤에 `CloudWatchNetworkFlowMonitorAgentPublishPolicy` attach(멱등). Lambda 핸들러 env: `TABLE_FLOWS, TABLE_META, MONITORS`(콤마구분 `이름=클러스터` 쌍, 클러스터 없으면 `이름=`), `CONCURRENCY`(기본 5).
 - Produces(`wi-query.ts`): `collectWorkloadInsights(nfm, window: {startTime: Date; endTime: Date}): Promise<WiResult[]>` — `ListScopesCommand`로 scopeId 조회 후 metric 3종(DATA_TRANSFERRED/RETRANSMISSIONS/TIMEOUTS) × category 3종의 WorkloadInsights 쿼리(StartQueryWorkloadInsightsTopContributors→Status→Results, Task 3과 동일 폴링/백오프 규약)를 실행. `WiResult = {metric, category, rows: {accountId,localSubnetId,localAz,localVpcId,remoteIdentifier,value}[]}`. handler는 결과를 `NfmMeta`의 `WI#latest`/`all` 아이템 `{rows: WiResult[], cycleTs}`로 Put. 테스트: `collector/src/wi-query.test.ts` happy-path 1건(nfm-query.test와 동일 mock 패턴).
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```ts
 // collector/src/onboard.test.ts
@@ -650,9 +650,9 @@ it('skips already-tagged instances (idempotent)', async () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** — `npx -w collector vitest run onboard` → FAIL
+- [x] **Step 2: 실패 확인** — `npx -w collector vitest run onboard` → FAIL
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```ts
 // collector/src/onboard.ts
@@ -745,8 +745,8 @@ export const handler = async () => {
 };
 ```
 
-- [ ] **Step 4: 통과/빌드 확인** — `npx -w collector vitest run` → 15 passed (wi-query happy-path 포함). `npm -w collector run build` → `dist/handler.mjs` 생성.
-- [ ] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): auto-onboarding and lambda handler"`
+- [x] **Step 4: 통과/빌드 확인** — `npx -w collector vitest run` → 15 passed (wi-query happy-path 포함). `npm -w collector run build` → `dist/handler.mjs` 생성.
+- [x] **Step 5: Commit** — `git add collector && git commit -m "feat(collector): auto-onboarding and lambda handler"`
 
 ## Phase 2 — CDK 인프라 (데이터/온보딩)
 
@@ -759,7 +759,7 @@ export const handler = async () => {
 **Interfaces:**
 - Produces: 테이블명 `nfm-dashboard-flows`/`nfm-dashboard-meta`, Collector 함수명 `nfm-dashboard-collector`. `MONITORS` env는 이후 Task 7 온보딩 결과와 일치해야 함 — 규약: EKS 모니터명 `nfm-eks-<클러스터명>`, VPC 모니터명 `nfm-vpc-all`. DataStack은 `monitorsEnv` context(`infra/cdk.json`의 `nfmMonitors`)에서 읽음. 초기값은 Task 7 완료 후 실제 클러스터명으로 갱신(Task 7 Step 5).
 
-- [ ] **Step 1: infra 워크스페이스 생성**
+- [x] **Step 1: infra 워크스페이스 생성**
 
 ```jsonc
 // infra/package.json
@@ -785,7 +785,7 @@ const env = { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' };
 new DataStack(app, 'NfmDash-Data', { env });
 ```
 
-- [ ] **Step 2: 실패하는 assertions 테스트**
+- [x] **Step 2: 실패하는 assertions 테스트**
 
 ```ts
 // infra/test/data-stack.test.ts
@@ -808,9 +808,9 @@ it('DataStack has 2 tables with TTL+GSIs, collector fn, 5min schedule', () => {
 });
 ```
 
-- [ ] **Step 3: 실패 확인** — `npx -w infra vitest run` → FAIL (data-stack 없음)
+- [x] **Step 3: 실패 확인** — `npx -w infra vitest run` → FAIL (data-stack 없음)
 
-- [ ] **Step 4: DataStack 구현**
+- [x] **Step 4: DataStack 구현**
 
 ```ts
 // infra/lib/data-stack.ts
@@ -874,10 +874,10 @@ export class DataStack extends cdk.Stack {
 }
 ```
 
-- [ ] **Step 5: 테스트 통과 확인** — `npm -w collector run build && npx -w infra vitest run` → PASS
-- [ ] **Step 6: 배포** — `npx -w infra cdk deploy NfmDash-Data --require-approval never`
+- [x] **Step 5: 테스트 통과 확인** — `npm -w collector run build && npx -w infra vitest run` → PASS
+- [x] **Step 6: 배포** — `npx -w infra cdk deploy NfmDash-Data --require-approval never`
   Expected: CREATE_COMPLETE. 확인: `aws dynamodb describe-table --table-name nfm-dashboard-flows --query 'Table.TableStatus'` → `ACTIVE`, `aws lambda get-function --function-name nfm-dashboard-collector --query 'Configuration.State'` → `Active`.
-- [ ] **Step 7: Commit** — `git add infra collector && git commit -m "infra: DataStack (DynamoDB, collector lambda, 5min scheduler)"`
+- [x] **Step 7: Commit** — `git add infra collector && git commit -m "infra: DataStack (DynamoDB, collector lambda, 5min scheduler)"`
 
 ### Task 7: NfmOnboardingStack — Scope/모니터/EKS add-on/SSM Association
 
@@ -892,7 +892,7 @@ export class DataStack extends cdk.Stack {
 - Produces: NFM Scope 1개, 모니터 `nfm-eks-<cluster>` ×N + `nfm-vpc-all`, EKS add-on 설치 완료. Custom Resource 응답 Data에 `MonitorsEnv` 문자열(`nfm-eks-demo=demo,nfm-vpc-all=` 형식) — Task 6의 `nfmMonitors` context 갱신에 사용.
 - `onboard_nfm.py`의 순수 함수: `monitors_env(clusters: list[str]) -> str`, `desired_monitors(clusters, vpc_ids) -> list[dict]`.
 
-- [ ] **Step 1: 실패하는 테스트 (순수 함수만)**
+- [x] **Step 1: 실패하는 테스트 (순수 함수만)**
 
 ```python
 # onboarding/test_onboard_nfm.py
@@ -911,9 +911,9 @@ def test_desired_monitors_shapes():
             "identifier": "arn:aws:ec2:ap-northeast-2:<ACCOUNT_ID>:vpc/vpc-1"} in vpc["localResources"]
 ```
 
-- [ ] **Step 2: 실패 확인** — `cd onboarding && python3 -m pytest -q` → FAIL (module 없음)
+- [x] **Step 2: 실패 확인** — `cd onboarding && python3 -m pytest -q` → FAIL (module 없음)
 
-- [ ] **Step 3: 구현 (CFN Custom Resource 핸들러 포함)**
+- [x] **Step 3: 구현 (CFN Custom Resource 핸들러 포함)**
 
 ```python
 # onboarding/onboard_nfm.py
@@ -1031,9 +1031,9 @@ def handler(event, context):
         send_cfn(event, context, "FAILED", reason=str(e))
 ```
 
-- [ ] **Step 4: 순수 함수 테스트 통과** — `cd onboarding && python3 -m pytest -q` → 2 passed
+- [x] **Step 4: 순수 함수 테스트 통과** — `cd onboarding && python3 -m pytest -q` → 2 passed
 
-- [ ] **Step 5: 스택 구현 + 배포**
+- [x] **Step 5: 스택 구현 + 배포**
 
 ```ts
 // infra/lib/nfm-onboarding-stack.ts
@@ -1082,12 +1082,12 @@ new NfmOnboardingStack(app, 'NfmDash-Onboarding', { env });
 Run: `npx -w infra cdk deploy NfmDash-Onboarding --require-approval never`
 Expected: CREATE_COMPLETE, Output `MonitorsEnv` 표시 (예: `nfm-eks-A=A,...,nfm-vpc-all=`).
 
-- [ ] **Step 6: context 갱신 + Collector 재배포**
+- [x] **Step 6: context 갱신 + Collector 재배포**
 
 `infra/cdk.json`의 `nfmMonitors`를 Step 5 Output 값으로 교체 →
 `npx -w infra cdk deploy NfmDash-Data --require-approval never`
 
-- [ ] **Step 7: 검증**
+- [x] **Step 7: 검증**
 
 ```bash
 aws networkflowmonitor list-monitors --query 'monitors[].monitorName'   # nfm-eks-* + nfm-vpc-all
@@ -1097,7 +1097,7 @@ aws lambda invoke --function-name nfm-dashboard-collector /tmp/out.json && cat /
 # {"ok":true,...} — 초기엔 rows 0 정상(에이전트 데이터 ~20분 소요)
 ```
 
-- [ ] **Step 8: Commit** — `git add onboarding infra && git commit -m "infra: NFM onboarding (scope, monitors, EKS add-ons, SSM association)"`
+- [x] **Step 8: Commit** — `git add onboarding infra && git commit -m "infra: NFM onboarding (scope, monitors, EKS add-ons, SSM association)"`
 
 ## Phase 3 — Gateway 도구 & AgentCoreStack
 
@@ -1114,7 +1114,7 @@ aws lambda invoke --function-name nfm-dashboard-collector /tmp/out.json && cat /
 - `ddb_mcp.py` 도구: `query_pod_flows(namespace, pod, limit=50)`(GSI1+GSI2 양측 쿼리 병합), `query_flow_edges(edge_hash, limit=50)`(GSI3), `get_topology_snapshot()`, `get_top_talkers(metric='DATA_TRANSFERRED', limit=20)`(TOPO#latest 엣지 정렬), `find_flow_path(src_pod, dst_pod)`(GSI1 쿼리 후 상대측 매칭 → traversedConstructs/양단 반환), `get_collection_status()`.
 - env: `TABLE_FLOWS`, `TABLE_META` (ddb/nfm 공용).
 
-- [ ] **Step 1: 실패하는 테스트 작성** (dispatch·정렬 로직 중심 — boto3는 monkeypatch)
+- [x] **Step 1: 실패하는 테스트 작성** (dispatch·정렬 로직 중심 — boto3는 monkeypatch)
 
 ```python
 # tools/tests/test_ddb_mcp.py
@@ -1148,9 +1148,9 @@ def test_dispatch_and_err_shape():
     assert "error" in json.loads(r["body"])
 ```
 
-- [ ] **Step 2: 실패 확인** — `cd tools && python3 -m pytest -q` → FAIL
+- [x] **Step 2: 실패 확인** — `cd tools && python3 -m pytest -q` → FAIL
 
-- [ ] **Step 3: 구현** — 핵심 뼈대 (전체 도구는 Interfaces 목록 그대로 구현):
+- [x] **Step 3: 구현** — 핵심 뼈대 (전체 도구는 Interfaces 목록 그대로 구현):
 
 ```python
 # tools/ddb_mcp.py (발췌 아님 — 이 구조로 6개 도구 전부)
@@ -1204,8 +1204,8 @@ def lambda_handler(event, context):
 ```
 `...` 표기는 이 태스크에서 반드시 실제 함수로 완성한다(Interfaces의 동작 정의 참조). `nfm_mcp.py`도 동일 골격 + boto3 `networkflowmonitor`/`cloudwatch` 클라이언트.
 
-- [ ] **Step 4: 통과 확인** — `cd tools && python3 -m pytest -q` → 3 passed
-- [ ] **Step 5: Commit** — `git add tools && git commit -m "feat(tools): network/nfm/ddb MCP lambda tools (awsops handler contract)"`
+- [x] **Step 4: 통과 확인** — `cd tools && python3 -m pytest -q` → 3 passed
+- [x] **Step 5: Commit** — `git add tools && git commit -m "feat(tools): network/nfm/ddb MCP lambda tools (awsops handler contract)"`
 
 ### Task 9: AgentCoreStack + Gateway/타겟 생성
 
@@ -1220,7 +1220,7 @@ def lambda_handler(event, context):
 - `create_gateway.py`: `create-gateway(name='nfm-gateway', protocolType='MCP', authorizerType 미지정→IAM/SigV4, roleArn=게이트웨이롤)` 멱등 + 타겟 3개(`network-mcp-target`/`nfm-mcp-target`/`ddb-mcp-target`, `toolSchema.inlinePayload`, `GATEWAY_IAM_ROLE`) 멱등 생성. 완료 후 SSM 파라미터 `/nfm-dashboard/gateway-url`에 `https://{gatewayId}.gateway.bedrock-agentcore.ap-northeast-2.amazonaws.com/mcp` 기록.
 - 도구 스키마: Task 8 Interfaces의 인자명과 정확히 일치시킬 것 (예: `query_top_contributors`: `{monitor_name:string(req), metric_name:string(req), destination_category:string(req), minutes_back:integer, limit:integer}`).
 
-- [ ] **Step 1: 스택 구현**
+- [x] **Step 1: 스택 구현**
 
 ```ts
 // infra/lib/agentcore-stack.ts
@@ -1266,9 +1266,9 @@ export class AgentCoreStack extends cdk.Stack {
 ```
 `bin`에 `new AgentCoreStack(app, 'NfmDash-AgentCore', { env });` 추가.
 
-- [ ] **Step 2: 배포** — `npx -w infra cdk deploy NfmDash-AgentCore --require-approval never` → CREATE_COMPLETE
+- [x] **Step 2: 배포** — `npx -w infra cdk deploy NfmDash-AgentCore --require-approval never` → CREATE_COMPLETE
 
-- [ ] **Step 3: create_gateway.py 작성** — awsops 패턴 준수(EXISTS 체크, `prop()` 헬퍼). 게이트웨이 생성 부분:
+- [x] **Step 3: create_gateway.py 작성** — awsops 패턴 준수(EXISTS 체크, `prop()` 헬퍼). 게이트웨이 생성 부분:
 
 ```python
 # tools/create_gateway.py (골격 — 타겟 3개의 tools 스키마는 Task 8 인자명과 1:1)
@@ -1319,7 +1319,7 @@ ROLE_ARN=$(aws cloudformation describe-stacks --stack-name NfmDash-AgentCore \
 python3 tools/create_gateway.py "$ROLE_ARN"
 ```
 
-- [ ] **Step 4: 실행 + 검증**
+- [x] **Step 4: 실행 + 검증**
 
 ```bash
 bash scripts/setup-gateway.sh          # CREATED ×3 (재실행 시 EXISTS ×3 = 멱등 확인)
@@ -1343,7 +1343,7 @@ EOF
 # Expected: 27 tools: ['get_path_trace_methodology', ...]
 ```
 
-- [ ] **Step 5: Commit** — `git add infra tools scripts && git commit -m "infra: AgentCore gateway nfm-gateway with 3 lambda MCP targets"`
+- [x] **Step 5: Commit** — `git add infra tools scripts && git commit -m "infra: AgentCore gateway nfm-gateway with 3 lambda MCP targets"`
 
 ## Phase 4 — Next.js 앱
 
@@ -1360,9 +1360,9 @@ EOF
 - Produces: `useLanguage(): { lang: 'ko'|'en'; setLang; t(key: string, params?: Record<string,string|number>): string }`. 번역 키는 flat (`nav.overview`, `kpi.dataTransferred` …). `<AppShell>`(Sidebar+Topbar+MobileTabs 조합)은 `app/src/app/layout.tsx`에서 사용.
 - Tailwind 토큰: `colors: { ink:'#1C1C1C', surface:'#F7F9FB', accentBlue:'#E3F5FF', accentLav:'#E5ECF6', accentMint:'#BAEDBD', chartBlue:'#A8C5DA', chartViolet:'#95A4FC', chartSky:'#B1E3FF' }`, `borderRadius: { card:'16px' }`. 다크는 `dark:` variant(`#1C1C1C` 배경).
 
-- [ ] **Step 1: 스캐폴드 생성** — `npx create-next-app@latest app --ts --app --tailwind --src-dir --no-eslint --import-alias "@/*"` 후 `output: 'standalone'`을 next.config에 설정. vitest/@testing-library 설치: `npm -w app i -D vitest @testing-library/react @vitejs/plugin-react jsdom`.
+- [x] **Step 1: 스캐폴드 생성** — `npx create-next-app@latest app --ts --app --tailwind --src-dir --no-eslint --import-alias "@/*"` 후 `output: 'standalone'`을 next.config에 설정. vitest/@testing-library 설치: `npm -w app i -D vitest @testing-library/react @vitejs/plugin-react jsdom`.
 
-- [ ] **Step 2: 실패하는 i18n 테스트**
+- [x] **Step 2: 실패하는 i18n 테스트**
 
 ```tsx
 // app/src/lib/i18n/i18n.test.tsx
@@ -1383,9 +1383,9 @@ it('t() resolves ko/en with params and falls back to key', () => {
 });
 ```
 
-- [ ] **Step 3: 실패 확인** — `npx -w app vitest run` → FAIL
+- [x] **Step 3: 실패 확인** — `npx -w app vitest run` → FAIL
 
-- [ ] **Step 4: 구현** — awsops `src/lib/i18n` 패턴:
+- [x] **Step 4: 구현** — awsops `src/lib/i18n` 패턴:
 
 ```tsx
 // app/src/lib/i18n/LanguageContext.tsx
@@ -1426,8 +1426,8 @@ export function useLanguage() {
 - **MobileTabs.tsx**: `lg:hidden fixed bottom-0 inset-x-0` + `pb-[env(safe-area-inset-bottom)]`, 5개 핵심 탭(개요/토폴로지/플로우/진단/더보기), 44px 터치 타겟.
 - **layout.tsx**: `<LanguageProvider><div className="flex"><Sidebar/><div className="flex-1"><Topbar/><main className="p-4 pb-20 lg:pb-4">{children}</main></div></div><MobileTabs/></LanguageProvider>` + `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`. footer에 `SnowUI (CC BY 4.0) 디자인 참조` attribution 링크.
 
-- [ ] **Step 5: 통과 + 렌더 확인** — `npx -w app vitest run` → PASS. `npm -w app run dev` 후 `curl -s localhost:3000 | grep -o '<title>[^<]*'` → 앱 타이틀.
-- [ ] **Step 6: Commit** — `git add app && git commit -m "feat(app): nextjs scaffold, SnowUI tokens, i18n, responsive shell"`
+- [x] **Step 5: 통과 + 렌더 확인** — `npx -w app vitest run` → PASS. `npm -w app run dev` 후 `curl -s localhost:3000 | grep -o '<title>[^<]*'` → 앱 타이틀.
+- [x] **Step 6: Commit** — `git add app && git commit -m "feat(app): nextjs scaffold, SnowUI tokens, i18n, responsive shell"`
 
 ### Task 11: 인증 (Cognito Hosted UI + middleware)
 
@@ -1441,7 +1441,7 @@ export function useLanguage() {
 - Produces: `buildAuthUrls(env)` → `{authorize, token, logout}` URL 생성 순수함수; `verifyIdToken(token): Promise<{email:string}|null>` (aws-jwt-verify CognitoJwtVerifier, tokenUse 'id'); 쿠키명 `nfm_id_token`(httpOnly, Secure, SameSite=Lax, 8h).
 - middleware 규칙: (1) `X-Origin-Verify` 헤더가 `ORIGIN_VERIFY_SECRET`과 불일치 시 403 (헬스체크 경로 `/api/health` 제외 — ALB 타겟그룹용), (2) `/login`, `/api/auth/*`, `/_next/*`, `/api/health` 제외 전 경로에서 `nfm_id_token` 쿠키 검증 실패 시 `/login`으로 redirect(API는 401 JSON).
 
-- [ ] **Step 1: 실패하는 테스트** — `buildAuthUrls`가 authorize/token/logout URL을 정확히 조립하는지(redirect_uri 인코딩 포함), 쿠키 직렬화 헬퍼 `sessionCookie(token)`이 옵션 포함하는지.
+- [x] **Step 1: 실패하는 테스트** — `buildAuthUrls`가 authorize/token/logout URL을 정확히 조립하는지(redirect_uri 인코딩 포함), 쿠키 직렬화 헬퍼 `sessionCookie(token)`이 옵션 포함하는지.
 
 ```ts
 // app/src/lib/auth.test.ts
@@ -1460,10 +1460,10 @@ it('session cookie is httpOnly+secure', () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** → FAIL
-- [ ] **Step 3: 구현** — `auth.ts`(buildAuthUrls/sessionCookie/verifyIdToken), `login/route.ts`(authorize로 302), `callback/route.ts`(code→`${domain}/oauth2/token` POST(fetch, grant_type=authorization_code)→쿠키 설정→`/`로 302), `logout/route.ts`(쿠키 삭제+Cognito logout URL 302), `middleware.ts`(위 규칙 — verifier는 모듈 스코프 캐시), `login/page.tsx`(로그인 버튼 → `/api/auth/login`).
-- [ ] **Step 4: 통과 확인** — `npx -w app vitest run` → PASS (로컬에선 env 미설정 시 middleware가 인증 스킵하는 `AUTH_DISABLED=1` dev 플래그 지원 — 코드에 명시적 조건 `process.env.AUTH_DISABLED === '1'`)
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): cognito hosted-ui auth with jwt middleware and origin verify"`
+- [x] **Step 2: 실패 확인** → FAIL
+- [x] **Step 3: 구현** — `auth.ts`(buildAuthUrls/sessionCookie/verifyIdToken), `login/route.ts`(authorize로 302), `callback/route.ts`(code→`${domain}/oauth2/token` POST(fetch, grant_type=authorization_code)→쿠키 설정→`/`로 302), `logout/route.ts`(쿠키 삭제+Cognito logout URL 302), `middleware.ts`(위 규칙 — verifier는 모듈 스코프 캐시), `login/page.tsx`(로그인 버튼 → `/api/auth/login`).
+- [x] **Step 4: 통과 확인** — `npx -w app vitest run` → PASS (로컬에선 env 미설정 시 middleware가 인증 스킵하는 `AUTH_DISABLED=1` dev 플래그 지원 — 코드에 명시적 조건 `process.env.AUTH_DISABLED === '1'`)
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): cognito hosted-ui auth with jwt middleware and origin verify"`
 
 ### Task 12: 데이터 API routes + DDB/CW 클라이언트
 
@@ -1486,11 +1486,11 @@ it('session cookie is httpOnly+secure', () => {
   - `POST /api/nfm/refresh` → Lambda `nfm-dashboard-collector` InvokeCommand(Event) 후 `{ triggered: true }`
   - `GET /api/health` → `{ ok: true }` (인증/origin-verify 제외 경로)
 
-- [ ] **Step 1: 실패하는 테스트** — `recentBuckets`가 5분 격자 ISO를 내는지, `queryPodFlows`가 GSI1/GSI2 두 번 쿼리해 병합하는지(mock).
-- [ ] **Step 2: 실패 확인** → FAIL
-- [ ] **Step 3: 구현** — 각 route는 `export const dynamic = 'force-dynamic'` + try/catch로 `{error}` 500. `/api/nfm/refresh`만 `@aws-sdk/client-lambda` 사용.
-- [ ] **Step 4: 통과 확인** — `npx -w app vitest run` → PASS. 로컬 검증: `AUTH_DISABLED=1 npm -w app run dev` 후 `curl -s localhost:3000/api/topology | head -c 200` (배포된 DDB에 대해 — EC2 개발 호스트의 IAM으로 접근 가능).
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): data api routes over dynamodb and cloudwatch"`
+- [x] **Step 1: 실패하는 테스트** — `recentBuckets`가 5분 격자 ISO를 내는지, `queryPodFlows`가 GSI1/GSI2 두 번 쿼리해 병합하는지(mock).
+- [x] **Step 2: 실패 확인** → FAIL
+- [x] **Step 3: 구현** — 각 route는 `export const dynamic = 'force-dynamic'` + try/catch로 `{error}` 500. `/api/nfm/refresh`만 `@aws-sdk/client-lambda` 사용.
+- [x] **Step 4: 통과 확인** — `npx -w app vitest run` → PASS. 로컬 검증: `AUTH_DISABLED=1 npm -w app run dev` 후 `curl -s localhost:3000/api/topology | head -c 200` (배포된 DDB에 대해 — EC2 개발 호스트의 IAM으로 접근 가능).
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): data api routes over dynamodb and cloudwatch"`
 
 ### Task 13: MCP 클라이언트(SigV4) + `/api/ai` 에이전트 루프 SSE
 
@@ -1508,7 +1508,7 @@ it('session cookie is httpOnly+secure', () => {
 - `lib/sse.ts`: `sseEvent(event,data): string`(`event: X\ndata: {...}\n\n`), `simulateStreaming(text, emit, chunkSize=50, delayMs=15)`, `keepalive(controller, intervalMs=15000)` 타이머 헬퍼.
 - `/api/ai` POST body: `{ messages: {role:'user'|'assistant', content:string}[], lang: 'ko'|'en' }`. 에이전트 루프 최대 8회, 시스템 프롬프트: NFM 운영 어시스턴트 페르소나 + 도구 사용 지침 + 응답 언어 지시(lang). SSE `status`(`connecting/tool:<name>/thinking`)→`chunk`→`done`. Gateway 불가 시 도구 없이 Bedrock 직접(폴백) + `status:fallback`.
 
-- [ ] **Step 1: 실패하는 테스트**
+- [x] **Step 1: 실패하는 테스트**
 
 ```ts
 // app/src/lib/sse.test.ts
@@ -1537,8 +1537,8 @@ it('maps MCP tools to Bedrock toolSpec', () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** → FAIL
-- [ ] **Step 3: 구현** — `/api/ai` 루프 핵심(전문):
+- [x] **Step 2: 실패 확인** → FAIL
+- [x] **Step 3: 구현** — `/api/ai` 루프 핵심(전문):
 
 ```ts
 // app/src/app/api/ai/route.ts
@@ -1616,11 +1616,11 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-- [ ] **Step 4: 통과 + 실호출 확인** — `npx -w app vitest run` → PASS. 실검증(Gateway/Bedrock 실계정):
+- [x] **Step 4: 통과 + 실호출 확인** — `npx -w app vitest run` → PASS. 실검증(Gateway/Bedrock 실계정):
   `AUTH_DISABLED=1 npm -w app run dev` 후
   `curl -N -s localhost:3000/api/ai -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"현재 top talker pod 3개 알려줘"}]}' | head -40`
   Expected: `event: status` → `event: chunk`(토큰) → `event: done` (usedTools에 `get_top_talkers` 계열 포함). **Sonnet 5 첫 실호출 검증 지점** — 실패 시 bedrock.ts 폴백 로그 확인.
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): sigv4 mcp client and streaming agent loop /api/ai"`
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): sigv4 mcp client and streaming agent loop /api/ai"`
 
 ### Task 14: `/api/diagnose` (진단 SSE + regenerate)
 
@@ -1633,11 +1633,11 @@ export async function POST(req: NextRequest) {
 - POST body: `{ focus?: string, lang: 'ko'|'en', regenerate?: boolean }` — regenerate여도 동일 경로(컨텍스트 재조회 + converseStream 재실행, 프롬프트에 "이전과 다른 관점으로" 지시 추가).
 - 도구 미사용. `ConverseStreamCommand` contentBlockDelta → 즉시 `chunk` (Task 13의 sse.ts 재사용).
 
-- [ ] **Step 1: 실패하는 테스트** — anomalies 상위 20 트림·정렬, 빈 토폴로지 시 "수집 준비 중" 문구 포함 여부.
-- [ ] **Step 2: 실패 확인** → FAIL
-- [ ] **Step 3: 구현** — `diagnose-context.ts`(순수) + route(ddb.ts로 topology/status 조회 → anomalies는 RETRANSMISSIONS/TIMEOUTS 합 내림차순 상위 20 → converseStream → SSE).
-- [ ] **Step 4: 통과 + 실호출 확인** — vitest PASS + `curl -N localhost:3000/api/diagnose -d '{"lang":"ko"}' ...` → 진단 텍스트 스트리밍.
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): llm diagnose route with context injection and regenerate"`
+- [x] **Step 1: 실패하는 테스트** — anomalies 상위 20 트림·정렬, 빈 토폴로지 시 "수집 준비 중" 문구 포함 여부.
+- [x] **Step 2: 실패 확인** → FAIL
+- [x] **Step 3: 구현** — `diagnose-context.ts`(순수) + route(ddb.ts로 topology/status 조회 → anomalies는 RETRANSMISSIONS/TIMEOUTS 합 내림차순 상위 20 → converseStream → SSE).
+- [x] **Step 4: 통과 + 실호출 확인** — vitest PASS + `curl -N localhost:3000/api/diagnose -d '{"lang":"ko"}' ...` → 진단 텍스트 스트리밍.
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): llm diagnose route with context injection and regenerate"`
 
 ### Task 15: UI 페이지 6종 (overview/topology/flows/paths/insights/agents)
 
@@ -1657,10 +1657,10 @@ export async function POST(req: NextRequest) {
   - `/agents`: 커버리지 테이블 — standalone(instanceId/tagged/policyAttached) + eksNodeCount, 마지막 수집 통계.
 - 모든 문자열 `t()` 경유. dataviz 스킬의 접근성 규칙(색+형태 이중 부호화, 다크 대응)을 차트 컴포넌트에 적용.
 
-- [ ] **Step 1: format 유틸 실패 테스트** — `formatBytes(1536)='1.5 KB'`, `formatMicros(1500)='1.5 ms'` 등 (`app/src/lib/format.test.ts`).
-- [ ] **Step 2: 실패 확인** → FAIL / **Step 3: format.ts 구현 + 통과**
-- [ ] **Step 4: 컴포넌트/페이지 구현** — 위 Interfaces 명세 전부. dev 서버에서 6페이지 각각 콘솔 에러 0 확인.
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): dashboard pages (overview, topology, flows, paths, insights, agents)"`
+- [x] **Step 1: format 유틸 실패 테스트** — `formatBytes(1536)='1.5 KB'`, `formatMicros(1500)='1.5 ms'` 등 (`app/src/lib/format.test.ts`).
+- [x] **Step 2: 실패 확인** → FAIL / **Step 3: format.ts 구현 + 통과**
+- [x] **Step 4: 컴포넌트/페이지 구현** — 위 Interfaces 명세 전부. dev 서버에서 6페이지 각각 콘솔 에러 0 확인.
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): dashboard pages (overview, topology, flows, paths, insights, agents)"`
 
 ### Task 16: 챗 UI — FloatingChat + 팝업 분기 + `/diagnose` 페이지
 
@@ -1679,7 +1679,7 @@ export async function POST(req: NextRequest) {
 - `/diagnose` 페이지: "진단 실행" 버튼 → `/api/diagnose` SSE → `<Markdown>` 점진 렌더 + **Regenerate** 버튼(`{regenerate:true}` 재호출), 응답 메타(모델/시간) 표시.
 - `Markdown.tsx`: `react-markdown` v10 + `remark-gfm`, 테이블/코드 SnowUI 스타일(카드 배경, overflow-x-auto).
 
-- [ ] **Step 1: 실패하는 테스트**
+- [x] **Step 1: 실패하는 테스트**
 
 ```ts
 // app/src/lib/ua.test.ts
@@ -1694,16 +1694,16 @@ it('iphone → mobile-sheet', () => expect(chatOpenMode(IOS)).toBe('mobile-sheet
 ```
 `use-sse.test.ts`: ReadableStream mock으로 `event: chunk\ndata: {"delta":"a"}\n\n` 프레임 2개 분할 전송(프레임 경계가 청크 중간에 오는 케이스 포함) → onChunk 2회 호출 검증.
 
-- [ ] **Step 2: 실패 확인** → FAIL / **Step 3: 구현** / **Step 4: 통과 + dev 수동 확인**(Chrome iframe, 모바일 뷰포트 시트)
-- [ ] **Step 5: Commit** — `git add app && git commit -m "feat(app): floating chat with popup strategy, diagnose page, markdown"`
+- [x] **Step 2: 실패 확인** → FAIL / **Step 3: 구현** / **Step 4: 통과 + dev 수동 확인**(Chrome iframe, 모바일 뷰포트 시트)
+- [x] **Step 5: Commit** — `git add app && git commit -m "feat(app): floating chat with popup strategy, diagnose page, markdown"`
 
 ### Task 17: 모바일 반응형 마감 + 접근성 점검
 
 **Files:**
 - Modify: Task 10~16의 페이지/컴포넌트 (브레이크포인트 보정)
 
-- [ ] **Step 1: 점검 목록 실행** — dev 서버에서 뷰포트 390×844(iPhone) 기준: (1) 가로 스크롤 없는지(각 페이지), (2) MobileTabs가 컨텐츠 가리지 않는지(`pb-20`), (3) FlowTable→카드 전환, (4) topology 터치 팬/줌(`reactflow` 기본 + `panOnDrag`), (5) PathView 세로 스테퍼, (6) FloatingChat 풀스크린 시트 + `env(safe-area-inset-bottom)`, (7) 다크 모드 각 페이지 대비.
-- [ ] **Step 2: 발견 이슈 수정 + 커밋** — `git commit -m "fix(app): mobile responsive polish (iPhone web)"`
+- [x] **Step 1: 점검 목록 실행** — dev 서버에서 뷰포트 390×844(iPhone) 기준: (1) 가로 스크롤 없는지(각 페이지), (2) MobileTabs가 컨텐츠 가리지 않는지(`pb-20`), (3) FlowTable→카드 전환, (4) topology 터치 팬/줌(`reactflow` 기본 + `panOnDrag`), (5) PathView 세로 스테퍼, (6) FloatingChat 풀스크린 시트 + `env(safe-area-inset-bottom)`, (7) 다크 모드 각 페이지 대비.
+- [x] **Step 2: 발견 이슈 수정 + 커밋** — `git commit -m "fix(app): mobile responsive polish (iPhone web)"`
 
 ## Phase 5 — 배포 & 검증
 
@@ -1720,7 +1720,7 @@ it('iphone → mobile-sheet', () => expect(chatOpenMode(IOS)).toBe('mobile-sheet
 - Produces: CloudFront URL(Output `AppUrl`), Cognito UserPool/Client/도메인, ECS 서비스 `nfm-dashboard-app`.
 - Task Role 권한: `bedrock:InvokeModelWithResponseStream`+`bedrock:InvokeModel`(리소스 `*` — global 프로파일은 다중 리전 기반 모델 ARN 필요), `bedrock-agentcore:InvokeGateway`(`*`), DDB R/W(두 테이블+인덱스), `lambda:InvokeFunction`(collector), `cloudwatch:GetMetricData/ListMetrics`, `ssm:GetParameter`(`/nfm-dashboard/*`).
 
-- [ ] **Step 1: Dockerfile (arm64, standalone)**
+- [x] **Step 1: Dockerfile (arm64, standalone)**
 
 ```dockerfile
 # app/Dockerfile
@@ -1748,7 +1748,7 @@ EXPOSE 3000
 CMD ["node", "app/server.js"]
 ```
 
-- [ ] **Step 2: 시크릿/빌드 스크립트**
+- [x] **Step 2: 시크릿/빌드 스크립트**
 
 ```bash
 # scripts/save-cognito-secret.sh
@@ -1776,9 +1776,9 @@ docker tag $REPO:$TAG $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG
 docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG
 ```
 
-- [ ] **Step 3: 실패하는 assertions 테스트** — ALB SG ingress가 prefix list `pl-22a6434b`인지, TaskDefinition `RuntimePlatform.CpuArchitecture=ARM64`인지, CloudFront `/api/*` 비캐시 behavior 존재.
+- [x] **Step 3: 실패하는 assertions 테스트** — ALB SG ingress가 prefix list `pl-22a6434b`인지, TaskDefinition `RuntimePlatform.CpuArchitecture=ARM64`인지, CloudFront `/api/*` 비캐시 behavior 존재.
 
-- [ ] **Step 4: AppStack 구현** — 핵심 골격:
+- [x] **Step 4: AppStack 구현** — 핵심 골격:
 
 ```ts
 // infra/lib/app-stack.ts (골격 — 이 태스크에서 전부 완성)
@@ -1801,7 +1801,7 @@ docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG
 // 7) Outputs: AppUrl, UserPoolId, ClientId, CognitoDomain
 ```
 
-- [ ] **Step 5: 배포 시퀀스**
+- [x] **Step 5: 배포 시퀀스**
 
 ```bash
 bash scripts/save-cognito-secret.sh          # 1회 (사용자 제공 비밀번호 입력)
@@ -1813,7 +1813,7 @@ npx -w infra cdk deploy NfmDash-App --require-approval never
 브라우저에서 AppUrl → `/login` redirect → Cognito Hosted UI 로그인(admin@whchoi.net) → 대시보드.
 ALB DNS 직접 호출 → 403 (origin verify).
 
-- [ ] **Step 6: Commit** — `git add infra app scripts && git commit -m "infra: AppStack (ECS/ALB/CloudFront/Cognito) and image pipeline"`
+- [x] **Step 6: Commit** — `git add infra app scripts && git commit -m "infra: AppStack (ECS/ALB/CloudFront/Cognito) and image pipeline"`
 
 ### Task 19: 운영 알람 + E2E 스모크
 
@@ -1824,7 +1824,7 @@ ALB DNS 직접 호출 → 403 (origin verify).
 **Interfaces:**
 - Playwright env: `APP_URL`, `E2E_EMAIL=admin@whchoi.net`, `E2E_PASSWORD`(환경변수로만 — Secrets Manager에서 `aws secretsmanager get-secret-value`로 주입).
 
-- [ ] **Step 1: 스모크 시나리오 작성**
+- [x] **Step 1: 스모크 시나리오 작성**
 
 ```ts
 // e2e/smoke.spec.ts
@@ -1857,8 +1857,8 @@ test('iphone viewport has no horizontal scroll', async ({ browser }) => {
 ```
 (로그인 상태 공유: 첫 테스트에서 `page.context().storageState({path:'e2e/.auth.json'})` 저장, config `use.storageState`로 재사용. KPI/챗 요소에 `data-testid`를 Task 15/16 컴포넌트에 추가하는 수정 포함.)
 
-- [ ] **Step 2: 실행** — `APP_URL=... E2E_PASSWORD=$(aws secretsmanager get-secret-value --secret-id nfm-dashboard/cognito-admin --query SecretString --output text | jq -r .password) npx playwright test` → 3 passed. 수집 20분 경과 전이면 KPI가 `collecting` 상태 — 테스트는 KPI 카드 렌더 자체를 검증하므로 통과 가능해야 함(빈 값도 카드 표시).
-- [ ] **Step 3: 알람 배포 + Commit** — `git commit -m "test: e2e smoke + ops alarms"`
+- [x] **Step 2: 실행** — `APP_URL=... E2E_PASSWORD=$(aws secretsmanager get-secret-value --secret-id nfm-dashboard/cognito-admin --query SecretString --output text | jq -r .password) npx playwright test` → 3 passed. 수집 20분 경과 전이면 KPI가 `collecting` 상태 — 테스트는 KPI 카드 렌더 자체를 검증하므로 통과 가능해야 함(빈 값도 카드 표시).
+- [x] **Step 3: 알람 배포 + Commit** — `git commit -m "test: e2e smoke + ops alarms"`
 
 ### Task 20: 문서/마감
 
@@ -1866,9 +1866,9 @@ test('iphone viewport has no horizontal scroll', async ({ browser }) => {
 - Create: `README.md` — 아키텍처 다이어그램(ASCII), 배포 순서(스펙 12절), env 표, 스크립트 사용법, SnowUI attribution(CC BY 4.0 링크), awsops 참조 명시.
 - Modify: `docs/superpowers/plans/2026-07-08-nfm-dashboard.md` 체크박스 최종 상태.
 
-- [ ] **Step 1: README 작성** (영/한 병기 섹션 헤더)
-- [ ] **Step 2: 전체 테스트 일괄 실행** — `npm test`(collector) + `npx -w infra vitest run` + `npx -w app vitest run` + `cd tools && python3 -m pytest -q` + `cd onboarding && python3 -m pytest -q` → 전부 PASS
-- [ ] **Step 3: Commit** — `git add -A && git commit -m "docs: README with deployment guide and attribution"`
+- [x] **Step 1: README 작성** (영/한 병기 섹션 헤더)
+- [x] **Step 2: 전체 테스트 일괄 실행** — `npm test`(collector) + `npx -w infra vitest run` + `npx -w app vitest run` + `cd tools && python3 -m pytest -q` + `cd onboarding && python3 -m pytest -q` → 전부 PASS
+- [x] **Step 3: Commit** — `git add -A && git commit -m "docs: README with deployment guide and attribution"`
 
 ## 실행 순서 요약 (재배포 시에도 이 순서)
 
