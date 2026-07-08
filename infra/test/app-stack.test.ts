@@ -4,7 +4,9 @@ import { Template, Match } from 'aws-cdk-lib/assertions';
 import { AppStack } from '../lib/app-stack';
 
 // Vpc.fromLookup falls back to a dummy VPC when no cdk.context.json is present.
-const template = () => Template.fromStack(new AppStack(new App(), 'T',
+// `imageTag` is required context (deploys pin the immutable per-commit SHA tag).
+const template = () => Template.fromStack(new AppStack(
+  new App({ context: { imageTag: 'test' } }), 'T',
   { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } }));
 
 it('ALB SG ingress is ONLY the CloudFront origin-facing prefix list on :80', () => {
@@ -39,6 +41,16 @@ it('TaskDefinition is arm64 Fargate with prod env and no AUTH_DISABLED', () => {
   expect(names).not.toContain('ORIGIN_VERIFY_SECRET'); // must arrive via `secrets`, not env
   const secrets: Array<{ Name: string }> = td.Properties.ContainerDefinitions[0].Secrets;
   expect(secrets.map((s) => s.Name)).toContain('ORIGIN_VERIFY_SECRET');
+  // Image is pinned to the context-provided immutable tag — never `latest`.
+  const image = JSON.stringify(td.Properties.ContainerDefinitions[0].Image);
+  expect(image).toContain(':test');
+  expect(image).not.toContain(':latest');
+});
+
+it('AppStack synth fails fast when the imageTag context is missing', () => {
+  expect(() => Template.fromStack(new AppStack(new App(), 'T',
+    { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } })))
+    .toThrow(/imageTag/);
 });
 
 it('CloudFront has a no-cache /api/* behavior and forwards the origin-verify header', () => {

@@ -54,6 +54,7 @@ export class AppStack extends cdk.Stack {
     const alb = new elbv2.ApplicationLoadBalancer(this, 'Alb', {
       vpc, internetFacing: true, securityGroup: albSg,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      deletionProtection: true, // guard against accidental stack/console deletion
       idleTimeout: cdk.Duration.seconds(120) }); // SSE streams idle longer than default 60s
 
     // ── Origin-verify shared secret (CloudFront ↔ middleware) ─────────────
@@ -95,7 +96,8 @@ export class AppStack extends cdk.Stack {
       userPoolName: 'nfm-dashboard',
       selfSignUpEnabled: false,
       signInAliases: { email: true },
-      removalPolicy: cdk.RemovalPolicy.DESTROY });
+      // RETAIN: the pool holds the user store — never delete it with the stack.
+      removalPolicy: cdk.RemovalPolicy.RETAIN });
     const domain = userPool.addDomain('Domain', {
       cognitoDomain: { domainPrefix: 'nfm-dashboard-<ACCOUNT_ID>' } });
     const client = userPool.addClient('Client', {
@@ -135,9 +137,19 @@ export class AppStack extends cdk.Stack {
         cpuArchitecture: ecs.CpuArchitecture.ARM64,
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX } });
     const repo = ecr.Repository.fromRepositoryName(this, 'Repo', 'nfm-dashboard-app');
+    // Immutable per-commit tag (scripts/build-push.sh pushes the git short SHA).
+    // Pinning the tag makes deploys reproducible: a task restart can never
+    // silently pull a different image the way a mutable `latest` tag can.
+    const imageTag: string | undefined = this.node.tryGetContext('imageTag');
+    if (!imageTag) {
+      throw new Error(
+        "Missing CDK context 'imageTag' — pass the ECR image tag to deploy, e.g. " +
+        "`cdk deploy NfmDash-App -c imageTag=$(git rev-parse --short HEAD)` " +
+        '(scripts/build-push.sh pushes that tag).');
+    }
     taskDef.addContainer('app', {
       containerName: 'app',
-      image: ecs.ContainerImage.fromEcrRepository(repo, 'latest'),
+      image: ecs.ContainerImage.fromEcrRepository(repo, imageTag),
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'app', logRetention: logs.RetentionDays.ONE_MONTH }),
       portMappings: [{ containerPort: 3000 }],
       environment: {
