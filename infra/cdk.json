@@ -1,0 +1,7 @@
+{
+  "app": "npx tsx bin/nfm-dashboard.ts",
+  "context": {
+    "nfmMonitors": "nfm-vpc-all=",
+    "@aws-cdk/core:bootstrapQualifier": "hnb659fds"
+  }
+}
