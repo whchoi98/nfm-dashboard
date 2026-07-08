@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowRight, ArrowUp, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { EndpointInfo, FlowEdge } from '@/lib/types';
@@ -58,6 +58,13 @@ function EndpointDetail({ title, e }: { title: string; e: EndpointInfo }) {
 /** Right-side drawer (desktop) / bottom sheet (mobile) with full flow detail. */
 export function FlowDrawer({ flow, onClose }: { flow: FlowEdge; onClose: () => void }) {
   const { t } = useLanguage();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('flow.drawerTitle')}>
       <button

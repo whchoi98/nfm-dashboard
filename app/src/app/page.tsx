@@ -100,7 +100,7 @@ export default function OverviewPage() {
         />
         <KpiCard
           label={t('kpi.rtt')}
-          value={kpis?.rttAvg != null ? formatMicros(kpis.rttAvg) : '—'}
+          value={loading && !data ? '…' : kpis?.rttAvg != null ? formatMicros(kpis.rttAvg) : '—'}
           accent="lav"
           testId="kpi-rtt"
         />

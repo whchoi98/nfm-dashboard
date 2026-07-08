@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -26,9 +26,21 @@ function EdgePanel({
   const { t } = useLanguage();
   const a = nodeById.get(edge.source);
   const b = nodeById.get(edge.target);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     // Desktop: overlay card pinned to the right of the graph. Mobile: bottom sheet.
-    <div className="fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto rounded-t-card border border-black/5 bg-white p-5 shadow-lg md:absolute md:inset-x-auto md:bottom-4 md:right-4 md:top-4 md:z-10 md:max-h-none md:w-80 md:rounded-card dark:border-white/10 dark:bg-ink">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('topology.edgeDetail')}
+      className="fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto rounded-t-card border border-black/5 bg-white p-5 shadow-lg md:absolute md:inset-x-auto md:bottom-4 md:right-4 md:top-4 md:z-10 md:max-h-none md:w-80 md:rounded-card dark:border-white/10 dark:bg-ink"
+    >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('topology.edgeDetail')}</h2>
         <button

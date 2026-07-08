@@ -57,6 +57,7 @@
   "topology.kindVpc": "VPC",
   "topology.kindExternal": "외부",
   "topology.edgeHint": "선 굵기 = 전송량, 색 = 카테고리",
+  "flows.latestBucket": "최신 ({time})",
   "flows.bucket": "시간 버킷",
   "flows.monitor": "모니터",
   "flows.namespace": "네임스페이스",

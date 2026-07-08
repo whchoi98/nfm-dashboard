@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface Polling<T> {
   data: T | null;
@@ -10,47 +10,50 @@ export interface Polling<T> {
 
 /**
  * Fetch `url` as JSON on mount and every `ms` milliseconds (default 30s).
- * The interval and any in-flight response are discarded on unmount / url change.
+ * Each effect run owns a `cancelled` flag and an AbortController, so a
+ * response belonging to a superseded url/interval (or an unmounted
+ * component) is discarded instead of overwriting the current url's data.
  */
 export function usePolling<T>(url: string, ms = 30000): Polling<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const aliveRef = useRef(true);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      const body = (await res.json()) as T & { error?: string };
-      if (!aliveRef.current) return;
-      if (!res.ok) {
-        setError(body?.error ?? `HTTP ${res.status}`);
-      } else {
-        setData(body);
-        setError(null);
-      }
-    } catch (e) {
-      if (aliveRef.current) setError(e instanceof Error ? e.message : 'fetch failed');
-    } finally {
-      if (aliveRef.current) setLoading(false);
-    }
-  }, [url]);
+  // Bumping this restarts the polling effect (used by refresh()).
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    aliveRef.current = true;
+    let cancelled = false;
+    const ctrl = new AbortController();
+
+    const load = async () => {
+      try {
+        const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+        const body = (await res.json()) as T & { error?: string };
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(body?.error ?? `HTTP ${res.status}`);
+        } else {
+          setData(body);
+          setError(null);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'fetch failed');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     setLoading(true);
     load();
     const id = setInterval(load, ms);
     return () => {
-      aliveRef.current = false;
+      cancelled = true;
+      ctrl.abort();
       clearInterval(id);
     };
-  }, [load, ms]);
+  }, [url, ms, tick]);
 
-  const refresh = useCallback(() => {
-    setLoading(true);
-    load();
-  }, [load]);
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   return { data, error, loading, refresh };
 }

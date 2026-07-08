@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { FlowEdge } from '@/lib/types';
@@ -22,15 +22,28 @@ const LIMITS = ['50', '100', '200', '500'];
 
 export default function FlowsPage() {
   const { t } = useLanguage();
-  // computed once per mount; the 12 most-recent 5-min buckets.
-  // Default to the previous bucket — the newest one is usually still being written.
-  const buckets = useRef(recentBuckets(12)).current;
-  const [bucket, setBucket] = useState(buckets[1]);
+  // The 12 most-recent 5-min buckets, refreshed so the list tracks the current grid.
+  const [buckets, setBuckets] = useState(() => recentBuckets(12));
+  // '' = follow the latest complete bucket (the newest one is usually still being written);
+  // a concrete value = explicit user pick, which is kept as-is.
+  const [bucket, setBucket] = useState('');
   const [monitor, setMonitor] = useState('');
   const [ns, setNs] = useState('');
   const [pod, setPod] = useState('');
   const [applied, setApplied] = useState<{ ns: string; pod: string }>({ ns: '', pod: '' });
   const [limit, setLimit] = useState('200');
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBuckets((prev) => {
+        const next = recentBuckets(12);
+        return next[0] === prev[0] ? prev : next;
+      });
+    }, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const effectiveBucket = bucket || buckets[1];
 
   const url = useMemo(() => {
     const p = new URLSearchParams({ limit });
@@ -38,16 +51,33 @@ export default function FlowsPage() {
       p.set('ns', applied.ns);
       p.set('pod', applied.pod);
     } else {
-      p.set('bucket', bucket);
+      p.set('bucket', effectiveBucket);
       if (monitor) p.set('monitor', monitor);
     }
     return `/api/flows?${p.toString()}`;
-  }, [bucket, monitor, applied, limit]);
+  }, [effectiveBucket, monitor, applied, limit]);
 
   const { data, error, loading } = usePolling<{ flows: FlowEdge[] }>(url);
   const flows = useMemo(() => data?.flows ?? [], [data]);
 
-  const monitors = useMemo(() => [...new Set(flows.map((f) => f.monitor))].sort(), [flows]);
+  // Superset of every monitor seen across fetches, so applying a monitor
+  // filter (which narrows the fetched rows) never removes the other options.
+  const [monitors, setMonitors] = useState<string[]>([]);
+  useEffect(() => {
+    if (!data?.flows?.length) return;
+    setMonitors((prev) => {
+      const merged = new Set(prev);
+      for (const f of data.flows) merged.add(f.monitor);
+      return merged.size === prev.length ? prev : [...merged].sort();
+    });
+  }, [data]);
+
+  // Keep an explicitly selected bucket selectable even after it ages out of the list.
+  const bucketOptions = useMemo(() => {
+    const list = bucket && !buckets.includes(bucket) ? [...buckets, bucket] : buckets;
+    return list.map((b) => ({ value: b, label: bucketLabel(b) }));
+  }, [buckets, bucket]);
+
   const podMode = !!(applied.ns && applied.pod);
 
   return (
@@ -66,7 +96,8 @@ export default function FlowsPage() {
             label={t('flows.bucket')}
             value={bucket}
             onChange={setBucket}
-            options={buckets.map((b) => ({ value: b, label: bucketLabel(b) }))}
+            allLabel={t('flows.latestBucket', { time: bucketLabel(buckets[1]) })}
+            options={bucketOptions}
           />
           <Select
             label={t('flows.monitor')}
