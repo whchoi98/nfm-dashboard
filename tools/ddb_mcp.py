@@ -47,7 +47,10 @@ def get_top_talkers(args):
 
 
 def query_pod_flows(args):
-    pk = f"POD#{args['namespace']}/{args['pod']}"; limit = int(args.get("limit", 50))
+    namespace, pod = args.get("namespace", ""), args.get("pod", "")
+    if not namespace or not pod:
+        return err("namespace and pod are required")
+    pk = f"POD#{namespace}/{pod}"; limit = int(args.get("limit", 50))
     t = _table(TABLE_FLOWS); items = []
     for idx, key in (("GSI1", "gsi1pk"), ("GSI2", "gsi2pk")):
         items += t.query(IndexName=idx, KeyConditionExpression=Key(key).eq(pk),
@@ -120,4 +123,9 @@ TOOLS = {"query_pod_flows": query_pod_flows, "query_flow_edges": query_flow_edge
 def lambda_handler(event, context):
     t = event.get("tool_name", ""); args = event.get("arguments", event)
     fn = TOOLS.get(t)
-    return fn(args) if fn else err(f"unknown tool: {t}")
+    if fn is None:
+        return err(f"unknown tool: {t}")
+    try:
+        return fn(args)
+    except Exception as e:  # isolate tool failures into the ok()/err() contract / 도구 실패를 ok()/err() 계약 안으로 격리
+        return err(f"{type(e).__name__}: {e}")

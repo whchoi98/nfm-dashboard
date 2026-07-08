@@ -286,4 +286,9 @@ TOOLS = {
 def lambda_handler(event, context):
     t = event.get("tool_name", ""); args = event.get("arguments", event)
     fn = TOOLS.get(t)
-    return fn(args) if fn else err(f"unknown tool: {t}")
+    if fn is None:
+        return err(f"unknown tool: {t}")
+    try:
+        return fn(args)
+    except Exception as e:  # isolate tool failures into the ok()/err() contract / 도구 실패를 ok()/err() 계약 안으로 격리
+        return err(f"{type(e).__name__}: {e}")
