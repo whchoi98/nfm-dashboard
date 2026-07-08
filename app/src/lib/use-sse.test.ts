@@ -61,6 +61,28 @@ it('reports non-2xx responses through onError', async () => {
   expect(onError.mock.calls[0][0].message).toContain('401');
 });
 
+it('releases the reader when a handler throws', async () => {
+  const cancelled = vi.fn();
+  const enc = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(enc.encode('event: chunk\ndata: {"delta":"a"}\n\n'));
+      // stream deliberately left open — only reader.cancel() releases it
+    },
+    cancel: cancelled,
+  });
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    ({ ok: true, status: 200, body }) as unknown as Response,
+  ));
+  const onError = vi.fn();
+  await sendSse('/api/ai', {}, {
+    onChunk: () => { throw new Error('handler boom'); },
+    onError,
+  }).done;
+  expect(cancelled).toHaveBeenCalledTimes(1);
+  expect(onError).toHaveBeenCalledWith({ message: 'handler boom' });
+});
+
 it('abort() cancels without calling onError', async () => {
   vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {

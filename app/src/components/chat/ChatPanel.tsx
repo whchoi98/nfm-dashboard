@@ -100,8 +100,12 @@ export default function ChatPanel({ compact = false }: { compact?: boolean }) {
         finish();
       },
       onError: (e) => {
+        // Keep any partially streamed answer, but append WHY it failed so the
+        // reason isn't lost behind the error styling alone.
+        const prev = current[current.length - 1].content;
+        const reason = `${t('common.error')}: ${e.message}`;
         patchLast({
-          content: current[current.length - 1].content || `${t('common.error')}: ${e.message}`,
+          content: prev ? `${prev}\n\n_⚠️ ${reason}_` : reason,
           error: true,
         });
         finish();

@@ -76,20 +76,30 @@ export function sendSse(url: string, body: unknown, handlers: SseHandlers): SseR
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      for (;;) {
-        const { value, done: finished } = await reader.read();
-        if (finished) break;
-        buffer += decoder.decode(value, { stream: true });
-        // Split complete frames off the buffer; the trailing remainder (if
-        // any) is an incomplete frame kept for the next read.
-        let sep: number;
-        while ((sep = buffer.indexOf('\n\n')) !== -1) {
-          const frame = buffer.slice(0, sep);
-          buffer = buffer.slice(sep + 2);
-          if (frame.trim()) dispatchFrame(frame, handlers);
+      try {
+        for (;;) {
+          const { value, done: finished } = await reader.read();
+          if (finished) break;
+          buffer += decoder.decode(value, { stream: true });
+          // Split complete frames off the buffer; the trailing remainder (if
+          // any) is an incomplete frame kept for the next read.
+          let sep: number;
+          while ((sep = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            if (frame.trim()) dispatchFrame(frame, handlers);
+          }
+        }
+        if (buffer.trim()) dispatchFrame(buffer, handlers); // stream ended mid-frame
+      } finally {
+        // A throwing handler (or abort mid-read) must not leave the reader
+        // locked and the connection lingering — always release it.
+        try {
+          await reader.cancel();
+        } catch {
+          /* stream already closed or errored — nothing to release */
         }
       }
-      if (buffer.trim()) dispatchFrame(buffer, handlers); // stream ended mid-frame
     } catch (e) {
       if ((e as Error).name === 'AbortError') return; // caller cancelled — not an error
       handlers.onError?.({ message: (e as Error).message });

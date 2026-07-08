@@ -1,12 +1,16 @@
 'use client';
 
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 // SnowUI-styled markdown renderer for AI answers (chat bubbles, diagnosis).
 // Tables and code blocks sit in flat cards and scroll horizontally instead of
 // overflowing the layout; colors stay on the ink/surface token pair.
-export default function Markdown({ children }: { children: string }) {
+// Memoized (children is a plain string, so the default shallow compare is
+// exact): past messages skip the react-markdown/unified re-parse on every
+// SSE chunk or keystroke in ChatPanel.
+function Markdown({ children }: { children: string }) {
   return (
     <div className="space-y-3 text-sm leading-relaxed [overflow-wrap:anywhere]">
       <ReactMarkdown
@@ -69,3 +73,5 @@ export default function Markdown({ children }: { children: string }) {
     </div>
   );
 }
+
+export default memo(Markdown);
