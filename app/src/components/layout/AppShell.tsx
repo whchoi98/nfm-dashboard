@@ -1,9 +1,11 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '@/lib/i18n/LanguageContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileTabs from './MobileTabs';
+import FloatingChat from '@/components/chat/FloatingChat';
 
 function FooterAttribution() {
   const { t } = useLanguage();
@@ -22,6 +24,14 @@ function FooterAttribution() {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  // /chat-popup is a standalone window (popup / iframe): no shell chrome and
+  // no FloatingChat (it would recurse into itself).
+  if (pathname === '/chat-popup') {
+    return <LanguageProvider>{children}</LanguageProvider>;
+  }
+
   return (
     <LanguageProvider>
       <div className="flex min-h-screen">
@@ -33,6 +43,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <MobileTabs />
+      {/* /login is unauthenticated — /api/ai calls would just 401 there. */}
+      {pathname !== '/login' && <FloatingChat />}
     </LanguageProvider>
   );
 }
