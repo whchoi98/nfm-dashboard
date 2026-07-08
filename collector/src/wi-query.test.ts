@@ -32,3 +32,23 @@ it('start→status→results happy path yields WiResult per metric×category', a
       remoteIdentifier: 'vpc-2', value: 42 },
   ]);
 });
+
+it('FAILED query is skipped without aborting the other metric×category pairs', async () => {
+  nfm.on(ListScopesCommand).resolves({ scopes: [{ scopeId: 'scope-1', status: 'SUCCEEDED', scopeArn: 'arn:scope-1' }] });
+  nfm.on(StartQueryWorkloadInsightsTopContributorsCommand).resolves({ queryId: 'q1' });
+  nfm.on(GetQueryStatusWorkloadInsightsTopContributorsCommand).resolves({ status: 'FAILED' });
+
+  const results = await collectWorkloadInsights(new NetworkFlowMonitorClient({}), window, opts);
+
+  expect(results).toHaveLength(9);
+  for (const r of results) expect(r.rows).toEqual([]);
+});
+
+it('no scope found returns [] with a warning and issues no Start command', async () => {
+  nfm.on(ListScopesCommand).resolves({ scopes: [] });
+
+  const results = await collectWorkloadInsights(new NetworkFlowMonitorClient({}), window, opts);
+
+  expect(results).toEqual([]);
+  expect(nfm.commandCalls(StartQueryWorkloadInsightsTopContributorsCommand)).toHaveLength(0);
+});

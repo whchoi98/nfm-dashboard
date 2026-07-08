@@ -38,12 +38,12 @@ async function runOne(client: NetworkFlowMonitorClient, scopeId: string, metric:
       new StartQueryWorkloadInsightsTopContributorsCommand({ scopeId, metricName: metric,
         destinationCategory: category, startTime: window.startTime, endTime: window.endTime,
         limit: 100 })), base);
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 30; i++) {
       const { status } = await withRetry(() => client.send(
         new GetQueryStatusWorkloadInsightsTopContributorsCommand({ scopeId, queryId: queryId! })), base);
       if (status === 'SUCCEEDED') break;
       if (status === 'FAILED' || status === 'CANCELED') return { metric, category, rows: [] };
-      if (i === 59) {
+      if (i === 29) {
         await client.send(new StopQueryWorkloadInsightsTopContributorsCommand({ scopeId, queryId: queryId! }))
           .catch(() => {});
         return { metric, category, rows: [] };
@@ -85,9 +85,16 @@ export async function collectWorkloadInsights(client: NetworkFlowMonitorClient,
     console.warn(JSON.stringify({ level: 'warn', msg: 'no scope found; skipping workload insights' }));
     return [];
   }
-  const results: WiResult[] = [];
-  for (const metric of METRICS) for (const category of CATEGORIES) {
-    results.push(await runOne(client, scopeId, metric, category, window, resolved));
-  }
+  const jobs: Array<{ metric: WiMetricName; category: WiCategory }> = [];
+  for (const metric of METRICS) for (const category of CATEGORIES) jobs.push({ metric, category });
+  const results: WiResult[] = new Array(jobs.length);
+  let idx = 0;
+  await Promise.all(Array.from({ length: Math.min(5, jobs.length) }, async () => {
+    while (idx < jobs.length) {
+      const i = idx++;
+      const { metric, category } = jobs[i];
+      results[i] = await runOne(client, scopeId!, metric, category, window, resolved);
+    }
+  }));
   return results;
 }
