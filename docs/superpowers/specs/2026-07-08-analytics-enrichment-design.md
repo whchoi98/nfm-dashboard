@@ -58,27 +58,34 @@ Next.js API routes (ECS Fargate — 기존)
 
 ```
 app/src/lib/analytics/
-  ├─ cost.ts            # bytesToUsd, topCostContributors, costByCategorySeries
-  ├─ reliability.ts     # ratePer(엔티티), thresholdBreaches, nhiTimeline
-  ├─ latency.ts         # percentiles(p50/p90/p95), intraVsInter, slowestPaths, rttTrend
-  ├─ dependencies.ts    # serviceGraph(Sankey), composition(port/ns/category), hopUsage
-  ├─ aggregate.ts       # 공유 헬퍼: groupBy, entityKey(pod/service/ns/az), sum/rate
+  ├─ cost.ts            # bytesToUsd, topCostContributors, costByCategorySeries, regionArcs, categoryStream
+  ├─ reliability.ts     # ratePer, thresholdBreaches, nhiTimeline, nhiSwimlanes, rttVsRetrans
+  ├─ latency.ts         # percentiles, intraVsInter, slowestPaths, rttTrend, rttByHourHeatmap
+  ├─ dependencies.ts    # serviceGraph(Sankey), composition, hopUsage, pathFrequencyTree, paretoTalkers
+  ├─ aggregate.ts       # 공유 헬퍼: groupBy, entityKey(pod/service/ns/az), sum/rate/percentile
   └─ *.test.ts          # 각 순수함수 TDD
 app/src/app/api/analytics/{cost,reliability,latency,dependencies}/route.ts   # 신규
 app/src/app/api/overview/route.ts                                            # 확장(델타/스파크라인)
 app/src/components/charts/
-  ├─ Heatmap.tsx        # 신규(커스텀 그리드) — AZ×AZ, 인접행렬 겸용
+  ├─ Heatmap.tsx        # 신규(커스텀 그리드) — AZ×AZ, 인접행렬, 시간대(hour×day) 겸용
   ├─ Sankey.tsx         # 신규(recharts Sankey 래핑)
   ├─ Treemap.tsx        # 신규(recharts Treemap)
-  ├─ Distribution.tsx   # 신규(히스토그램/박스)
+  ├─ Distribution.tsx   # 신규(히스토그램)
   ├─ Gauge.tsx          # 신규(반원 게이지)
   ├─ StatDelta.tsx      # 신규(값+델타+미니 스파크라인)
+  ├─ Scatter.tsx        # 신규 — RTT×재전송 상관 산점도(4분면, recharts ScatterChart)
+  ├─ StreamGraph.tsx    # 신규 — 카테고리 구성 스트림/100% 스택 영역(recharts AreaChart)
+  ├─ RegionArcMap.tsx   # 신규 — 스키매틱 리전 노드 + 아크(커스텀 SVG, 지리좌표 아님)
+  ├─ Icicle.tsx         # 신규 — 경로 빈도 트리(flame/icicle, 커스텀 SVG)
+  ├─ Pareto.tsx         # 신규 — 상위 talker 바 + 누적 % 선(recharts ComposedChart)
+  ├─ Swimlane.tsx       # 신규 — per-monitor NHI 병렬 타임라인 밴드
   └─ (기존 TimeSeries/CategoryBars/CategoryDonut 유지)
 app/src/components/topology/
-  ├─ AggregateGraph.tsx # 신규 — 집계 노드 + 드릴다운(React Flow 재사용)
+  ├─ TierFlowMap.tsx    # 신규 — 아이콘 티어드 플로우 맵 + 드릴다운(React Flow 커스텀 노드)
+  ├─ ResourceIcon.tsx   # 신규 — 리소스 타입별 색상 원형 아이콘(EKS pod/ns/service/cluster 포함, §8.1)
   ├─ AdjacencyMatrix.tsx# 신규 — src×dst 히트맵(Heatmap 재사용)
   ├─ TopEdgesPanel.tsx  # 신규 — 상위 엣지 랭킹 사이드/시트
-  └─ (기존 TopologyGraph.tsx는 AggregateGraph로 대체, 삭제)
+  └─ (기존 TopologyGraph.tsx는 TierFlowMap으로 대체, 삭제)
 app/src/app/{page,insights,flows,paths,topology,agents}/page.tsx   # 풍성화
 app/src/app/monitors/page.tsx                                       # 신규(모니터 목록)
 app/src/app/monitors/[name]/page.tsx                                # 신규(모니터 상세: Overview+Historical explorer 탭)
@@ -112,35 +119,44 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 - `bytesToUsd(bytes, category)`: INTER_AZ = 양방향 각 $0.01/GB(= $0.02/GB round-trip 근사, ap-northeast-2), INTER_VPC = 동일 요율 적용, INTRA_AZ = $0 (요율은 상수 `AZ_TRANSFER_USD_PER_GB=0.01`로 명시, 코드 주석에 근거/가정 기록)
 - `topCostContributors(flows, kind='service')`: 엔티티쌍별 과금 바이트 → USD 내림차순 Top N
 - `costByCategorySeries(flows)`: 버킷별 카테고리 비용 시계열
-- 응답: `{ totalUsd, byCategory: Record<DestCategory,{bytes,usd}>, top: CostRow[], series: Series[] }`
+- `regionArcs(flows)`: INTER_REGION 플로우를 `a.region`/`b.region` 쌍으로 집계 → 리전 아크맵 데이터. `{ from, to, bytes, usd }[]` (동일 리전/미상은 제외)
+- `categoryStream(flows)`: 버킷별 카테고리 구성(바이트) — 스트림그래프/100% 스택 영역용. `{ t, values: Record<DestCategory, number> }[]`
+- 응답: `{ totalUsd, byCategory: Record<DestCategory,{bytes,usd}>, top: CostRow[], series: Series[], regionArcs: {from,to,bytes,usd}[], stream: {t,values}[] }`
 - 명시 가정: NFM value가 과금 대상 바이트의 근사치라는 전제(정확 청구서 아님) — UI에 "추정치" 배지
 
 ### 6.2 신뢰성 (reliability.ts / /api/analytics/reliability)
 - `ratePer(flows, kind)`: 엔티티별 **재전송/타임아웃을 전송량(GB)으로 정규화** → `retransRate = retransmissions / max(bytes/1e9, ε)`, `timeoutRate = timeouts / max(bytes/1e9, ε)` (ε로 0-division 가드; bytes=0이면 rate=0). "GB당 이벤트" 단위로 UI 표기
 - `thresholdBreaches(rows, {retransRate, timeoutRate})`: 임계 초과 목록. 기본 임계 상수 `DEFAULT_RETRANS_RATE=10`, `DEFAULT_TIMEOUT_RATE=5`(GB당 이벤트, 코드 상수로 명시) — 실데이터 관찰 후 조정
 - `nhiTimeline(cwHealthIndicator)`: CW HealthIndicator(Maximum) 타임라인(0/1)
-- 응답: `{ hotspots: ReliabilityRow[], breaches: ReliabilityRow[], nhi: Series }`
+- `nhiSwimlanes(cwByMonitor)`: 모니터별 HealthIndicator 병렬 타임라인 — `{ monitor, points: {t, healthy: boolean}[] }[]` (5개 모니터 스웜레인)
+- `rttVsRetrans(flows)`: 엣지별 (RTT, 재전송) 산점 — `{ key, label, rtt: number, retransmissions: number, bytes: number }[]`. RTT 없는 엣지 제외, 샘플 상한(예: 500)으로 트림하고 트림 시 `log()`로 드롭 수 기록
+- 응답: `{ hotspots: ReliabilityRow[], breaches: ReliabilityRow[], nhi: Series, nhiSwimlanes: {...}[], scatter: {key,label,rtt,retransmissions,bytes}[] }`
+- 참고: `rttVsRetrans`의 산점 데이터는 지연 렌즈(§6.3)와 **공유**(양 탭에서 동일 데이터 렌더, 축/강조만 다름)
 
 ### 6.3 지연 (latency.ts / /api/analytics/latency)
 - `percentiles(rttValues)`: p50/p90/p95/max/count (RTT sparse → count 표기, 없으면 빈 상태)
 - `intraVsInter(flows)`: INTRA_AZ vs INTER_AZ RTT 통계 비교
 - `slowestPaths(flows, n)`: RTT 상위 엣지(pod쌍/경로) 랭킹
 - `rttTrend(edgeSeriesOrBuckets)`: RTT 시계열 추이
-- 응답: `{ overall: LatencyStats, intra: LatencyStats, inter: LatencyStats, slowest: {...}[], trend: Series[], distribution: {bucketMs:number,count:number}[] }`
+- `rttByHourHeatmap(flows)`: hour-of-day × day-of-week(또는 최근 N일) RTT/전송량 히트맵 — `{ day, hour, value, count }[]`. 주기적 패턴/피크 식별
+- 산점도(RTT×재전송)는 §6.2 `rttVsRetrans` 데이터를 공유(별도 계산 없음)
+- 응답: `{ overall: LatencyStats, intra: LatencyStats, inter: LatencyStats, slowest: {...}[], trend: Series[], distribution: {bucketMs:number,count:number}[], hourHeatmap: {day,hour,value,count}[] }`
 
 ### 6.4 서비스 의존성 (dependencies.ts / /api/analytics/dependencies)
 - `serviceGraph(flows)`: pod→service 집계 후 service↔service SankeyData (라벨 없으면 ns 또는 ip 폴백)
 - `composition(flows)`: targetPort Top / namespace 분포 / category 분포
 - `hopUsage(flows)`: traversedConstructs componentType별 통과 횟수(미지 타입 'OTHER')
-- 응답: `{ sankey: SankeyData, ports: {port,count,bytes}[], namespaces: {...}[], categories: {...}[], hops: {type,count}[] }`
+- `pathFrequencyTree(flows)`: 각 플로우의 홉 시퀀스(componentType 순서)를 접두사 트리로 병합 → flame/icicle용. `{ name, value, children[] }`(재귀). 가장 많이 통과하는 홉 경로/공통 병목 식별
+- `paretoTalkers(flows, kind='service', metric='DATA_TRANSFERRED')`: 상위 talker + 누적 % — `{ key, label, value, cumulativePct }[]` (내림차순, 누적선용)
+- 응답: `{ sankey: SankeyData, ports: {port,count,bytes}[], namespaces: {...}[], categories: {...}[], hops: {type,count}[], pathTree: {name,value,children}, pareto: {key,label,value,cumulativePct}[] }`
 
 ## 7. Analytics 허브 (인사이트 페이지 확장)
 
 `/insights` 페이지를 탭형 허브로 재구성. 탭: `비용 | 신뢰성 | 지연 | 의존성`(i18n). 각 탭은 해당 API를 `usePolling`으로 소비하고 벤토 그리드로 배치:
-- **비용**: 총비용 StatDelta + 카테고리 트리맵 + 카테고리 비용 시계열(누적 영역) + Top 비용 기여 바
-- **신뢰성**: 핫스팟 바(재전송/타임아웃 율) + 임계 초과 테이블 + NHI 타임라인(스텝) + AZ×AZ 히트맵(재전송)
-- **지연**: p50/p90/p95 StatDelta 3개 + RTT 분포 히스토그램 + AZ내부 vs AZ간 비교 바 + 느린 경로 랭킹 + RTT 추이
-- **의존성**: 서비스 Sankey + 포트 Top 바 + 네임스페이스 트리맵 + 경로 홉 도넛
+- **비용**: 총비용 StatDelta + 카테고리 트리맵 + Top 비용 기여 바 + **카테고리 구성 스트림그래프**(믹스 변화) + **리전 아크맵**(크로스리전 비용)
+- **신뢰성**: 핫스팟 바(재전송/타임아웃 율) + 임계 초과 테이블 + NHI 타임라인(스텝) + AZ×AZ 히트맵(재전송) + **RTT×재전송 상관 산점도** + **per-monitor NHI 스웜레인**
+- **지연**: p50/p90/p95 StatDelta 3개 + RTT 분포 히스토그램 + AZ내부 vs AZ간 비교 바 + 느린 경로 랭킹 + RTT 추이 + **시간대(hour×day) 히트맵** + (신뢰성과 공유하는 RTT×재전송 산점도)
+- **의존성**: 서비스 Sankey + 포트 Top 바 + 네임스페이스 트리맵 + 경로 홉 도넛 + **경로 빈도 트리(icicle)** + **상위 talker 파레토(누적 %)**
 - 데이터 없음/수집 준비 중 상태 각 차트에 처리. 나브 라벨은 기존 "인사이트/Insights" 유지.
 
 ## 8. 토폴로지 재설계 (AWS Network path 미학 채택)
