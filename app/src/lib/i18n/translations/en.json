@@ -12,6 +12,8 @@
   "common.error": "Something went wrong",
   "common.refresh": "Refresh",
   "common.collecting": "Collecting",
+  "common.switchLang": "Language / 언어",
+  "common.toggleTheme": "Toggle theme",
   "kpi.dataTransferred": "Data Transferred",
   "kpi.retransmissions": "Retransmissions",
   "kpi.timeouts": "Timeouts",

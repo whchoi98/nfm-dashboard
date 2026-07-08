@@ -12,6 +12,8 @@
   "common.error": "오류가 발생했습니다",
   "common.refresh": "새로고침",
   "common.collecting": "수집 중",
+  "common.switchLang": "Language / 언어",
+  "common.toggleTheme": "테마 전환",
   "kpi.dataTransferred": "데이터 전송량",
   "kpi.retransmissions": "재전송",
   "kpi.timeouts": "타임아웃",
