@@ -1,0 +1,16 @@
+{
+  "name": "nfm-dashboard",
+  "private": true,
+  "workspaces": [
+    "infra",
+    "app",
+    "collector"
+  ],
+  "scripts": {
+    "test": "npm -w collector run test",
+    "deploy:data": "npm -w collector run build && cd infra && npx cdk deploy NfmDash-Data --require-approval never -c imageTag=unused"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

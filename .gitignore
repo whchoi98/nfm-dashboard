@@ -1,0 +1,10 @@
+node_modules/
+.next/
+cdk.out/
+dist/
+__pycache__/
+.pytest_cache/
+test-results/
+*.tsbuildinfo
+.env*
+e2e/.auth.json
