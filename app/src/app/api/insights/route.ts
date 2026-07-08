@@ -8,6 +8,10 @@ const emptyByCategory = (): Record<DestCategory, CategoryTotals> => ({
   INTRA_AZ: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
   INTER_AZ: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
   INTER_VPC: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  UNCLASSIFIED: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  AMAZON_S3: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  AMAZON_DYNAMODB: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  INTER_REGION: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
 });
 const METRIC_KEY: Record<string, keyof CategoryTotals> = {
   DATA_TRANSFERRED: 'dataTransferred', RETRANSMISSIONS: 'retransmissions', TIMEOUTS: 'timeouts',

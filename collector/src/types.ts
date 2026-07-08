@@ -1,6 +1,7 @@
 // collector/src/types.ts
 export type MetricName = 'DATA_TRANSFERRED'|'RETRANSMISSIONS'|'TIMEOUTS'|'ROUND_TRIP_TIME';
-export type DestCategory = 'INTRA_AZ'|'INTER_AZ'|'INTER_VPC';
+export type DestCategory = 'INTRA_AZ'|'INTER_AZ'|'INTER_VPC'
+  |'UNCLASSIFIED'|'AMAZON_S3'|'AMAZON_DYNAMODB'|'INTER_REGION';
 export interface EndpointInfo { ip?: string; instanceId?: string; subnetId?: string; az?: string;
   vpcId?: string; region?: string; podName?: string; podNamespace?: string; serviceName?: string; }
 export interface TraversedComponent { componentId?: string; componentType?: string;

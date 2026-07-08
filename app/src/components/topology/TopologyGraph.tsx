@@ -92,7 +92,9 @@ function layout(nodes: TopoNode[], edges: TopoEdge[]): { rf: RFNode[]; rfe: RFEd
     id: e.id,
     source: e.source,
     target: e.target,
-    style: { stroke: CATEGORY_COLORS[e.category] ?? TOKENS.chartBlue, strokeWidth: edgeWidth(e) },
+    // Extended categories (UNCLASSIFIED, AMAZON_S3, ...) have no dedicated hue yet;
+    // fall back to chartBlue until the chart palette is widened.
+    style: { stroke: CATEGORY_COLORS[e.category as keyof typeof CATEGORY_COLORS] ?? TOKENS.chartBlue, strokeWidth: edgeWidth(e) },
     // Interaction affordance: a wide invisible hit area handles the click.
     interactionWidth: 14,
   }));

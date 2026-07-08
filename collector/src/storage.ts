@@ -50,7 +50,7 @@ export function buildTopology(edges: FlowEdge[], monitorToCluster: Record<string
 export async function writeCycle(ddb: DynamoDBDocumentClient,
     tables: { flows: string; meta: string },
     payload: { edges: FlowEdge[]; topology: TopologySnapshot; stats: CycleStats;
-      cycleTs: string; coverage?: unknown }): Promise<void> {
+      cycleTs: string; coverage?: unknown; cycle?: number }): Promise<void> {
   const ttl = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
   const items = payload.edges.map(e => ({ PutRequest: { Item: flowItem(e, ttl) } }));
   for (let i = 0; i < items.length; i += 25) {
@@ -69,7 +69,8 @@ export async function writeCycle(ddb: DynamoDBDocumentClient,
   await ddb.send(new PutCommand({ TableName: tables.meta,
     Item: { pk: 'STATUS#collect', sk: payload.cycleTs, stats: payload.stats, ttl } }));
   await ddb.send(new PutCommand({ TableName: tables.meta,
-    Item: { pk: 'STATUS#collect', sk: 'latest', cycleTs: payload.cycleTs, stats: payload.stats } }));
+    Item: { pk: 'STATUS#collect', sk: 'latest', cycleTs: payload.cycleTs, stats: payload.stats,
+      cycle: payload.cycle } }));
   await ddb.send(new PutCommand({ TableName: tables.meta,
     Item: { pk: 'TOPO#latest', sk: 'snapshot', topology: payload.topology } }));
   if (payload.coverage) await ddb.send(new PutCommand({ TableName: tables.meta,

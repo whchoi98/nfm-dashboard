@@ -6,7 +6,7 @@ import { normalizeRow, dedupeEdges, type RawRow } from './normalize.js';
 
 export interface MatrixSpec { monitors: string[]; metrics: MetricName[]; categories: DestCategory[];
   startTime: Date; endTime: Date; bucket: string; concurrency: number;
-  pollDelayMs?: number; retryBaseMs?: number; }
+  pollDelayMs?: number; retryBaseMs?: number; statusPollMax?: number; }
 export interface CycleStats { started: number; succeeded: number; failed: number;
   throttled: number; rows: number; }
 
@@ -34,12 +34,13 @@ async function runOne(client: NetworkFlowMonitorClient, monitor: string, metric:
     const { queryId } = await withRetry(() => client.send(new StartQueryMonitorTopContributorsCommand({
       monitorName: monitor, metricName: metric, destinationCategory: category,
       startTime: spec.startTime, endTime: spec.endTime, limit: 100 })), stats, base);
-    for (let i = 0; i < 60; i++) {
+    const pollMax = spec.statusPollMax ?? 30;
+    for (let i = 0; i < pollMax; i++) {
       const { status } = await withRetry(() => client.send(
         new GetQueryStatusMonitorTopContributorsCommand({ monitorName: monitor, queryId })), stats, base);
       if (status === 'SUCCEEDED') break;
       if (status === 'FAILED' || status === 'CANCELED') { stats.failed++; return []; }
-      if (i === 59) {
+      if (i === pollMax - 1) {
         await client.send(new StopQueryMonitorTopContributorsCommand({ monitorName: monitor, queryId }))
           .catch(() => {});
         stats.failed++; return [];

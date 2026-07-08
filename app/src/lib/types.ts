@@ -2,7 +2,8 @@
 // Kept as a small local module instead of a cross-workspace import so the Next.js build stays
 // self-contained. Field names MUST stay identical to the collector output.
 export type MetricName = 'DATA_TRANSFERRED' | 'RETRANSMISSIONS' | 'TIMEOUTS' | 'ROUND_TRIP_TIME';
-export type DestCategory = 'INTRA_AZ' | 'INTER_AZ' | 'INTER_VPC';
+export type DestCategory = 'INTRA_AZ' | 'INTER_AZ' | 'INTER_VPC'
+  | 'UNCLASSIFIED' | 'AMAZON_S3' | 'AMAZON_DYNAMODB' | 'INTER_REGION';
 
 export interface EndpointInfo { ip?: string; instanceId?: string; subnetId?: string; az?: string;
   vpcId?: string; region?: string; podName?: string; podNamespace?: string; serviceName?: string; }
