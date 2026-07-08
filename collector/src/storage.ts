@@ -33,7 +33,11 @@ export function buildTopology(edges: FlowEdge[], monitorToCluster: Record<string
     const key = e.edgeHash;
     const cur = merged.get(key) ?? { id: key, source: endpointKey(e.a), target: endpointKey(e.b),
       metrics: {}, category: e.category, targetPort: e.targetPort };
-    cur.metrics[e.metric] = (cur.metrics[e.metric] ?? 0) + e.value;
+    // Duplicate observations of the same flow (two cluster monitors) must not
+    // inflate latency: RTT merges with MAX; counts (bytes/retrans/timeouts) sum.
+    const prev = cur.metrics[e.metric];
+    cur.metrics[e.metric] = e.metric === 'ROUND_TRIP_TIME'
+      ? Math.max(prev ?? 0, e.value) : (prev ?? 0) + e.value;
     merged.set(key, cur);
   }
   const top = [...merged.values()]

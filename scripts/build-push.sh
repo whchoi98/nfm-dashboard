@@ -7,7 +7,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ACCOUNT=<ACCOUNT_ID>; REGION=ap-northeast-2; REPO=nfm-dashboard-app
 TAG=${1:-$(git rev-parse --short HEAD)}
-# New repos are created tag-IMMUTABLE; a pre-existing repo may still be MUTABLE.
+# New repos are created tag-IMMUTABLE (the live repo has also been switched to
+# IMMUTABLE). Re-pushing an existing SHA tag is rejected by design: a new
+# commit = a new tag. Rebuilding the same commit requires passing a fresh tag.
 aws ecr describe-repositories --repository-names $REPO --region $REGION >/dev/null 2>&1 || \
   aws ecr create-repository --repository-name $REPO --region $REGION \
     --image-tag-mutability IMMUTABLE \

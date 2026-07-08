@@ -22,8 +22,13 @@ export class AgentCoreStack extends cdk.Stack {
       return fn;
     };
     const net = mk('Network', 'network_mcp'), nfm = mk('Nfm', 'nfm_mcp'), ddbF = mk('Ddb', 'ddb_mcp');
+    // Reachability Analyzer (analyze_reachability tool) needs create/start plus
+    // ec2:CreateTags (TagSpecifications on create) and the tiros:* backend
+    // actions the analysis engine calls; these APIs are account-level → '*'.
     net.addToRolePolicy(new iam.PolicyStatement({ actions: ['ec2:Describe*', 'ec2:Get*',
-      'ec2:CreateNetworkInsightsPath', 'ec2:StartNetworkInsightsAnalysis',
+      'ec2:CreateNetworkInsightsPath', 'ec2:DeleteNetworkInsightsPath',
+      'ec2:StartNetworkInsightsAnalysis', 'ec2:CreateTags',
+      'tiros:CreateQuery', 'tiros:GetQueryAnswer', 'tiros:GetQueryExplanation',
       'ec2:DescribeNetworkInsights*', 'elasticloadbalancing:Describe*',
       'network-firewall:Describe*', 'network-firewall:List*', 'logs:FilterLogEvents',
       'eks:Describe*', 'eks:List*'], resources: ['*'] }));

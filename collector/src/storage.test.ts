@@ -39,6 +39,18 @@ it('buildTopology merges metrics per edge and classifies nodes', () => {
   expect(topo.edges[0].metrics.ROUND_TRIP_TIME).toBe(900);
 });
 
+it('buildTopology duplicate observations: RTT takes max, count metrics still sum', () => {
+  // Same physical flow observed by two cluster monitors (dedupeEdges keys on
+  // monitor+category, so both survive into topology): latency must not sum.
+  const rtt1 = { ...edge, metric: 'ROUND_TRIP_TIME' as const, value: 900 };
+  const rtt2 = { ...edge, monitor: 'nfm-eks-other', metric: 'ROUND_TRIP_TIME' as const, value: 700 };
+  const bytes2 = { ...edge, monitor: 'nfm-eks-other', value: 40 };
+  const topo = buildTopology([edge, rtt1, rtt2, bytes2], {}, '2026-07-08T11:50:00Z');
+  expect(topo.edges).toHaveLength(1);
+  expect(topo.edges[0].metrics.ROUND_TRIP_TIME).toBe(900); // max(900, 700), not 1600
+  expect(topo.edges[0].metrics.DATA_TRANSFERRED).toBe(140); // 100 + 40 (counts sum)
+});
+
 it('flowItem key precedence: colliding FlowEdge fields cannot clobber computed keys', () => {
   // A future FlowEdge field literally named pk/sk/gsi3pk/gsi3sk/ttl must not win over
   // the computed DynamoDB keys — ...e has to be spread BEFORE the computed keys are assigned.

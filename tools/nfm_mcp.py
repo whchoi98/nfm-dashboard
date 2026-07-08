@@ -22,9 +22,11 @@ REGION = "ap-northeast-2"
 
 WI_CATEGORIES = ("INTRA_AZ", "INTER_AZ", "INTER_VPC")
 # GetMetricData stat per AWS/NetworkFlowMonitor metric name / 지표별 GetMetricData 통계 방식
+# HealthIndicator is 0/1 where any 1 = degraded, so Maximum is the correct
+# semantic (matches app/src/lib/cw-metrics.ts statFor()).
 CW_METRIC_STATS = {
     "DataTransferred": "Sum", "Retransmissions": "Sum", "Timeouts": "Sum",
-    "RoundTripTime": "Average", "HealthIndicator": "Average",
+    "RoundTripTime": "Average", "HealthIndicator": "Maximum",
 }
 
 _nfm = None
