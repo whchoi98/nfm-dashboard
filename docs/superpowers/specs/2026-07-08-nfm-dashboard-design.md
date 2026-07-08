@@ -177,7 +177,12 @@ nfm-dashboard/
 ## 10. Frontend (섹션 5 — 승인됨)
 
 - **스택**: Next.js 15 App Router, Tailwind CSS, standalone output, arm64. `react-markdown` v10 + `remark-gfm`.
-- **디자인**: Figma Dashboard UI Kit(사이드바+카드+차트 어드민) 참조, light/dark. 구현 시 frontend-design·dataviz 스킬 적용.
+- **디자인**: Figma "Dashboard UI Kit" = **SnowUI by ByeWind** (CC BY 4.0 — attribution 표기 필요). 프리뷰를 실측 확인한 구체 기준:
+  - **레이아웃**: 좌측 사이드바(그룹 섹션 네비, 선택 항목 연회색 pill) + 상단 breadcrumb 바(검색 `⌘/`, 테마 토글, 알림) + 카드 그리드 본문 + 우측 보조 패널(알림/활동 피드 — 우리는 수집 이벤트/NFM 알람 피드로 사용, lg 이상에서만 표시)
+  - **컬러(라이트)**: 배경 `#FFFFFF`, 카드 서피스 `#F7F9FB`, 텍스트 `#1C1C1C`, 보조 텍스트 40% 불투명. 파스텔 액센트: 하늘 `#E3F5FF`/`#B1E3FF`, 라벤더 `#E5ECF6`/`#95A4FC`, 민트 `#BAEDBD`/`#A1E3CB`, 블루그레이 `#A8C5DA`, 포인트 블루/블랙 KPI 변형. **다크**: `#1C1C1C` 기조 동일 구조
+  - **형태/타이포**: 카드 radius 16px, 라운드 캡 바 차트, 그림자 없음(플랫), Inter 계열 — KPI 값 24px semibold + 증감 배지(`+11.02% ↗`), 라벨 12px
+  - **NFM 매핑**: KPI 카드 4개(DataTransferred/Retransmissions/Timeouts/RTT + NHI 배지), 라인 차트(시계열), 라운드 바(클러스터/카테고리별), 도넛(destinationCategory 분포)
+  - 구현 시 frontend-design·dataviz 스킬 적용. 스크린샷 사본: `docs/design-refs/snowui-overview-light.png`, `docs/design-refs/snowui-variant-bold.png`
 - **반응형(아이폰)**: 모바일 우선. 사이드바→햄버거+하단 탭, 테이블→카드 리스트, 그래프 터치 줌/팬, `safe-area-inset`, 44px 터치 타겟, `viewport-fit=cover`.
 - **페이지**: `/`(KPI+상태) · `/topology`(React Flow Pod-to-Pod 그래프, 필터, 엣지→경로 패널) · `/flows`(테이블+drawer) · `/paths`(pod쌍 경로: 양단 pod→노드→서브넷→AZ→VPC + traversedConstructs + SNAT/DNAT) · `/insights`(Workload Insights 시계열) · `/diagnose`(SSE 진단+regenerate) · `/agents`(커버리지)
 - **FloatingChat**: 우하단 플로팅 버튼 → 인라인 패널(SSE 소비: fetch+getReader 수동 파싱 — POST body 필요로 EventSource 미사용, awsops 패턴).
