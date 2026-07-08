@@ -1,7 +1,7 @@
 {
   "app": "npx tsx bin/nfm-dashboard.ts",
   "context": {
-    "nfmMonitors": "nfm-vpc-all=",
+    "nfmMonitors": "nfm-eks-ekscluster01-iptables=ekscluster01-iptables,nfm-eks-ekscluster01-ipvs=ekscluster01-ipvs,nfm-eks-ekscluster01-nftables=ekscluster01-nftables,nfm-eks-eksworkshop=eksworkshop,nfm-vpc-all=",
     "@aws-cdk/core:bootstrapQualifier": "hnb659fds"
   }
 }
