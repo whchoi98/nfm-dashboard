@@ -281,7 +281,34 @@ AWS 아이콘 풍의 색상 원형 아이콘 세트를 `app/src/components/topol
 - **개요·모니터 개요**: query-value 타일 행 + 동기화 timeseries + toplist로 재구성.
 - **플로우·토폴로지·에이전트**: 필터 바 공유 + toplist/heatmap 위젯 추가.
 
-## 17. 참조 / References
+## 17. 챗봇 재설계 (ontology-for-gcc 참조)
+
+참조 프로젝트 `/home/ec2-user/my-project/ontology-for-gcc/web`(Next.js, react-markdown v10+remark-gfm)의 챗봇이 더 깔끔·친화적이라는 피드백을 반영한다. **참조의 좋은 패턴은 채택하되, 참조와 우리 모두의 공통 약점(구문 강조 없음, 정지 버튼 없음, 전체 재파싱)은 이번에 함께 개선**한다. SnowUI 토큰/테마-어웨어(라이트+다크)는 유지(참조의 강제 다크는 미채택).
+
+### 17.1 채택할 참조 패턴
+- **단일 렌더러 + 전역 `.chat-markdown` 스타일**(참조 `MarkdownView.tsx` + `globals.css`): 모든 챗 표면(FloatingChat/팝업/진단)이 하나의 `Markdown` 컴포넌트 + 전역 CSS로 동일 스타일. 기존 `Markdown.tsx`를 이 방식으로 정리(컴포넌트 오버라이드 최소화, 스타일은 전역 클래스).
+- **스트리밍 클라이언트 정리**(참조 `lib/api-client.ts`): `use-sse.ts`에 (a) `streamSSE` **async-generator**(`for await` 소비) + (b) `chatStream` **콜백+AbortController** 두 형태를 노출. fetch+getReader(POST+쿠키) 유지, `\n\n` 프레이밍/401 처리/한글 에러 표면화.
+- **가이드형 빈 상태 + 후속 질문 칩**: 빈 챗에 NFM 운영 맥락 **추천 질문 5개**(예: "재전송 상위 pod?", "AZ간 비용 상위?", "가장 느린 경로?"), 답변 후 **후속 질문 칩 3개**(2차 비스트리밍 Converse 호출로 생성, 참조 `followups.py` 패턴). 빈 화면이 "안내"처럼 느껴지게.
+- **진행 투명성(phase/tool trace)**: 참조의 phase 칩 + tool-call 트레이스 패널을 경량 채택 — 상태 배지가 사라지지 않고, 사용한 도구 목록(`usedTools`)을 답변 하단에 접이식으로 표시.
+- **일관 버블 시스템**: 비대칭 마진 + 옅은 tinted 보더, 무거운 아바타 없음(참조 방식). SnowUI 토큰 사용.
+
+### 17.2 참조/우리 공통 약점 개선 (이번에 함께)
+- **구문 강조 + 코드 복사 버튼**: `Markdown`에 `rehype-highlight`(또는 shiki) 추가 → JSON/CLI/YAML 강조, 코드블록 우상단 복사 버튼. (네트워크 운영 어시스턴트에 가장 큰 렌더링 개선)
+- **정지(Stop) 버튼**: 스트리밍 중 전송 버튼이 Stop으로 전환 → `abort()` 호출(코드엔 이미 있으나 UI 미연결).
+- **멀티라인 입력**: `<input>` → 자동 확장 `<textarea>`, Shift+Enter 줄바꿈, Enter 전송.
+- **점진 렌더**: 스트리밍 버블은 완료분(memo) + 마지막 청크만 재렌더하도록 분할, 매우 긴 답변에서 전체 재파싱 회피.
+- **스마트 오토스크롤**: 하단 고정은 "이미 하단일 때만", 위로 스크롤 시 "맨 아래로" pill 표시.
+- **접근성**: 스트리밍 텍스트 `aria-live=polite`, 다이얼로그 포커스 관리.
+- **에러 UX**: 인라인 이탤릭 대신 재시도 버튼 + 명확한 사유.
+
+### 17.3 팝업 복잡도 단순화
+- 현재 3-way UA 분기(popup/iframe/sheet) + 500ms 차단 재확인 휴리스틱은 취약 → 참조식 **우측 슬라이드 드로어** 기본 + 선택적 "새 창으로" 버튼(Chrome은 iframe 모달 폴백 유지)로 단순화. `/chat-popup` 라우트는 유지(독립 창).
+
+### 17.4 백엔드(SSE) 정렬
+- `/api/ai`·`/api/diagnose`의 진짜 토큰 스트리밍은 유지. 이벤트 어휘를 참조와 정렬해 `status|chunk|done|error`에 **`followups`**(후속 질문) 추가, 답변 종료 후 후속 질문 3개를 별도 짧은 Converse로 생성해 emit. 15초 keepalive 유지. 모델 `global.anthropic.claude-sonnet-5` 유지.
+- 영향 파일: `app/src/components/Markdown.tsx`, `app/src/lib/use-sse.ts`, `app/src/components/chat/{ChatPanel,FloatingChat}.tsx`, `app/src/app/api/{ai,diagnose}/route.ts`, `app/src/lib/ua.ts`(단순화), `app/src/app/globals.css`(.chat-markdown), 신규 후속질문 생성 유틸. 의존성 추가: `rehype-highlight`(+하이라이트 테마 CSS, CSP 안전 인라인).
+
+## 18. 참조 / References
 
 - 기반: `docs/superpowers/specs/2026-07-08-nfm-dashboard-design.md`
 - 현재 디자인 캡처: `docs/design-refs/current-*.png`
