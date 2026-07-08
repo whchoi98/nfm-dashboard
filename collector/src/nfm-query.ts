@@ -59,7 +59,11 @@ async function runOne(client: NetworkFlowMonitorClient, monitor: string, metric:
     } while (nextToken);
     stats.succeeded++;
     return edges;
-  } catch { stats.failed++; return []; }
+  } catch (e) {
+    console.error(JSON.stringify({ level: 'error', msg: 'query failed', monitor, metric, category,
+      error: (e as Error).name, detail: (e as Error).message }));
+    stats.failed++; return [];
+  }
 }
 
 export async function runQueryMatrix(client: NetworkFlowMonitorClient, spec: MatrixSpec) {
