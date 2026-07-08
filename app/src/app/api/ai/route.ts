@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import type { ContentBlock, Message, Tool } from '@aws-sdk/client-bedrock-runtime';
+import type { ContentBlock, Message, Tool, ToolUseBlock } from '@aws-sdk/client-bedrock-runtime';
 import { sendConverseStream, MODEL_ID } from '@/lib/bedrock';
 import { listTools, callTool, toBedrockTools } from '@/lib/mcp-client';
 import { sseEvent } from '@/lib/sse';
@@ -36,11 +36,15 @@ export async function POST(req: NextRequest) {
       let modelUsed = MODEL_ID;
       try {
         send('status', { stage: 'connecting' });
-        const gatewayUrl = await getParam('/nfm-dashboard/gateway-url');
+        // Gateway URL fetch + listTools + toBedrockTools together: an SSM or
+        // gateway outage degrades to a tool-less answer, never a hard error.
+        let gatewayUrl = '';
         let tools: ReturnType<typeof toBedrockTools> = [];
-        try { tools = toBedrockTools(await listTools(gatewayUrl)); }
-        catch (e) {
-          console.error('[api/ai] gateway listTools failed — tool-less fallback:', e);
+        try {
+          gatewayUrl = await getParam('/nfm-dashboard/gateway-url');
+          tools = toBedrockTools(await listTools(gatewayUrl));
+        } catch (e) {
+          console.error('[api/ai] gateway setup failed — tool-less fallback:', e);
           send('status', { stage: 'fallback' });
         }
         const system = [{ text: `You are an AWS network operations assistant for an NFM (Network Flow Monitor) dashboard. Use tools to inspect flows, pods, paths and AWS network resources. Answer in ${lang === 'ko' ? 'Korean' : 'English'}. Cite concrete values from tool results.` }];
@@ -58,40 +62,68 @@ export async function POST(req: NextRequest) {
             ...(tools.length ? { toolConfig: { tools: tools as unknown as Tool[] } } : {}),
           });
           modelUsed = modelId; // stick with the fallback once engaged
-          const toolUses: { toolUseId: string; name: string; input: string }[] = [];
+          // Track tool-use blocks by contentBlockIndex so each delta maps to
+          // its block deterministically (a delta arriving without a preceding
+          // contentBlockStart must not crash the stream).
+          const toolUseByIndex = new Map<number, { toolUseId: string; name: string; input: string }>();
+          let lastToolUseIdx = -1;
           let stopReason = '';
           let text = '';
           for await (const ev of res.stream!) {
             if (ev.contentBlockStart?.start?.toolUse) {
               const t = ev.contentBlockStart.start.toolUse;
-              toolUses.push({ toolUseId: t.toolUseId!, name: t.name!, input: '' });
+              const idx = ev.contentBlockStart.contentBlockIndex ?? lastToolUseIdx + 1;
+              lastToolUseIdx = idx;
+              const blk = toolUseByIndex.get(idx) ?? { toolUseId: '', name: '', input: '' };
+              blk.toolUseId = t.toolUseId ?? blk.toolUseId;
+              blk.name = t.name ?? blk.name;
+              toolUseByIndex.set(idx, blk);
             } else if (ev.contentBlockDelta?.delta?.text) {
               text += ev.contentBlockDelta.delta.text;
               send('chunk', { delta: ev.contentBlockDelta.delta.text });
-            } else if (ev.contentBlockDelta?.delta?.toolUse?.input) {
-              toolUses[toolUses.length - 1].input += ev.contentBlockDelta.delta.toolUse.input;
+            } else if (ev.contentBlockDelta?.delta?.toolUse?.input !== undefined) {
+              const idx = ev.contentBlockDelta.contentBlockIndex ?? lastToolUseIdx;
+              let blk = toolUseByIndex.get(idx);
+              if (!blk) { // delta without a started block — create lazily, never crash
+                blk = { toolUseId: '', name: '', input: '' };
+                toolUseByIndex.set(idx, blk);
+              }
+              blk.input += ev.contentBlockDelta.delta.toolUse.input;
             } else if (ev.messageStop) stopReason = ev.messageStop.stopReason ?? '';
           }
+          // Ordered list at messageStop; a lazily-created block that never got
+          // an id/name cannot be echoed back to Bedrock, so drop it.
+          const toolUses = [...toolUseByIndex.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([, blk]) => blk)
+            .filter((blk) => blk.toolUseId && blk.name);
           full += text;
           if (stopReason !== 'tool_use') break;
           const assistantContent: ContentBlock[] = [];
           if (text) assistantContent.push({ text });
-          for (const tu of toolUses) {
-            assistantContent.push({ toolUse: { toolUseId: tu.toolUseId,
-              name: tu.name, input: JSON.parse(tu.input || '{}') } });
-          }
-          convo.push({ role: 'assistant', content: assistantContent });
           const results: ContentBlock[] = [];
           for (const tu of toolUses) {
             usedTools.push(tu.name);
             send('status', { stage: `tool:${tu.name}` });
-            let out: string;
-            // callTool restores the original MCP name if Bedrock's was truncated.
-            try { out = await callTool(gatewayUrl, tu.name, JSON.parse(tu.input || '{}')); }
-            catch (e) { out = `tool error: ${(e as Error).message}`; }
+            // Per-tool isolation: parse the input once, reuse it for both the
+            // assistant toolUse block and the call; any failure becomes a
+            // toolResult error for THIS tool only — never abort the stream.
+            let input: Record<string, unknown> = {};
+            let out: string | undefined;
+            try { input = JSON.parse(tu.input || '{}'); }
+            catch (e) { out = `tool error: invalid tool input JSON: ${(e as Error).message}`; }
+            // Every toolResult needs a matching toolUse block, even on failure.
+            assistantContent.push({ toolUse: { toolUseId: tu.toolUseId, name: tu.name,
+              input: input as ToolUseBlock['input'] } });
+            if (out === undefined) {
+              // callTool restores the original MCP name if Bedrock's was truncated.
+              try { out = await callTool(gatewayUrl, tu.name, input); }
+              catch (e) { out = `tool error: ${(e as Error).message}`; }
+            }
             results.push({ toolResult: { toolUseId: tu.toolUseId,
               content: [{ text: out.slice(0, 40000) }] } });
           }
+          convo.push({ role: 'assistant', content: assistantContent });
           convo.push({ role: 'user', content: results });
         }
         send('done', { content: full, usedTools, elapsedMs: Date.now() - t0, model: modelUsed });

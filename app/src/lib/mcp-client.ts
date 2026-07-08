@@ -46,11 +46,20 @@ export async function mcpCall(
 ): Promise<Record<string, unknown>> {
   const u = new URL(url);
   const body = JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, ...(params ? { params } : {}) });
+  // Sign the query string too: SigV4 canonicalizes path and query separately,
+  // so the query must go in `query` (not appended to `path`, which would be
+  // percent-encoded into the canonical path and fail server-side verification).
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(u.searchParams.keys())) {
+    const values = u.searchParams.getAll(key);
+    query[key] = values.length > 1 ? values : values[0];
+  }
   const unsigned = new HttpRequest({
     method: 'POST',
     protocol: u.protocol,
     hostname: u.hostname,
     path: u.pathname,
+    query,
     headers: {
       host: u.hostname,
       'content-type': 'application/json',
