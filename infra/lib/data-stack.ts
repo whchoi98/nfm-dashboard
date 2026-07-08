@@ -41,8 +41,14 @@ export class DataStack extends cdk.Stack {
       'networkflowmonitor:GetQueryStatusMonitorTopContributors',
       'networkflowmonitor:GetQueryResultsMonitorTopContributors',
       'networkflowmonitor:StopQueryMonitorTopContributors',
-      'networkflowmonitor:ListMonitors', 'ec2:DescribeInstances', 'ec2:CreateTags',
-      'iam:ListAttachedRolePolicies'], resources: ['*'] }));
+      'networkflowmonitor:ListMonitors',
+      'networkflowmonitor:ListScopes',
+      'networkflowmonitor:StartQueryWorkloadInsightsTopContributors',
+      'networkflowmonitor:GetQueryStatusWorkloadInsightsTopContributors',
+      'networkflowmonitor:GetQueryResultsWorkloadInsightsTopContributors',
+      'networkflowmonitor:StopQueryWorkloadInsightsTopContributors',
+      'ec2:DescribeInstances', 'ec2:CreateTags',
+      'iam:ListAttachedRolePolicies', 'iam:GetInstanceProfile'], resources: ['*'] }));
     this.collector.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:AttachRolePolicy'], resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*'],
       conditions: { ArnEquals: { 'iam:PolicyARN':
