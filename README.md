@@ -39,9 +39,9 @@ EventBridge Scheduler (5분) ─▶ Collector Lambda (Node 22, arm64)
    └─ 신규 standalone EC2 자동 온보딩(태깅 + 정책 attach)
 
 AgentCore Gateway `nfm-gateway` (MCP, AWS_IAM/SigV4 — 27 tools)
- ├─ network-mcp-target → Lambda nfm-network-mcp (VPC/TGW/방화벽/reachability 16 도구)
- ├─ nfm-mcp-target     → Lambda nfm-flowmonitor-mcp (NFM API 조회 5 도구)
- └─ ddb-mcp-target     → Lambda nfm-ddb-mcp (적재 데이터 조회 6 도구)
+ ├─ network-mcp-target → Lambda nfm-dashboard-mcp-network (VPC/TGW/방화벽/reachability 16 도구)
+ ├─ nfm-mcp-target     → Lambda nfm-dashboard-mcp-nfm (NFM API 조회 5 도구)
+ └─ ddb-mcp-target     → Lambda nfm-dashboard-mcp-ddb (적재 데이터 조회 6 도구)
 
 NFM 온보딩 (NfmDash-Onboarding):
   Scope ×1 (Workload Insights) · 모니터 5개 (nfm-eks-<cluster> ×4 + nfm-vpc-all)
@@ -117,10 +117,10 @@ npx -w infra cdk deploy NfmDash-AgentCore -c imageTag=$TAG --require-approval ne
 bash scripts/setup-gateway.sh
 ```
 
-**5. 앱 이미지 빌드/푸시 (arm64) → App 스택** (ECS/ALB/CloudFront/Cognito). `build-push.sh`가 git short SHA를 불변 태그로 푸시하고, 배포는 그 태그를 고정한다.
+**5. 앱 이미지 빌드/푸시 (arm64) → App 스택** (ECS/ALB/CloudFront/Cognito). 처음에 캡처한 `$TAG`를 `build-push.sh`에 **명시적으로 전달**해 빌드/푸시와 App 배포가 반드시 같은 태그를 사용하도록 한다(가이드 진행 중 커밋이 생겨도 안전).
 
 ```bash
-bash scripts/build-push.sh          # → "Pushed image tag: <sha>" 출력
+bash scripts/build-push.sh "$TAG"   # → "Pushed image tag: <sha>" 출력
 npx -w infra cdk deploy NfmDash-App -c imageTag=$TAG --require-approval never
 ```
 
@@ -184,7 +184,7 @@ bash scripts/smoke.sh
 
 - **E2E 스모크**: `bash scripts/smoke.sh` (전체 3 spec) / `bash scripts/smoke.sh -g login` (필터). 로그인→KPI, 챗 SSE 실응답, iPhone 뷰포트 무가로스크롤을 라이브 URL에서 검증.
 - **수집 주기**: EventBridge Scheduler 5분. 사이클당 최대 60 NFM 쿼리(모니터 5 × metric 4 × category 3) + Workload Insights, 동시성 5 + 지수 백오프, 부분 실패 허용. 데이터 TTL 7일. 수집 상태는 `nfm-dashboard-meta`와 `/agents` 페이지에서 확인.
-- **재배포**: 앱 변경 시 `bash scripts/build-push.sh` → `cdk deploy NfmDash-App -c imageTag=<새 sha>`. 태그가 불변이므로 태스크 재시작으로 이미지가 바뀌는 일이 없다.
+- **재배포**: 앱 변경 시 `TAG=$(git rev-parse --short HEAD)` 캡처 후 `bash scripts/build-push.sh "$TAG"` → `cdk deploy NfmDash-App -c imageTag=$TAG`. 태그가 불변이므로 태스크 재시작으로 이미지가 바뀌는 일이 없다.
 - **비용 메모** (개략): 상시 비용은 ECS Fargate 1 task(1 vCPU/2GB, arm64) + ALB + NATGW 트래픽. 종량 비용은 DynamoDB on-demand, Collector/도구 Lambda(5분 주기), CloudFront, NFM 쿼리, 그리고 챗/진단 사용 시 Bedrock 토큰. 미사용 시 Bedrock 비용은 0.
 
 ## 어트리뷰션 / Attribution
@@ -196,7 +196,7 @@ bash scripts/smoke.sh
 
 - **단일 계정/단일 리전**: NFM Scope는 계정/리전당 1개(고정 쿼터). 멀티 계정/리전, 커스텀 도메인(Route53), AgentCore Runtime/Memory는 범위 외.
 - **Gateway는 CFN 밖에서 생성**: `nfm-gateway`는 `scripts/setup-gateway.sh`(boto3)로 생성 — 스택 삭제 시 함께 삭제되지 않으므로 정리도 스크립트/콘솔로 수행.
-- **모든 cdk 명령에 `-c imageTag` 필요**: App 스택이 synth 시 태그를 검증하기 때문 (위 배포 가이드 참조). 계정에 이미 존재하던 ECR 리포는 MUTABLE일 수 있음(신규 생성 시엔 IMMUTABLE) — 배포는 SHA 태그 고정이라 실질 영향 없음.
+- **모든 cdk 명령에 `-c imageTag` 필요**: App 스택이 synth 시 태그를 검증하기 때문 (위 배포 가이드 참조). App 이외 스택만 다루는 cdk 명령도 placeholder가 필요하다 — 예: `deploy:data` npm 스크립트는 `-c imageTag=unused`를 전달. 계정에 이미 존재하던 ECR 리포는 MUTABLE일 수 있음(신규 생성 시엔 IMMUTABLE) — 배포는 SHA 태그 고정이라 실질 영향 없음.
 - **Cognito 토큰 유효기간 8시간**: 만료 시 재로그인 필요. 초기 사용자는 `admin@whchoi.net` 1명(추가 사용자는 콘솔/CLI로 생성).
 - **EKS 메타데이터 제약**(NFM 자체): 타 클러스터의 remote pod는 미해석, control plane 소유 pod는 이름 비노출, `ExternalTrafficPolicy: Cluster`의 NodePort/LB instance mode는 노드 IP로 보고됨.
 - **구형 SSM Agent**: 일부 오래된 EC2는 Distributor 설치 전 `AWS-UpdateSSMAgent` 선행이 필요할 수 있음(State Manager Association이 1일 주기로 재시도).
