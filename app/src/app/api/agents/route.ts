@@ -7,6 +7,7 @@ export async function GET() {
     const [coverage, status] = await Promise.all([getCoverage(), getCollectionStatus()]);
     return Response.json({ coverage, status });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    console.error('[api/agents]', e);
+    return Response.json({ error: 'internal error' }, { status: 500 });
   }
 }

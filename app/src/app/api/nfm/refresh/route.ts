@@ -13,6 +13,7 @@ export async function POST() {
     await client.send(new InvokeCommand({ FunctionName: COLLECTOR_FN, InvocationType: 'Event' }));
     return Response.json({ triggered: true });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    console.error('[api/nfm/refresh]', e);
+    return Response.json({ error: 'internal error' }, { status: 500 });
   }
 }

@@ -26,6 +26,7 @@ export async function GET() {
     if (latest.length) kpis.nhi = Math.max(...latest);
     return Response.json({ kpis, series, status, coverage });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    console.error('[api/overview]', e);
+    return Response.json({ error: 'internal error' }, { status: 500 });
   }
 }

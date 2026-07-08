@@ -37,6 +37,7 @@ export async function GET() {
     }
     return Response.json({ byCategory, rows: [] });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    console.error('[api/insights]', e);
+    return Response.json({ error: 'internal error' }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ export async function GET() {
     const topology = await getTopology();
     return Response.json(topology ?? { generatedAt: '', nodes: [], edges: [] });
   } catch (e) {
-    return Response.json({ error: (e as Error).message }, { status: 500 });
+    console.error('[api/topology]', e);
+    return Response.json({ error: 'internal error' }, { status: 500 });
   }
 }
