@@ -13,7 +13,7 @@
 
 | 항목 | 결정 |
 |---|---|
-| 분석 렌즈 | 비용(AZ간/VPC간 $), 신뢰성(재전송/타임아웃 핫스팟), 지연(RTT 분포/백분위), 서비스 의존성(맵+구성) — 4종 모두 |
+| 분석 렌즈 | 비용(AZ간/VPC간 $), 신뢰성(재전송/타임아웃 핫스팟), 지연(RTT 분포/백분위), 서비스 의존성(맵+구성), **DNS/이름해석(Resolver+CoreDNS)** — 5종 |
 | 디자인 강도 | 풍성화 — SnowUI 팔레트/구조 유지 + 벤토 그리드 + 차트 다양화 + KPI 델타·스파크라인 |
 | 집계 위치 | **백엔드 analytics API** (서버 계산) + 순수 집계 라이브러리(TDD) |
 | 토폴로지 | 집계 노드(클러스터/네임스페이스) → 클릭 드릴다운(→pod) + 인접행렬(히트맵) 토글 + 상위 엣지 랭킹 사이드 패널 |
@@ -62,9 +62,14 @@ app/src/lib/analytics/
   ├─ reliability.ts     # ratePer, thresholdBreaches, nhiTimeline, nhiSwimlanes, rttVsRetrans
   ├─ latency.ts         # percentiles, intraVsInter, slowestPaths, rttTrend, rttByHourHeatmap
   ├─ dependencies.ts    # serviceGraph(Sankey), composition, hopUsage, pathFrequencyTree, paretoTalkers
+  ├─ dns.ts             # topDomains, failureRates, dnsLatency, resolutionMap, queryTypeBreakdown, nameFlowCorrelation (§18)
+  ├─ dns-parse.ts       # CoreDNS(텍스트)·Resolver(JSON) 로그 라인 파서 2종
   ├─ aggregate.ts       # 공유 헬퍼: groupBy, entityKey(pod/service/ns/az), sum/rate/percentile
   └─ *.test.ts          # 각 순수함수 TDD
-app/src/app/api/analytics/{cost,reliability,latency,dependencies}/route.ts   # 신규
+app/src/app/api/analytics/{cost,reliability,latency,dependencies,dns}/route.ts   # 신규
+collector/src/dns-collect.ts                                                 # 신규 — Logs Insights 쿼리+집계→DNS#latest (15분 로테이션)
+infra/lib/dns-stack.ts (NfmDash-Dns)                                         # 신규 — Resolver query-log config+VPC 연결, CoreDNS log 활성 CR, IAM
+onboarding/enable_coredns_log.py                                             # 신규 — coredns ConfigMap에 log 플러그인(가역적)
 app/src/app/api/overview/route.ts                                            # 확장(델타/스파크라인)
 app/src/components/charts/
   ├─ Heatmap.tsx        # 신규(커스텀 그리드) — AZ×AZ, 인접행렬, 시간대(hour×day) 겸용
@@ -152,11 +157,12 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 
 ## 7. Analytics 허브 (인사이트 페이지 확장)
 
-`/insights` 페이지를 탭형 허브로 재구성. 탭: `비용 | 신뢰성 | 지연 | 의존성`(i18n). 각 탭은 해당 API를 `usePolling`으로 소비하고 벤토 그리드로 배치:
+`/insights` 페이지를 탭형 허브로 재구성. 탭: `비용 | 신뢰성 | 지연 | 의존성 | DNS`(i18n). 각 탭은 해당 API를 `usePolling`으로 소비하고 벤토 그리드로 배치:
 - **비용**: 총비용 StatDelta + 카테고리 트리맵 + Top 비용 기여 바 + **카테고리 구성 스트림그래프**(믹스 변화) + **리전 아크맵**(크로스리전 비용)
 - **신뢰성**: 핫스팟 바(재전송/타임아웃 율) + 임계 초과 테이블 + NHI 타임라인(스텝) + AZ×AZ 히트맵(재전송) + **RTT×재전송 상관 산점도** + **per-monitor NHI 스웜레인**
 - **지연**: p50/p90/p95 StatDelta 3개 + RTT 분포 히스토그램 + AZ내부 vs AZ간 비교 바 + 느린 경로 랭킹 + RTT 추이 + **시간대(hour×day) 히트맵** + (신뢰성과 공유하는 RTT×재전송 산점도)
 - **의존성**: 서비스 Sankey + 포트 Top 바 + 네임스페이스 트리맵 + 경로 홉 도넛 + **경로 빈도 트리(icicle)** + **상위 talker 파레토(누적 %)**
+- **DNS**: 상위 조회 도메인 바(내부/외부) + 쿼리타입 도넛 + DNS 실패율 히트맵 + DNS 지연 분포 + 해석 맵(Sankey) + 이름↔플로우 상관 (§18; 로그 미활성 시 활성화 안내)
 - 데이터 없음/수집 준비 중 상태 각 차트에 처리. 나브 라벨은 기존 "인사이트/Insights" 유지.
 
 ## 8. 토폴로지 재설계 (AWS Network path 미학 채택)
@@ -308,7 +314,46 @@ AWS 아이콘 풍의 색상 원형 아이콘 세트를 `app/src/components/topol
 - `/api/ai`·`/api/diagnose`의 진짜 토큰 스트리밍은 유지. 이벤트 어휘를 참조와 정렬해 `status|chunk|done|error`에 **`followups`**(후속 질문) 추가, 답변 종료 후 후속 질문 3개를 별도 짧은 Converse로 생성해 emit. 15초 keepalive 유지. 모델 `global.anthropic.claude-sonnet-5` 유지.
 - 영향 파일: `app/src/components/Markdown.tsx`, `app/src/lib/use-sse.ts`, `app/src/components/chat/{ChatPanel,FloatingChat}.tsx`, `app/src/app/api/{ai,diagnose}/route.ts`, `app/src/lib/ua.ts`(단순화), `app/src/app/globals.css`(.chat-markdown), 신규 후속질문 생성 유틸. 의존성 추가: `rehype-highlight`(+하이라이트 테마 CSS, CSP 안전 인라인).
 
-## 18. 참조 / References
+## 18. DNS / 이름 해석 렌즈 (Route53 Resolver + CoreDNS)
+
+NFM(IP/pod 플로우)에 **DNS 이름 해석** 관점을 더해 "무엇을 향해 통신하려 했는가"를 설명하는 5번째 렌즈. **두 소스 모두 사용**: Route53 Resolver 질의로그(VPC 수준, EC2 포함) + CoreDNS 질의로그(EKS 클러스터 내부 해석). 실측 현황: 계정에 Resolver query-log config 없음(0), CoreDNS `log` 플러그인 미활성, 단 Container Insights는 4개 클러스터 모두 활성(`/aws/containerinsights/<cluster>/application` 존재).
+
+### 18.1 로그 활성화 (구현 계획의 선행 단계 — 라이브 변경·과금 주의)
+- **Route53 Resolver**: `CfnResolverQueryLoggingConfig`(대상 = 신규 CW Logs 그룹 `/nfm-dashboard/resolver-dns`) + 계정 VPC들에 `CfnResolverQueryLoggingConfigAssociation`. 인프라 스택(예: `NfmDash-Dns`)으로 배포.
+- **CoreDNS**: 4개 클러스터 coredns ConfigMap(Corefile)에 `log` 플러그인 추가 → CoreDNS stdout이 기존 Container Insights Fluent Bit를 통해 `/aws/containerinsights/<cluster>/application`로 유입(신규 로그그룹 불필요). 적용 = Custom Resource Lambda(EKS API/kubectl) 또는 문서화된 `kubectl` 단계. **원본 ConfigMap 백업 + 가역적**으로 수행.
+- **IAM**: 수집 주체 롤에 `logs:StartQuery/GetQueryResults/StopQuery/GetLogEvents`(해당 로그그룹).
+- 활성화 후 ~수 분 내 로그 유입 시작. 활성화 전에는 DNS 렌즈가 "미활성/데이터 없음" 상태를 명확히 표시.
+
+### 18.2 수집 (CloudWatch Logs Insights, 비용 제어)
+- Logs Insights는 비동기(StartQuery→poll→GetQueryResults) + 스캔 GB당 과금 → **collector에 DNS 패스를 추가하되 N사이클마다(기본 15분, `DNS_COLLECT_EVERY=3`) 실행**(§15.1 확장 카테고리 로테이션과 동일 카운터). 시간창 좁게(최근 15분), 필요한 필드만 파싱.
+- 결과 집계를 `NfmMeta`의 `DNS#latest`(상위 도메인/실패율/지연/해석맵/쿼리타입)로 저장. UI는 이 스냅샷을 조회(온디맨드 Insights 쿼리 회피).
+- **CoreDNS 로그 파싱**(`log` 플러그인 포맷): client `ip:port`, query name, QTYPE, RCODE(NOERROR/NXDOMAIN/SERVFAIL), duration(초). client IP → pod은 NFM 엔드포인트 IP와 상관(가능 시).
+- **Resolver 로그 파싱**(JSON): `query_name`, `query_type`, `rcode`, `srcaddr`, `srcids`(instance/eni), `vpc_id`, `answers[]`(해석된 IP).
+
+### 18.3 집계 (dns.ts, 순수함수 TDD)
+- `topDomains(logs, n)`: query_name별 횟수/볼륨, 내부(`*.cluster.local`) vs 외부 분리
+- `failureRates(logs, kind)`: NXDOMAIN/SERVFAIL 비율 per namespace/pod/source(0-division 가드)
+- `dnsLatency(coreDnsLogs)`: duration p50/p90/p95(CoreDNS만; Resolver는 duration 없음)
+- `resolutionMap(logs)`: source(pod/instance) → query_name → answer IP 서비스 디스커버리 그래프
+- `queryTypeBreakdown(logs)`: A/AAAA/SRV/PTR 분포
+- `nameFlowCorrelation(resolverLogs, flows)`: 해석된 answer IP ↔ NFM 원격 IP 조인 → pod-to-pod 엣지에 조회 이름 부착(이름↔플로우 상관)
+- 응답: `{ enabled: boolean, topDomains:{name,count,internal}[], failures:{key,label,nxdomain,servfail,total,failRate}[], latency:LatencyStats, resolution:SankeyData, queryTypes:{type,count}[], nameFlow:{edgeHash,name}[] }`
+
+### 18.4 시각화 (인사이트 허브 신규 탭 "DNS / 이름 해석")
+- 상위 조회 도메인 바(내부/외부 분리) + 쿼리타입 도넛
+- **DNS 실패율 히트맵**(namespace × RCODE) + 임계 초과 하이라이트
+- DNS 지연 분포 히스토그램(CoreDNS)
+- **해석 맵(Sankey)**: source → 이름 → answer (서비스 디스커버리)
+- 이름 부착 플로우 상관(테이블/토폴로지 엣지 라벨에 조회 이름 표시)
+- 미활성 시 각 위젯에 "DNS 로그 활성화 필요" 안내 + 활성화 방법 링크
+
+### 18.5 주의 / 한계
+- **비용**: Resolver 질의로그(쿼리당) + Logs Insights(스캔 GB당) → 시간창/주기(15분) 제한, 필드 최소화.
+- **CoreDNS 오버헤드**: `log` 플러그인 로그량↑ + 소폭 CPU. 클러스터 ConfigMap 변경은 4개 라이브 클러스터 대상 → 가역적·순차 적용.
+- **포맷 상이**: CoreDNS 텍스트 vs Resolver JSON → 파서 2종. CoreDNS client IP→pod 매핑은 상관 실패 시 IP로 표기.
+- **범위**: 이름↔플로우 상관은 answer IP가 NFM이 관측한 원격 IP와 일치할 때만(외부/캐시된 응답은 부분적).
+
+## 19. 참조 / References
 
 - 기반: `docs/superpowers/specs/2026-07-08-nfm-dashboard-design.md`
 - 현재 디자인 캡처: `docs/design-refs/current-*.png`
