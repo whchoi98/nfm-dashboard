@@ -10,3 +10,11 @@ it('creates resolver query-log config + log group + association', () => {
   t.resourceCountIs('AWS::Route53Resolver::ResolverQueryLoggingConfig', 1);
   t.resourceCountIs('AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation', 1);
 });
+
+it('creates the coredns-log enable lambda + custom resource', () => {
+  const t = Template.fromStack(new DnsStack(new App({ context: { imageTag: 'unused' } }), 'T',
+    { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } }));
+  t.hasResourceProperties('AWS::Lambda::Function', {
+    FunctionName: 'nfm-dashboard-coredns-log', Handler: 'enable_coredns_log.handler' });
+  t.hasResourceProperties('AWS::CloudFormation::CustomResource', { Version: '1' });
+});
