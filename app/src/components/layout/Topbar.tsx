@@ -41,7 +41,7 @@ export default function Topbar() {
           onClick={() => router.refresh()}
           title={t('common.refresh')}
           aria-label={t('common.refresh')}
-          className="flex h-9 w-9 items-center justify-center rounded-card text-ink/60 hover:bg-surface hover:text-ink dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+          className="flex h-11 w-11 items-center justify-center rounded-card text-ink/60 hover:bg-surface hover:text-ink lg:h-9 lg:w-9 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <RotateCw size={16} strokeWidth={1.5} aria-hidden />
         </button>
@@ -50,7 +50,7 @@ export default function Topbar() {
           onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}
           title={t('common.switchLang')}
           aria-label={t('common.switchLang')}
-          className="flex h-9 min-w-9 items-center justify-center rounded-card px-2 text-xs font-semibold text-ink/60 hover:bg-surface hover:text-ink dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+          className="flex h-11 min-w-11 items-center justify-center rounded-card px-2 text-xs font-semibold text-ink/60 hover:bg-surface hover:text-ink lg:h-9 lg:min-w-9 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
         >
           {lang === 'ko' ? 'ko' : 'EN'}
         </button>
@@ -59,7 +59,7 @@ export default function Topbar() {
           onClick={toggleTheme}
           title={t('common.toggleTheme')}
           aria-label={t('common.toggleTheme')}
-          className="flex h-9 w-9 items-center justify-center rounded-card text-ink/60 hover:bg-surface hover:text-ink dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+          className="flex h-11 w-11 items-center justify-center rounded-card text-ink/60 hover:bg-surface hover:text-ink lg:h-9 lg:w-9 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
         >
           {dark ? <Sun size={16} strokeWidth={1.5} aria-hidden /> : <Moon size={16} strokeWidth={1.5} aria-hidden />}
         </button>

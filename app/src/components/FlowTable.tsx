@@ -66,14 +66,14 @@ export function FlowDrawer({ flow, onClose }: { flow: FlowEdge; onClose: () => v
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('flow.drawerTitle')}>
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={t('flow.drawerTitle')}>
       <button
         type="button"
         aria-label={t('common.close')}
         onClick={onClose}
         className="absolute inset-0 bg-black/30"
       />
-      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-card bg-white p-5 md:inset-y-0 md:left-auto md:right-0 md:h-full md:max-h-full md:w-[26rem] md:rounded-none dark:bg-ink">
+      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-card bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:inset-y-0 md:left-auto md:right-0 md:h-full md:max-h-full md:w-[26rem] md:rounded-none md:pb-5 dark:bg-ink">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold">{t('flow.drawerTitle')}</h2>
           <button

@@ -138,7 +138,8 @@ function TopologyGraphInner({
       proOptions={{ hideAttribution: false }}
     >
       <Background gap={24} size={1} color="currentColor" style={{ opacity: 0.15 }} />
-      <Controls showInteractive={false} position="bottom-right" />
+      {/* bottom-left: the fixed chat FAB sits over the graph's bottom-right corner */}
+      <Controls showInteractive={false} position="bottom-left" />
     </ReactFlow>
   );
 }

@@ -6,7 +6,7 @@ import ChatPanel from '@/components/chat/ChatPanel';
 // (and without FloatingChat) so it works as a window.open popup or an iframe.
 export default function ChatPopupPage() {
   return (
-    <div className="flex h-dvh flex-col bg-white dark:bg-ink">
+    <div className="flex h-dvh flex-col bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] dark:bg-ink">
       <ChatPanel compact />
     </div>
   );

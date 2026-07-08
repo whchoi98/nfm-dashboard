@@ -84,7 +84,7 @@ export default function FloatingChat() {
           data-testid="floating-chat-fab"
           onClick={() => setOpen(true)}
           aria-label={t('chat.title')}
-          className="fixed bottom-16 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white shadow-lg transition-transform hover:scale-105 dark:bg-white dark:text-ink lg:bottom-6 lg:right-6"
+          className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-ink text-white shadow-lg transition-transform hover:scale-105 dark:bg-white dark:text-ink lg:bottom-6 lg:right-6"
         >
           <MessageCircle size={24} strokeWidth={1.75} aria-hidden />
         </button>
@@ -94,7 +94,7 @@ export default function FloatingChat() {
         <div
           role="dialog"
           aria-label={t('chat.title')}
-          className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-ink lg:inset-auto lg:bottom-6 lg:right-6 lg:h-[32rem] lg:w-96 lg:rounded-card lg:border lg:border-black/5 lg:shadow-xl lg:dark:border-white/10"
+          className="fixed inset-0 z-[60] flex flex-col bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] dark:bg-ink lg:inset-auto lg:bottom-6 lg:right-6 lg:h-[32rem] lg:w-96 lg:rounded-card lg:border lg:border-black/5 lg:pb-0 lg:pt-0 lg:shadow-xl lg:dark:border-white/10"
         >
           {header}
           <div className="min-h-0 flex-1">
