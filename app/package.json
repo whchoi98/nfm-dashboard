@@ -19,11 +19,15 @@
     "@aws-sdk/lib-dynamodb": "^3.1081.0",
     "@smithy/protocol-http": "^5.5.7",
     "@smithy/signature-v4": "^5.6.3",
+    "@types/dagre": "^0.7.54",
     "aws-jwt-verify": "^5.2.1",
+    "dagre": "^0.8.5",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "reactflow": "^11.11.4",
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
