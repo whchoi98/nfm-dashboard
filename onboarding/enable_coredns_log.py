@@ -1,5 +1,7 @@
 """Enable the CoreDNS `log` plugin on all EKS clusters, reversibly, via a CFN custom resource."""
-import base64, json, os, re, tempfile, time, urllib.request
+from __future__ import annotations
+
+import base64, json, os, re, tempfile, time, urllib.error, urllib.request
 import boto3
 
 REGION = "ap-northeast-2"
@@ -16,6 +18,16 @@ def add_log_plugin(corefile: str) -> str:
 
 def remove_log_plugin(corefile: str) -> str:
     return re.sub(r"^\s*log\s*\n", "", corefile, count=1, flags=re.M)
+
+
+def delete_corefile(current: str, backup: str | None) -> str | None:
+    """Delete decision: restore the backed-up original Corefile verbatim.
+
+    Returns the backup when one exists, else None (= skip: this CR never modified
+    the cluster, e.g. the original Corefile already had a user-owned `log` line and
+    Create no-op'd without writing a backup). Never strips `log` heuristically.
+    """
+    return backup
 
 
 def _self_role_arn() -> str:
@@ -49,8 +61,13 @@ def _remove_access(eks, cluster: str, role_arn: str):
         print(json.dumps({"level": "warn", "cluster": cluster, "delete_access_entry": str(e)}))
 
 
-def _k8s_patch_corefile(cluster: str, transform):
-    """Read coredns ConfigMap Corefile, transform, write back. Uses EKS token + k8s REST."""
+def _k8s_patch_corefile(cluster: str, is_delete: bool):
+    """Read coredns ConfigMap Corefile, transform, write back. Uses EKS token + k8s REST.
+
+    Create/Update: add `log`, preserving the original Corefile once in the backup
+    annotation. Delete: restore the backup verbatim (and drop the annotation); if no
+    backup exists this CR never modified the cluster, so skip entirely.
+    """
     eks = boto3.client("eks", region_name=REGION)
     c = eks.describe_cluster(name=cluster)["cluster"]
     endpoint = c["endpoint"]; ca = c["certificateAuthority"]["data"]
@@ -61,13 +78,19 @@ def _k8s_patch_corefile(cluster: str, transform):
     cur = _req(base, token, ca_file.name)
     corefile = cur["data"]["Corefile"]
     backup = cur.get("metadata", {}).get("annotations", {}).get(BACKUP_ANNOTATION)
-    if backup is None:
-        backup = corefile
-    new_corefile = transform(corefile)
-    if new_corefile == corefile:
-        return                               # already in desired state — no rollout churn
-    patch = {"data": {"Corefile": new_corefile},
-             "metadata": {"annotations": {BACKUP_ANNOTATION: backup}}}
+    if is_delete:
+        restored = delete_corefile(corefile, backup)
+        if restored is None:
+            return                           # never modified this cluster — nothing to undo
+        # JSON merge-patch: null value removes the annotation key
+        patch = {"data": {"Corefile": restored},
+                 "metadata": {"annotations": {BACKUP_ANNOTATION: None}}}
+    else:
+        new_corefile = add_log_plugin(corefile)
+        if new_corefile == corefile:
+            return                           # already in desired state — no rollout churn
+        patch = {"data": {"Corefile": new_corefile},
+                 "metadata": {"annotations": {BACKUP_ANNOTATION: backup if backup is not None else corefile}}}
     _req(base, token, ca_file.name, method="PATCH", body=patch,
          content_type="application/merge-patch+json")
 
@@ -100,11 +123,11 @@ def _req(url, token, ca, method="GET", body=None, content_type="application/json
         return json.loads(r.read())
 
 
-def _patch_with_retry(cluster: str, transform, attempts=3, delay=15):
+def _patch_with_retry(cluster: str, is_delete: bool, attempts=3, delay=15):
     """Access-entry propagation can lag a few seconds → retry auth failures briefly."""
     for i in range(attempts):
         try:
-            _k8s_patch_corefile(cluster, transform)
+            _k8s_patch_corefile(cluster, is_delete)
             return
         except urllib.error.HTTPError as e:
             if e.code in (401, 403) and i < attempts - 1:
@@ -126,15 +149,16 @@ def handler(event, context):
         eks = boto3.client("eks", region_name=REGION)
         clusters = eks.list_clusters()["clusters"]
         is_delete = event["RequestType"] == "Delete"
-        transform = remove_log_plugin if is_delete else add_log_plugin
         role_arn = _self_role_arn()
         failed = []
         for cl in clusters:
             try:                             # one cluster failure must not block others
                 _ensure_access(eks, cl, role_arn)
-                _patch_with_retry(cl, transform)
-                if is_delete:
-                    _remove_access(eks, cl, role_arn)
+                try:
+                    _patch_with_retry(cl, is_delete)
+                finally:
+                    if is_delete:            # best-effort even if the patch failed —
+                        _remove_access(eks, cl, role_arn)  # never leave a dangling entry
             except Exception as e:           # noqa: BLE001
                 print(json.dumps({"level": "error", "cluster": cl, "error": str(e)}))
                 failed.append(cl)
