@@ -20,7 +20,8 @@
 | 인사이트 페이지 | 4렌즈 탭형 Analytics 허브로 확장 |
 | footer | SnowUI CC BY 4.0 문구 제거. **표기는 `README.md`에 유지**(라이선스 준수) |
 | 팔레트/i18n/모바일 | 기존 SnowUI 토큰, ko/en, 아이폰 반응형 유지 |
-| 배포 | 기존 `NfmDash-App` 이미지 재빌드(불변 SHA 태그) + 재배포 |
+| AWS 콘솔 파리티 | 카테고리 7종 확대(collector 변경), per-monitor "모니터" 페이지(Overview+Historical explorer), hop-by-hop 경로, 집계 의미 정렬, NHI 밴드, CloudWatch 딥링크 — 상세 §15 |
+| 배포 | 앱 재빌드(불변 SHA 태그) + `NfmDash-App` 재배포. **카테고리 확대는 collector 재빌드 + `NfmDash-Data` 재배포 포함**(확장 카테고리 데이터 유입에 최대 15분) |
 
 ## 3. 가용 데이터 / Available Data (집계 입력)
 
@@ -79,7 +80,14 @@ app/src/components/topology/
   ├─ TopEdgesPanel.tsx  # 신규 — 상위 엣지 랭킹 사이드/시트
   └─ (기존 TopologyGraph.tsx는 AggregateGraph로 대체, 삭제)
 app/src/app/{page,insights,flows,paths,topology,agents}/page.tsx   # 풍성화
+app/src/app/monitors/page.tsx                                       # 신규(모니터 목록)
+app/src/app/monitors/[name]/page.tsx                                # 신규(모니터 상세: Overview+Historical explorer 탭)
+app/src/app/api/monitors/route.ts, app/src/app/api/monitors/[name]/route.ts  # 신규
+app/src/components/HopPath.tsx                                       # 신규(hop-by-hop 경로, PathView와 공유)
+app/src/components/layout/{Sidebar,MobileTabs}.tsx                  # 나브에 "모니터" 추가
 app/src/components/layout/AppShell.tsx                              # footer 문구 제거
+collector/src/handler.ts                                            # 카테고리 7종 + 로테이션(§15.1)
+collector/src/types.ts + app/src/lib/types.ts                       # DestCategory 7종 확대
 app/src/lib/i18n/translations/{ko,en}.json                          # 신규 키
 ```
 
@@ -145,7 +153,7 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 
 ## 9. 기존 페이지 풍성화
 
-- **개요**: KPI 4개 → `StatDelta`(값 + 직전 창 대비 ▲/▼% + 미니 스파크라인). RTT는 p50/p95 표기(진짜 null만 "—"). 추가 카드: 상위 talker(비용 렌즈 Top 재사용), 이상 징후 요약(신뢰성 breaches 카운트 + 링크). 벤토로 하단 여백 제거.
+- **개요**: KPI 4개 → `StatDelta`(값 + 직전 창 대비 ▲/▼% + 미니 스파크라인), 집계 의미는 §15.4 정렬(전송량 평균/재전송·타임아웃 합/RTT 최소). RTT는 최소+p50/p95 병기(진짜 null만 "—"). 추가 카드: 상위 talker(비용 렌즈 Top 재사용), 이상 징후 요약(신뢰성 breaches 카운트 + 링크), 전체 NHI 상태. 벤토로 하단 여백 제거.
 - **플로우**: 테이블 위 집계 스트립 — Top-N 바(전송량) + 카테고리 도넛 + 시간대 스파크바. 테이블/필터 유지.
 - **경로**: pod쌍 미선택 시 기본 콘텐츠 — 인기 경로(트래픽 상위 엣지), 최근 조회(sessionStorage), 전체 RTT 분포(Distribution), 경로 홉 구성(hopUsage).
 - **에이전트**: 커버리지 게이지(EKS/standalone 정책 부착률) + 수집 사이클 스파크라인. 테이블 유지, 하단 여백 축소.
@@ -182,9 +190,45 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 | footer 제거로 CC BY 위반 우려 | README에 attribution 유지(라이선스 "reasonable manner" 충족) |
 | 토폴로지 교체가 기존 /paths 링크와 어긋남 | TopEdgesPanel/매트릭스 셀 → `/paths?edge=<hash>` 계약 유지 |
 
-## 14. 참조 / References
+## 15. AWS NFM 콘솔 파리티 (스크린샷 분석 반영)
+
+`screenshots/nfm01~04.png`(AWS Network Flow Monitor 콘솔) 분석 결과를 아래와 같이 반영한다.
+
+### 15.1 카테고리 커버리지 확대 (collector 변경)
+- 현재 collector는 monitor 쿼리 카테고리 3종만 사용. **API 지원 7종으로 확대**: `INTRA_AZ, INTER_AZ, INTER_VPC, UNCLASSIFIED, AMAZON_S3, AMAZON_DYNAMODB, INTER_REGION` (기반 스펙 3절의 destinationCategory enum). → S3/DynamoDB/리전간/미분류 트래픽이 비용·의존성 렌즈에 편입.
+- **쿼리량/스로틀 완화**: 5 monitor × 4 metric × 7 category = 140 쿼리/사이클(기존 60). Lambda 270s 내 유지 위해 (a) monitor 쿼리 status-poll cap을 60→30으로 축소, (b) **카테고리 로테이션** — 코어 3종은 매 사이클, 확장 4종은 3사이클마다 1회 수집(`process.env.EXTENDED_CATEGORY_EVERY=3`, 사이클 카운터는 `NfmMeta`의 `STATUS#collect/latest`에 누적). 확장 카테고리 데이터는 최대 15분 신선도 — UI에 "확장 카테고리는 ~15분 주기" 주석.
+- UI 카테고리 표기/필터는 **NHI 기여 vs 비-NHI** 2그룹으로 시각 구분(AWS 방식). API 미지원 콘솔 전용 카테고리(Internet/TGW/Local Zone/AWS Service)는 수집 불가 → UI에 표시하지 않음(과장 금지).
+- `DestCategory` 타입/`aggregate.ts`/차트 카테고리 색 매핑을 7종으로 확장. 기존 3종 소비처는 그대로 동작(추가 값만).
+
+### 15.2 신규 "모니터" 페이지 (per-monitor, AWS Overview + Historical explorer 파리티)
+- 나브에 **모니터/Monitors** 추가. 모니터 목록(이름·Status·NHI 배지·최근 전송량 스파크라인) → 선택 시 상세.
+- **모니터 상세 = 탭 2개**:
+  - **개요(Overview)**: NHI 상태 카드(Healthy/Degraded, CW HealthIndicator) + **Traffic summary 4타일**(Data transferred=평균, Retransmissions=합, Retransmission timeouts=합, RTT=최소 — §15.4) + **NHI 타임라인 밴드** + 데이터 전송 추이 라인 + "CloudWatch에서 보기" 딥링크(§15.5)
+  - **히스토리 탐색(Historical explorer)**: 메트릭별 플로우 테이블(전송량/재전송/타임아웃/RTT), 컬럼 = Category, Local/Remote IP·instance·subnet·VPC·Region·AZ, 값. 검색·정렬·페이지네이션. **행 클릭 → hop 경로 패널(§15.3)**.
+- 데이터: 기존 `/api/flows?monitor=` + 모니터별 CW 지표. 신규 `/api/monitors`(목록+요약), `/api/monitors/[name]`(상세 요약) route.
+
+### 15.3 Hop-by-hop 경로 (traversedConstructs 렌더)
+- AWS는 플로우 행 선택 시 hop-by-hop path 표시. 우리는 `FlowEdge.traversedConstructs`(componentId/Type/Arn/serviceName) + 양단 subnet/AZ/VPC/instance + snat/dnat/port를 **순서 있는 홉 스텝**으로 렌더.
+- 기존 `PathView`(경로 페이지)를 재사용/강화하여 (a) 경로 페이지, (b) 플로우 테이블 행 드로어, (c) 모니터 히스토리 탐색 행에서 공통 사용. componentType 미지 값은 generic 홉 아이콘.
+
+### 15.4 집계 의미 정렬 (AWS 동일)
+- Traffic summary 타일 집계: **Data transferred = 평균**(average per period), **Retransmissions = 합**, **Retransmission timeouts = 합**, **Round-trip time = 최소**(best-case latency). 지연 렌즈는 여기에 더해 p50/p90/p95(§6.3) 병기.
+- 개요 페이지 KPI도 동일 의미 채택(현재 단순 합산과 다를 수 있으므로 정렬).
+
+### 15.5 CloudWatch 딥링크
+- 모니터 개요와 개요 페이지의 지표 카드에 "CloudWatch에서 보기"(metrics 콘솔 URL) + 선택적 "알람 만들기"(CloudWatch 알람 생성 URL) 링크. URL은 namespace `AWS/NetworkFlowMonitor` + 차원 `MonitorId`로 구성(리전 하드코딩 ap-northeast-2).
+
+### 15.6 Category 1급 필터/컬럼
+- 플로우 페이지·모니터 히스토리 탐색·인사이트 허브의 필터에 7종 카테고리(그룹화) 노출, 테이블에 Category 컬럼 표시. 카테고리별 색은 §5 차트 팔레트와 공유.
+
+### 15.7 반영하지 않는 것 (근거)
+- 조직/설정·에이전트 설치 마법사(nfm03 상단): 우리 대시보드 범위 아님(에이전트 온보딩은 인프라 스택이 담당).
+- 콘솔 전용 카테고리(Internet/TGW/Local Zone/AWS Service): 쿼리 API 미지원 → 수집 불가, 표시 안 함.
+
+## 16. 참조 / References
 
 - 기반: `docs/superpowers/specs/2026-07-08-nfm-dashboard-design.md`
 - 현재 디자인 캡처: `docs/design-refs/current-*.png`
+- AWS NFM 콘솔 캡처: `screenshots/nfm01~04.png`
 - 데이터 타입: `app/src/lib/types.ts`
 - NFM 카테고리/메트릭 근거: 기반 스펙 3절
