@@ -1,0 +1,12 @@
+{
+  "name": "nfm-dashboard",
+  "private": true,
+  "workspaces": [
+    "infra",
+    "app",
+    "collector"
+  ],
+  "scripts": {
+    "test": "npm -w collector run test"
+  }
+}
