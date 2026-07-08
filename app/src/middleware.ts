@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SESSION_COOKIE_NAME, verifyIdToken } from '@/lib/auth';
+import { SESSION_COOKIE_NAME, safeEqual, verifyIdToken } from '@/lib/auth';
 
 const PUBLIC_PATHS = ['/login', '/api/health', '/favicon.ico'];
 const PUBLIC_PREFIXES = ['/api/auth/', '/_next/'];
@@ -17,7 +17,11 @@ function isPublicPath(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   // Dev bypass: Cognito is provisioned later (Task 18 AppStack).
-  if (process.env.AUTH_DISABLED === '1') return NextResponse.next();
+  // Fail-open guard: the bypass is never honored in production builds.
+  if (process.env.AUTH_DISABLED === '1') {
+    if (process.env.NODE_ENV !== 'production') return NextResponse.next();
+    console.error('AUTH_DISABLED=1 ignored in production build — enforcing auth');
+  }
 
   const { pathname } = req.nextUrl;
 
@@ -25,8 +29,9 @@ export async function middleware(req: NextRequest) {
   if (pathname === '/api/health') return NextResponse.next();
 
   // CloudFront → ALB origin verification (skipped when unset, e.g. local dev).
+  // Constant-time (digest-based) compare: header timing must not leak the secret.
   const originSecret = process.env.ORIGIN_VERIFY_SECRET;
-  if (originSecret && req.headers.get('x-origin-verify') !== originSecret) {
+  if (originSecret && !(await safeEqual(req.headers.get('x-origin-verify') ?? '', originSecret))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
