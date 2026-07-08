@@ -28,11 +28,16 @@ def ensure_scope(nfm):
         return scopes[0]["scopeArn"]
     resp = nfm.create_scope(targets=[{"targetIdentifier": {
         "targetId": {"accountId": ACCOUNT}, "targetType": "ACCOUNT"}, "region": REGION}])
-    for _ in range(60):
+    # Bounded wait: scope typically activates quickly. Monitors reference scopeArn from
+    # the create response regardless, so a still-pending scope after 3min is a warn, not a raise.
+    for _ in range(18):
         s = nfm.get_scope(scopeId=resp["scopeId"])
         if s["status"] == "SUCCEEDED":
             break
         time.sleep(10)
+    else:
+        print(f"WARN: scope {resp['scopeId']} not SUCCEEDED after 3min wait "
+              f"(last status={s['status']}); proceeding with scopeArn from create response")
     return resp["scopeArn"]
 
 
@@ -68,10 +73,8 @@ def ensure_eks(eks, iam, cluster):
         try:
             eks.create_pod_identity_association(clusterName=cluster, namespace=NFM_NS,
                 serviceAccount=NFM_SA, roleArn=f"arn:aws:iam::{ACCOUNT}:role/{role_name}")
-        except Exception as e:  # noqa: BLE001 -- Controller adjustment 2: tolerate races/reruns
-            msg = str(e)
-            if "exists" not in msg and "ResourceInUseException" not in msg:
-                raise
+        except eks.exceptions.ResourceInUseException:  # Controller adjustment 2: tolerate races/reruns
+            pass
     # Controller adjustment 1: no wait for the network-flow-monitoring-agent addon —
     # NFM data starts flowing ~20min after install regardless of addon ACTIVE status.
     if "aws-network-flow-monitoring-agent" not in addons:
@@ -108,7 +111,7 @@ def send_cfn(event, context, status, data=None, reason=""):
         "Data": data or {}}).encode()
     req = urllib.request.Request(event["ResponseURL"], data=body, method="PUT",
         headers={"Content-Type": ""})
-    urllib.request.urlopen(req)
+    urllib.request.urlopen(req, timeout=10)
 
 
 def handler(event, context):
@@ -119,4 +122,7 @@ def handler(event, context):
         # Controller adjustment 6: run() on both Create and Update requests.
         send_cfn(event, context, "SUCCESS", run())
     except Exception as e:                      # noqa: BLE001
-        send_cfn(event, context, "FAILED", reason=str(e))
+        try:
+            send_cfn(event, context, "FAILED", reason=str(e))
+        except Exception as send_err:            # noqa: BLE001 -- double fault must not escape unhandled
+            print(f"send_cfn FAILED notification itself failed: {send_err!r} (original error: {e!r})")

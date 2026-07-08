@@ -13,11 +13,22 @@ export class NfmOnboardingStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_13, architecture: lambda.Architecture.ARM_64,
       handler: 'onboard_nfm.handler', timeout: cdk.Duration.minutes(15),
       code: lambda.Code.fromAsset(path.join(__dirname, '../../onboarding')) });
+    // 1) Read/service actions that have no meaningful resource to scope to.
     fn.addToRolePolicy(new iam.PolicyStatement({ actions: [
-      'networkflowmonitor:*', 'eks:ListClusters', 'eks:ListAddons', 'eks:CreateAddon',
-      'eks:DescribeAddon', 'eks:ListPodIdentityAssociations', 'eks:CreatePodIdentityAssociation',
-      'ec2:DescribeVpcs', 'iam:GetRole', 'iam:CreateRole', 'iam:AttachRolePolicy',
-      'iam:PassRole', 'iam:CreateServiceLinkedRole'], resources: ['*'] }));
+      'networkflowmonitor:ListScopes', 'networkflowmonitor:CreateScope', 'networkflowmonitor:GetScope',
+      'networkflowmonitor:ListMonitors', 'networkflowmonitor:CreateMonitor',
+      'eks:ListClusters', 'eks:ListAddons', 'eks:CreateAddon', 'eks:DescribeAddon',
+      'eks:ListPodIdentityAssociations', 'eks:CreatePodIdentityAssociation',
+      'ec2:DescribeVpcs', 'iam:CreateServiceLinkedRole'], resources: ['*'] }));
+    // 2) Role writes scoped to the per-cluster agent roles this Lambda itself creates.
+    fn.addToRolePolicy(new iam.PolicyStatement({ actions: [
+      'iam:GetRole', 'iam:CreateRole', 'iam:PassRole'],
+      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/nfm-agent-*'] }));
+    // 3) Policy attachment scoped to both the role prefix and the single publish policy.
+    fn.addToRolePolicy(new iam.PolicyStatement({ actions: ['iam:AttachRolePolicy'],
+      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/nfm-agent-*'],
+      conditions: { ArnEquals: { 'iam:PolicyARN':
+        'arn:aws:iam::aws:policy/CloudWatchNetworkFlowMonitorAgentPublishPolicy' } } }));
     const cr = new cdk.CustomResource(this, 'Onboarding', { serviceToken: fn.functionArn,
       properties: { Version: '1' } });   // Version 값 변경 시 재실행
     new cdk.CfnOutput(this, 'MonitorsEnv', { value: cr.getAttString('MonitorsEnv') });
