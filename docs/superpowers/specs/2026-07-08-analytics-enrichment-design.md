@@ -143,13 +143,22 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 - **의존성**: 서비스 Sankey + 포트 Top 바 + 네임스페이스 트리맵 + 경로 홉 도넛
 - 데이터 없음/수집 준비 중 상태 각 차트에 처리. 나브 라벨은 기존 "인사이트/Insights" 유지.
 
-## 8. 토폴로지 재설계
+## 8. 토폴로지 재설계 (AWS Network path 미학 채택)
 
-기존 플랫 React Flow(116노드 hairball) 제거. 신규:
-- **AggregateGraph**(기본): 노드 = 집계 단위(기본 namespace, 토글로 cluster), 엣지 = 집계 트래픽(두께=log(bytes), 색=카테고리). 노드 클릭 → 해당 그룹 확장(namespace→그 안의 pod). React Flow 유지하되 노드 수를 5~15개로 제한, dagre 레이아웃이 캔버스를 채우도록 rank 방향/간격 조정. 미니맵 활성.
-- **AdjacencyMatrix**(토글): src×dst 그리드(엔티티=집계 단위), 셀 색=선택 메트릭(전송량/재전송/RTT 전환). 셀 클릭 → 상세 패널. 수백 엔티티도 스크롤 그리드로 표현.
-- **TopEdgesPanel**(사이드, 모바일=하단 시트): 현재 뷰의 상위 엣지 랭킹(메트릭 정렬), 항목 클릭 → `/paths?edge=<hash>` 링크. 선택 요약 표시.
-- 필터(클러스터/네임스페이스/카테고리) 유지. 뷰 전환 토글(그래프↔매트릭스)을 상단에 배치.
+기존 플랫 React Flow(116노드 hairball) 제거. AWS 콘솔의 **Network path** 시각화(`screenshots/nfm06.png`) — 리소스 타입별 색상 원형 아이콘을 좌→우로 잇는 깔끔한 경로/티어 형태 — 를 기준으로 삼는다. 사용자 관점에서 "털뭉치 그래프"가 아니라 **아이콘 기반 티어드 플로우 맵**을 기본 전체 뷰로 제공한다.
+
+- **TierFlowMap**(기본 전체 뷰): 좌→우 티어 레인으로 배치 — `[Pod/Service]` → `[Node(EC2)/ENI]` → `[Subnet/AZ]` → `[VPC/VPC endpoint/TGW]` → `[Remote: 다른 pod/service · S3/DynamoDB · Region · Internet]`. 각 노드는 §8.1 아이콘 시스템(AWS 리소스 아이콘 풍) + 라벨 + ID 링크. 집계 단위(기본 namespace/service, 토글로 cluster/pod)로 노드 수를 제한하고, 노드 간 **플로우 리본**(두께=log(bytes), 색=카테고리)으로 연결. 클릭 → 드릴다운(cluster→namespace→service→pod)하되 항상 티어 레인 구조 유지(캔버스 균등 활용, 세로 뭉침 없음). React Flow(커스텀 노드/레이아웃) 사용, 미니맵 활성.
+- **NetworkPathStepper**(엣지/플로우 선택 시): 선택한 통신을 AWS `nfm06` 스타일 **수평 hop 스텝퍼**로 표시(§15.3의 `HopPath` 공유). 티어 맵 하단 패널 또는 우측 패널에 렌더.
+- **AdjacencyMatrix**(분석 토글): src×dst 그리드(엔티티=집계 단위), 셀 색=선택 메트릭(전송량/재전송/RTT 전환). 셀 클릭 → 해당 쌍의 NetworkPathStepper. 핫스팟 즉시 식별.
+- **TopEdgesPanel**(사이드, 모바일=하단 시트): 현재 뷰 상위 엣지 랭킹(메트릭 정렬), 클릭 → NetworkPathStepper / `/paths?edge=<hash>`.
+- 필터(클러스터/네임스페이스/카테고리) 유지. 상단에 뷰 전환 토글(티어 맵 ↔ 매트릭스).
+
+### 8.1 리소스 아이콘 시스템 (공유)
+AWS 아이콘 풍의 색상 원형 아이콘 세트를 `app/src/components/topology/ResourceIcon.tsx`로 정의. lucide-react 아이콘 + 토큰 색으로 근사(외부 AWS 아이콘 에셋 미사용 — CSP/라이선스 안전). 타입별:
+- **EKS**: `Pod`, `Namespace`, `Service`, `Cluster` (EKS 전용 — 스크린샷엔 없지만 요구사항으로 추가, 컨테이너/육각형 계열 아이콘 + 구분색)
+- **컴퓨트/네트워크**: `EC2 instance`, `Network interface(ENI)`, `Subnet`, `AvailabilityZone`, `VPC`, `VPC endpoint`, `TransitGateway`
+- **AWS 서비스/원격**: `AWS service`(S3/DynamoDB/CloudWatch Logs 등), `Region`, `Internet`, `Unclassified`
+- 각 아이콘 = 원형 테두리 + 리소스 색, 하단에 ID(외부링크 아이콘 포함 클릭) + 컨텍스트(리전/AZ). `traversedConstructs.componentType` → 아이콘 매핑(미지 타입 generic). EKS 노드는 `EndpointInfo.podName/podNamespace/serviceName/cluster`에서 판별.
 
 ## 9. 기존 페이지 풍성화
 
@@ -207,9 +216,11 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
   - **히스토리 탐색(Historical explorer)**: 메트릭별 플로우 테이블(전송량/재전송/타임아웃/RTT), 컬럼 = Category, Local/Remote IP·instance·subnet·VPC·Region·AZ, 값. 검색·정렬·페이지네이션. **행 클릭 → hop 경로 패널(§15.3)**.
 - 데이터: 기존 `/api/flows?monitor=` + 모니터별 CW 지표. 신규 `/api/monitors`(목록+요약), `/api/monitors/[name]`(상세 요약) route.
 
-### 15.3 Hop-by-hop 경로 (traversedConstructs 렌더)
-- AWS는 플로우 행 선택 시 hop-by-hop path 표시. 우리는 `FlowEdge.traversedConstructs`(componentId/Type/Arn/serviceName) + 양단 subnet/AZ/VPC/instance + snat/dnat/port를 **순서 있는 홉 스텝**으로 렌더.
-- 기존 `PathView`(경로 페이지)를 재사용/강화하여 (a) 경로 페이지, (b) 플로우 테이블 행 드로어, (c) 모니터 히스토리 탐색 행에서 공통 사용. componentType 미지 값은 generic 홉 아이콘.
+### 15.3 Hop-by-hop 경로 = NetworkPathStepper (AWS nfm06 디자인 채택)
+- AWS 콘솔(`screenshots/nfm06.png`)의 "Network path" 수평 스텝퍼를 그대로 참조: 리소스 타입별 **색상 원형 아이콘**(§8.1 `ResourceIcon`)을 수평 커넥터로 잇고, 각 노드 하단에 **ID(외부링크 아이콘 포함 클릭)** + 컨텍스트(리전/AZ). 제목은 메트릭 스코프 표기(예: "네트워크 경로 (재전송 타임아웃)").
+- 홉 구성: `[출발 pod/service/instance]` → traversedConstructs 순서(ENI/subnet/VPC endpoint/TGW/…) → `[도착 pod/service · AWS service · Region · Internet]`. 데이터원 = `FlowEdge.traversedConstructs`(componentId/Type/Arn/serviceName) + 양단 `EndpointInfo`(pod/ns/service/cluster/instance/subnet/az/vpc) + snat/dnat/port(커넥터 툴팁).
+- **EKS 노드 타입 포함**: 출발/도착이 pod이면 Pod 아이콘 + `namespace/pod` 라벨, service 있으면 Service 홉, cluster는 배지로 표기(요구사항). 스크린샷의 EC2/ENI/VPC endpoint/AWS service 타입에 EKS Pod·Namespace·Service·Cluster를 확장.
+- 컴포넌트 `app/src/components/HopPath.tsx`(=NetworkPathStepper) 하나로 (a) 경로 페이지, (b) 플로우 테이블 행 드로어, (c) 모니터 Historical explorer 행, (d) 토폴로지 엣지/매트릭스 셀 선택에서 **공통** 사용. componentType 미지 값 generic 홉. 모바일=가로 스크롤 또는 세로 스텝.
 
 ### 15.4 집계 의미 정렬 (AWS 동일)
 - Traffic summary 타일 집계: **Data transferred = 평균**(average per period), **Retransmissions = 합**, **Retransmission timeouts = 합**, **Round-trip time = 최소**(best-case latency). 지연 렌즈는 여기에 더해 p50/p90/p95(§6.3) 병기.
@@ -225,7 +236,36 @@ export interface Series { label: string; points: { t: string; v: number }[]; }
 - 조직/설정·에이전트 설치 마법사(nfm03 상단): 우리 대시보드 범위 아님(에이전트 온보딩은 인프라 스택이 담당).
 - 콘솔 전용 카테고리(Internet/TGW/Local Zone/AWS Service): 쿼리 API 미지원 → 수집 불가, 표시 안 함.
 
-## 16. 참조 / References
+## 16. Datadog 스타일 화면 구성 / Datadog-style Composition
+
+기존 "풍성화(SnowUI 유지)" 결정 위에, **Datadog 대시보드식 조밀·다위젯 구성**을 채택해 인사이트 밀도를 높인다. SnowUI 토큰/카드 룩은 base로 유지하되 레이아웃/상호작용/위젯 밀도를 Datadog 방식으로 구성한다(팔레트 전면 교체 아님, 다계열용 강조색만 확장).
+
+### 16.1 글로벌 필터 바 (Datadog template variables 풍)
+- Analytics 허브·모니터·플로우·토폴로지 상단에 **고정 필터 바**: `시간범위(15m/1h/3h/24h) · 클러스터 · 네임스페이스 · 카테고리(7종 그룹) · 메트릭`. 선택은 URL 쿼리 + `sessionStorage`에 유지되고 페이지 내 **모든 위젯에 동시 적용**(Datadog `$var` 개념). `app/src/components/analytics/FilterBar.tsx` + `useAnalyticsFilters` 훅.
+
+### 16.2 조밀한 위젯 그리드 (Timeboard 풍)
+- 벤토 그리드를 Datadog **timeboard**처럼 다수의 소형 위젯 행으로 구성: `query-value 타일`(큰 숫자 + 스파크라인 + 조건부 색) 행 → `timeseries` 행 → `toplist`(랭크 바) + `heatmap`/`distribution` 행. 위젯 수를 늘려 여백 제거.
+- **위젯 공통 chrome**: 제목 + 우상단 옵션 메뉴(메트릭/집계 전환, CloudWatch 딥링크) + 범례. `app/src/components/analytics/Widget.tsx` 래퍼로 통일.
+
+### 16.3 시계열 동기화 크로스헤어
+- 한 화면의 모든 `timeseries` 위젯이 **hover 시 동일 시각에 크로스헤어/툴팁 동기화**(Datadog 특유의 시간축 정렬). 공유 hover 상태 컨텍스트 `HoverSyncContext`로 recharts `activeTooltip`을 브로드캐스트.
+
+### 16.4 조건부 색 & 임계 (status coloring)
+- query-value 타일과 toplist 항목에 **임계 기반 색상**(정상=mint, 주의=amber, 위험=red — 토큰 확장색). 예: 신뢰성 율 임계(§6.2), NHI Degraded, 비용 상위 등. 색+아이콘 이중부호화(접근성).
+
+### 16.5 Toplist / Hostmap 위젯
+- **Toplist**(랭크 바 리스트: 상위 talker/비용/느린 경로) 1급 위젯 `Toplist.tsx`.
+- **엔티티 맵**(Datadog hostmap 근사): 노드/네임스페이스를 타일 그리드로 배치하고 색=선택 메트릭(전송량/재전송/RTT) — §5 `Heatmap`/`Treemap` 재사용, 에이전트/토폴로지 요약에 활용.
+
+### 16.6 팔레트 확장 (다계열 밀도용)
+- 다계열 차트가 늘어나므로 SnowUI 액센트에 **카테고리 순서색 8종**(기존 accentBlue/Lav/Mint/chartBlue/Violet/Sky + 2 추가)과 status 3색(mint/amber/red)을 `chart-tokens.ts`에 정의. 라이트/다크 모두 CVD-안전(dataviz validator 통과 필수). Datadog식 다크 우선 대비를 위해 다크 배경 대비 강조를 보정.
+
+### 16.7 적용 범위
+- **인사이트 허브(4렌즈)**: 각 탭을 17.2 timeboard 그리드 + 17.1 필터 바 + 17.3 동기화로 구성 — 이 요구("더 풍부한 인사이트")의 핵심.
+- **개요·모니터 개요**: query-value 타일 행 + 동기화 timeseries + toplist로 재구성.
+- **플로우·토폴로지·에이전트**: 필터 바 공유 + toplist/heatmap 위젯 추가.
+
+## 17. 참조 / References
 
 - 기반: `docs/superpowers/specs/2026-07-08-nfm-dashboard-design.md`
 - 현재 디자인 캡처: `docs/design-refs/current-*.png`
