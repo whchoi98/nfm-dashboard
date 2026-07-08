@@ -9,10 +9,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1081.0",
     "@aws-sdk/client-cloudwatch": "^3.1081.0",
     "@aws-sdk/client-dynamodb": "^3.1081.0",
     "@aws-sdk/client-lambda": "^3.1081.0",
+    "@aws-sdk/client-ssm": "^3.1081.0",
+    "@aws-sdk/credential-provider-node": "^3.972.64",
     "@aws-sdk/lib-dynamodb": "^3.1081.0",
+    "@smithy/protocol-http": "^5.5.7",
+    "@smithy/signature-v4": "^5.6.3",
     "aws-jwt-verify": "^5.2.1",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
