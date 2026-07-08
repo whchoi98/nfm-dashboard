@@ -10,19 +10,24 @@ gateway MCP URL is written to SSM parameter /nfm-dashboard/gateway-url.
 멱등 실행 (awsops create_targets.py 패턴): 게이트웨이와 각 타겟은 이름 기준
 EXISTS 체크 후 없을 때만 생성. 완료 후 게이트웨이 MCP URL을 SSM 파라미터에 기록.
 
-Note: create_gateway requires authorizerType (API-required parameter). We use
-"NONE" to match the 13 existing awsops gateways in this account (all READY,
-consumed with SigV4-signed clients). "AWS_IAM" is the stricter alternative.
-참고: create_gateway는 authorizerType이 필수 파라미터라서, 이 계정의 기존
-awsops 게이트웨이 13개와 동일하게 "NONE"을 사용한다 (SigV4 서명 클라이언트로 사용).
+Security: the gateway requires authorizerType="AWS_IAM" so every request must
+be SigV4-signed (service bedrock-agentcore). If an existing nfm-gateway has a
+different authorizerType we first try an in-place update_gateway; if the API
+rejects that, all targets and the gateway are deleted and recreated with AWS_IAM.
+보안: 게이트웨이는 authorizerType="AWS_IAM"을 요구하며 모든 요청은 SigV4 서명이
+필요하다. 기존 게이트웨이의 authorizerType이 다르면 update_gateway로 in-place
+전환을 시도하고, 거부되면 타겟과 게이트웨이를 삭제 후 AWS_IAM으로 재생성한다.
 """
 import sys
 import time
 
 import boto3
+from botocore.exceptions import ClientError
 
 REGION, ACCOUNT = "ap-northeast-2", "<ACCOUNT_ID>"
 GATEWAY_NAME = "nfm-gateway"
+DESIRED_AUTH = "AWS_IAM"  # accepted values: CUSTOM_JWT | AWS_IAM | NONE
+READY_POLL_MAX = 60  # max poll iterations (x5s = ~5 min) before giving up
 client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 ssm = boto3.client("ssm", region_name=REGION)
 
@@ -42,46 +47,108 @@ def find_gateway():
         resp = client.list_gateways(**kwargs)
         for g in resp.get("items", []):
             if g["name"] == GATEWAY_NAME:
-                return g["gatewayId"]
+                return g
         next_token = resp.get("nextToken")
         if not next_token:
             return None
 
 
-def ensure_gateway(role_arn):
-    """Create nfm-gateway if absent; wait until READY. / 없으면 생성 후 READY까지 대기."""
-    gw_id = find_gateway()
-    if gw_id:
-        print("EXISTS", GATEWAY_NAME, gw_id)
-        return gw_id
+def wait_ready(gw_id, verb):
+    """Poll until READY (capped). / READY까지 폴링 (상한 있음)."""
+    for _ in range(READY_POLL_MAX):
+        status = client.get_gateway(gatewayIdentifier=gw_id)["status"]
+        if status == "READY":
+            return
+        if status == "FAILED":
+            raise RuntimeError(f"gateway {verb} FAILED: {gw_id}")
+        time.sleep(5)
+    raise TimeoutError(
+        f"gateway {gw_id} not READY after {READY_POLL_MAX * 5}s ({verb})")
+
+
+def delete_gateway_and_targets(gw_id):
+    """Delete all targets then the gateway itself. / 타겟 전체 삭제 후 게이트웨이 삭제."""
+    next_token = None
+    while True:
+        kwargs = {"gatewayIdentifier": gw_id}
+        if next_token:
+            kwargs["nextToken"] = next_token
+        resp = client.list_gateway_targets(**kwargs)
+        for t in resp.get("items", []):
+            print("DELETING target", t["name"], t["targetId"])
+            client.delete_gateway_target(gatewayIdentifier=gw_id, targetId=t["targetId"])
+        next_token = resp.get("nextToken")
+        if not next_token:
+            break
+    # Wait until target deletion settles / 타겟 삭제 완료 대기
+    for _ in range(READY_POLL_MAX):
+        if not client.list_gateway_targets(gatewayIdentifier=gw_id).get("items"):
+            break
+        time.sleep(5)
+    print("DELETING gateway", gw_id)
+    client.delete_gateway(gatewayIdentifier=gw_id)
+    for _ in range(READY_POLL_MAX):
+        try:
+            client.get_gateway(gatewayIdentifier=gw_id)
+        except client.exceptions.ResourceNotFoundException:
+            return
+        time.sleep(5)
+    raise TimeoutError(f"gateway {gw_id} still present after delete")
+
+
+def create_gateway(role_arn):
+    """create_gateway with one retry for IAM propagation. / IAM 전파 지연 대비 1회 재시도."""
+    kwargs = dict(name=GATEWAY_NAME, protocolType="MCP",
+                  authorizerType=DESIRED_AUTH, roleArn=role_arn,
+                  description="NFM dashboard network/flow/ddb tools")
     try:
-        r = client.create_gateway(name=GATEWAY_NAME, protocolType="MCP",
-                                  authorizerType="NONE", roleArn=role_arn,
-                                  description="NFM dashboard network/flow/ddb tools")
+        return client.create_gateway(**kwargs)
     except client.exceptions.ConflictException:
-        # Race/late visibility: gateway already exists / 경합 또는 지연 노출: 이미 존재
-        gw_id = find_gateway()
-        if gw_id:
-            print("EXISTS", GATEWAY_NAME, gw_id)
-            return gw_id
         raise
-    except Exception as e:
+    except ClientError as e:
         # Newly created IAM roles can take a moment to propagate / IAM 롤 전파 지연 대비 1회 재시도
         print("create_gateway failed ({}); retrying in 15s...".format(str(e)[:120]))
         time.sleep(15)
-        r = client.create_gateway(name=GATEWAY_NAME, protocolType="MCP",
-                                  authorizerType="NONE", roleArn=role_arn,
+        return client.create_gateway(**kwargs)
+
+
+def ensure_gateway(role_arn):
+    """Ensure nfm-gateway exists with AWS_IAM auth; wait until READY.
+    AWS_IAM 인가가 적용된 게이트웨이 확보 (없으면 생성, 다르면 전환/재생성) 후 READY 대기."""
+    gw = find_gateway()
+    if gw:
+        gw_id = gw["gatewayId"]
+        if gw.get("authorizerType") == DESIRED_AUTH:
+            print("EXISTS", GATEWAY_NAME, gw_id, DESIRED_AUTH)
+            return gw_id
+        # SECURITY: existing gateway does not require auth - switch to AWS_IAM
+        # 보안: 기존 게이트웨이 인가 방식이 다름 - AWS_IAM으로 전환
+        print(f"AUTH MISMATCH {GATEWAY_NAME} {gw_id}: "
+              f"{gw.get('authorizerType')} -> {DESIRED_AUTH}, trying in-place update")
+        try:
+            client.update_gateway(gatewayIdentifier=gw_id, name=GATEWAY_NAME,
+                                  protocolType="MCP", authorizerType=DESIRED_AUTH,
+                                  roleArn=role_arn,
                                   description="NFM dashboard network/flow/ddb tools")
+            wait_ready(gw_id, "update")
+            print("UPDATED", GATEWAY_NAME, gw_id, "authorizerType ->", DESIRED_AUTH)
+            return gw_id
+        except ClientError as e:
+            print("update_gateway rejected ({}); recreating gateway with {}".format(
+                str(e)[:160], DESIRED_AUTH))
+            delete_gateway_and_targets(gw_id)
+    try:
+        r = create_gateway(role_arn)
+    except client.exceptions.ConflictException:
+        # Race/late visibility: gateway already exists / 경합 또는 지연 노출: 이미 존재
+        gw = find_gateway()
+        if gw:
+            print("EXISTS", GATEWAY_NAME, gw["gatewayId"])
+            return gw["gatewayId"]
+        raise
     gw_id = r["gatewayId"]
-    while True:
-        status = client.get_gateway(gatewayIdentifier=gw_id)["status"]
-        if status == "READY":
-            break
-        if status == "FAILED":
-            print("ERROR: gateway creation FAILED", gw_id)
-            sys.exit(1)
-        time.sleep(5)
-    print("CREATED", GATEWAY_NAME, gw_id)
+    wait_ready(gw_id, "create")
+    print("CREATED", GATEWAY_NAME, gw_id, DESIRED_AUTH)
     return gw_id
 
 
@@ -232,7 +299,8 @@ def main():
         "Flow/topology store MCP - pod flows, edges, topology, top talkers, paths (6 tools)",
         DDB_TOOLS)
     url = f"https://{gw_id}.gateway.bedrock-agentcore.{REGION}.amazonaws.com/mcp"
-    ssm.put_parameter(Name="/nfm-dashboard/gateway-url", Value=url, Type="String", Overwrite=True)
+    ssm.put_parameter(Name="/nfm-dashboard/gateway-url", Value=url,
+                      Type="SecureString", Overwrite=True)
     print("SSM /nfm-dashboard/gateway-url =", url)
 
 

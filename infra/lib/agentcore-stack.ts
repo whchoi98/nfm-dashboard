@@ -15,8 +15,10 @@ export class AgentCoreStack extends cdk.Stack {
         runtime: lambda.Runtime.PYTHON_3_13, architecture: lambda.Architecture.ARM_64,
         handler: `${file}.lambda_handler`, timeout: cdk.Duration.seconds(60), code,
         environment: { TABLE_FLOWS: 'nfm-dashboard-flows', TABLE_META: 'nfm-dashboard-meta' } });
+      // Scope invoke to AgentCore gateways in this account only (confused-deputy guard)
       fn.addPermission('AgentCore', { principal: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
-        action: 'lambda:InvokeFunction' });
+        action: 'lambda:InvokeFunction', sourceAccount: this.account,
+        sourceArn: `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*` });
       return fn;
     };
     const net = mk('Network', 'network_mcp'), nfm = mk('Nfm', 'nfm_mcp'), ddbF = mk('Ddb', 'ddb_mcp');
@@ -25,8 +27,22 @@ export class AgentCoreStack extends cdk.Stack {
       'ec2:DescribeNetworkInsights*', 'elasticloadbalancing:Describe*',
       'network-firewall:Describe*', 'network-firewall:List*', 'logs:FilterLogEvents',
       'eks:Describe*', 'eks:List*'], resources: ['*'] }));
-    nfm.addToRolePolicy(new iam.PolicyStatement({ actions: ['networkflowmonitor:*',
-      'cloudwatch:GetMetricData', 'dynamodb:GetItem', 'dynamodb:Query'], resources: ['*'] }));
+    // Least-privilege: enumerated NFM read/query actions + CW metrics (CW requires *)
+    nfm.addToRolePolicy(new iam.PolicyStatement({ actions: [
+      'networkflowmonitor:ListMonitors', 'networkflowmonitor:ListScopes',
+      'networkflowmonitor:GetMonitor', 'networkflowmonitor:GetScope',
+      'networkflowmonitor:StartQueryMonitorTopContributors',
+      'networkflowmonitor:GetQueryStatusMonitorTopContributors',
+      'networkflowmonitor:GetQueryResultsMonitorTopContributors',
+      'networkflowmonitor:StopQueryMonitorTopContributors',
+      'networkflowmonitor:StartQueryWorkloadInsightsTopContributors',
+      'networkflowmonitor:GetQueryStatusWorkloadInsightsTopContributors',
+      'networkflowmonitor:GetQueryResultsWorkloadInsightsTopContributors',
+      'networkflowmonitor:StopQueryWorkloadInsightsTopContributors',
+      'cloudwatch:GetMetricData', 'cloudwatch:ListMetrics'], resources: ['*'] }));
+    nfm.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:Query'],
+      resources: [`arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*`,
+        `arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*/index/*`] }));
     ddbF.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:Query'],
       resources: [`arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*`,
         `arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*/index/*`] }));
