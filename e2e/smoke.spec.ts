@@ -38,9 +38,10 @@ test.describe.serial('NFM Dashboard smoke', () => {
       await page.getByTestId('chat-input').fill('top talker pod?');
       await page.getByTestId('chat-send').click();
       // Bedrock streaming can be slow on a cold path — allow up to 90s.
-      await expect(page.getByTestId('chat-assistant-msg').last()).toContainText(/\w/, {
-        timeout: 90_000,
-      });
+      const assistantMsg = page.getByTestId('chat-assistant-msg').last();
+      await expect(assistantMsg).toContainText(/\w/, { timeout: 90_000 });
+      // A rendered bubble is not enough — an error bubble also carries text.
+      await expect(assistantMsg).not.toContainText(/error|오류|⚠️/i);
     });
 
     test.describe(() => {
