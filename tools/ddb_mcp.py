@@ -120,8 +120,18 @@ TOOLS = {"query_pod_flows": query_pod_flows, "query_flow_edges": query_flow_edge
          "get_collection_status": get_collection_status}
 
 
+def _gateway_tool_name(context):
+    """AgentCore Gateway passes '<target>___<tool>' via Lambda client context.
+    AgentCore Gateway는 Lambda 클라이언트 컨텍스트로 '<target>___<tool>'을 전달한다."""
+    try:
+        return (context.client_context.custom or {}).get("bedrockAgentCoreToolName", "").split("___")[-1]
+    except AttributeError:
+        return ""
+
+
 def lambda_handler(event, context):
-    t = event.get("tool_name", ""); args = event.get("arguments", event)
+    t = event.get("tool_name", "") or _gateway_tool_name(context)
+    args = event.get("arguments", event)
     fn = TOOLS.get(t)
     if fn is None:
         return err(f"unknown tool: {t}")

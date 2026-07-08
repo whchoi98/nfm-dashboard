@@ -24,6 +24,13 @@ def lambda_handler(event, context):
     # Parse event and extract tool name and arguments / 이벤트를 파싱하고 도구 이름과 인자를 추출
     params = event if isinstance(event, dict) else json.loads(event)
     t = params.get("tool_name", "")
+    if not t:
+        # AgentCore Gateway passes '<target>___<tool>' via Lambda client context
+        # AgentCore Gateway는 Lambda 클라이언트 컨텍스트로 '<target>___<tool>'을 전달
+        try:
+            t = (context.client_context.custom or {}).get("bedrockAgentCoreToolName", "").split("___")[-1]
+        except AttributeError:
+            t = ""
     args = params.get("arguments", params)
     region = args.get("region", "ap-northeast-2")
 
