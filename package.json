@@ -9,5 +9,8 @@
   "scripts": {
     "test": "npm -w collector run test",
     "deploy:data": "npm -w collector run build && cd infra && npx cdk deploy NfmDash-Data --require-approval never"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

@@ -7,3 +7,4 @@ __pycache__/
 test-results/
 *.tsbuildinfo
 .env*
+e2e/.auth.json

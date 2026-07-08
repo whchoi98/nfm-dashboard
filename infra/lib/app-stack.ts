@@ -33,6 +33,11 @@ const ADMIN_SECRET_NAME = 'nfm-dashboard/cognito-admin'; // created out-of-band 
  *      `secrets` (never plaintext in the template).
  */
 export class AppStack extends cdk.Stack {
+  /** Exposed for OpsAlarmsStack (ELB 5xx metric dimensions). */
+  readonly alb: elbv2.ApplicationLoadBalancer;
+  /** Exposed for OpsAlarmsStack (HealthyHostCount metric dimensions). */
+  readonly targetGroup: elbv2.ApplicationTargetGroup;
+
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props);
     const region = 'ap-northeast-2';
@@ -198,11 +203,13 @@ export class AppStack extends cdk.Stack {
       circuitBreaker: { rollback: true } });
 
     const listener = alb.addListener('Http', { port: 80, open: false }); // SG stays prefix-list-only
-    listener.addTargets('App', {
+    const targetGroup = listener.addTargets('App', {
       port: 3000, protocol: elbv2.ApplicationProtocol.HTTP, targets: [service],
       deregistrationDelay: cdk.Duration.seconds(10),
       healthCheck: { path: '/api/health', healthyHttpCodes: '200',
         interval: cdk.Duration.seconds(15), healthyThresholdCount: 2 } });
+    this.alb = alb;
+    this.targetGroup = targetGroup;
 
     // ── Outputs ────────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'AppUrl', { value: appUrl });
