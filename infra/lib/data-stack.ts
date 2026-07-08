@@ -5,6 +5,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 
 export class DataStack extends cdk.Stack {
   readonly flows: ddb.Table; readonly meta: ddb.Table; readonly collector: lambda.Function;
@@ -27,11 +28,14 @@ export class DataStack extends cdk.Stack {
       billingMode: ddb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: 'ttl', removalPolicy: cdk.RemovalPolicy.DESTROY });
 
+    const collectorDist = path.join(__dirname, '../../collector/dist');
+    if (!fs.existsSync(path.join(collectorDist, 'handler.mjs')))
+      throw new Error('collector/dist/handler.mjs missing — run: npm -w collector run build');
     this.collector = new lambda.Function(this, 'Collector', {
       functionName: 'nfm-dashboard-collector',
       runtime: lambda.Runtime.NODEJS_22_X, architecture: lambda.Architecture.ARM_64,
       handler: 'handler.handler', memorySize: 512, timeout: cdk.Duration.seconds(270),
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../collector/dist')),
+      code: lambda.Code.fromAsset(collectorDist),
       environment: { TABLE_FLOWS: this.flows.tableName, TABLE_META: this.meta.tableName,
         MONITORS: this.node.tryGetContext('nfmMonitors') ?? '', CONCURRENCY: '5' } });
     this.flows.grantWriteData(this.collector);
@@ -47,8 +51,10 @@ export class DataStack extends cdk.Stack {
       'networkflowmonitor:GetQueryStatusWorkloadInsightsTopContributors',
       'networkflowmonitor:GetQueryResultsWorkloadInsightsTopContributors',
       'networkflowmonitor:StopQueryWorkloadInsightsTopContributors',
-      'ec2:DescribeInstances', 'ec2:CreateTags',
-      'iam:ListAttachedRolePolicies', 'iam:GetInstanceProfile'], resources: ['*'] }));
+      'ec2:DescribeInstances', 'ec2:CreateTags'], resources: ['*'] }));
+    this.collector.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['iam:ListAttachedRolePolicies', 'iam:GetInstanceProfile'],
+      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*', 'arn:aws:iam::<ACCOUNT_ID>:instance-profile/*'] }));
     this.collector.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:AttachRolePolicy'], resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*'],
       conditions: { ArnEquals: { 'iam:PolicyARN':

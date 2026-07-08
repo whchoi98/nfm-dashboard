@@ -55,3 +55,21 @@ it('reports policyAttached false without throwing when GetInstanceProfile fails'
   expect(cov.standalone[0]).toMatchObject({ instanceId: 'i-badprofile', policyAttached: false, roleName: undefined });
   expect(iam.commandCalls(AttachRolePolicyCommand)).toHaveLength(0);
 });
+
+it('caches instance profile lookups for repeated profile ARNs', async () => {
+  ec2.on(DescribeInstancesCommand).resolves({ Reservations: [{ Instances: [
+    { InstanceId: 'i-solo1', Tags: [{ Key: 'Name', Value: 'app1' }],
+      IamInstanceProfile: { Arn: 'arn:aws:iam::1:instance-profile/solorole-profile' }, State: { Name: 'running' } },
+    { InstanceId: 'i-solo2', Tags: [{ Key: 'Name', Value: 'app2' }],
+      IamInstanceProfile: { Arn: 'arn:aws:iam::1:instance-profile/solorole-profile' }, State: { Name: 'running' } },
+  ] }] });
+  ec2.on(CreateTagsCommand).resolves({});
+  iam.on(GetInstanceProfileCommand).resolves({ InstanceProfile: { Roles: [{ RoleName: 'solorole-actual-role' }] } } as any);
+  iam.on(ListAttachedRolePoliciesCommand).resolves({ AttachedPolicies: [] });
+  iam.on(AttachRolePolicyCommand).resolves({});
+  const cov = await discoverOnboarding(new EC2Client({}), new IAMClient({}));
+  expect(cov.standalone).toHaveLength(2);
+  expect(cov.standalone[0]).toMatchObject({ instanceId: 'i-solo1', roleName: 'solorole-actual-role' });
+  expect(cov.standalone[1]).toMatchObject({ instanceId: 'i-solo2', roleName: 'solorole-actual-role' });
+  expect(iam.commandCalls(GetInstanceProfileCommand)).toHaveLength(1);
+});
