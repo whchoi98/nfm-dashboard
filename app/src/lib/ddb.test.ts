@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { recentBuckets, queryPodFlows, queryEdgeSeries } from './ddb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getDns } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -67,6 +67,55 @@ describe('queryPodFlows', () => {
       input.IndexName === 'GSI1' ? { Items: [a, b] } : { Items: [c] });
     const flows = await queryPodFlows('shop', 'api-1', 2);
     expect(flows.map((f) => f.edgeHash)).toEqual(['bbb', 'aaa']);
+  });
+});
+
+describe('getFlowsWindow', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  it('queries each of the n recent buckets and concats the flows', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T11:47:33.123Z'));
+    ddbMock.on(QueryCommand).callsFake((input) => {
+      const pk = (input.ExpressionAttributeValues ?? {})[':pk'] as string;
+      return { Items: [{ edgeHash: `e-${pk}`, bucket: pk.split('#')[1], monitor: 'nfm-eks-demo' }] };
+    });
+
+    const flows = await getFlowsWindow(3);
+
+    const calls = ddbMock.commandCalls(QueryCommand);
+    expect(calls).toHaveLength(3);
+    const pks = calls.map((c) => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk']).sort();
+    expect(pks).toEqual([
+      'FLOW#2026-07-08T11:35:00Z#nfm-eks-demo',
+      'FLOW#2026-07-08T11:40:00Z#nfm-eks-demo',
+      'FLOW#2026-07-08T11:45:00Z#nfm-eks-demo',
+    ]);
+    expect(flows).toHaveLength(3); // 1 flow per bucket, concatenated
+  });
+});
+
+describe('getDns', () => {
+  it('returns the dns attribute of DNS#latest/all when present', async () => {
+    const dns = { enabled: true, topDomains: [{ name: 'a.svc.cluster.local', count: 3, internal: true }],
+      failures: [], latency: { p50: 1, p90: 2, p95: 3, max: 4, count: 5 }, queryTypes: [],
+      resolution: { nodes: [], links: [] }, nameFlow: [] };
+    ddbMock.on(GetCommand).resolves({ Item: { pk: 'DNS#latest', sk: 'all', dns } });
+
+    await expect(getDns()).resolves.toEqual(dns);
+
+    const input = ddbMock.commandCalls(GetCommand)[0].args[0].input;
+    expect(input.Key).toEqual({ pk: 'DNS#latest', sk: 'all' });
+  });
+
+  it('returns null when the item is missing', async () => {
+    ddbMock.on(GetCommand).resolves({});
+    await expect(getDns()).resolves.toBeNull();
   });
 });
 
