@@ -57,8 +57,12 @@ export const handler = async () => {
       resolverGroup: process.env.DNS_RESOLVER_GROUP ?? '/nfm-dashboard/resolver-dns',
       startTime: nowSec - 16 * 60, endTime: nowSec, flows: edges })
       .catch(err => { console.error('dns failed', err); return undefined; });
-    if (dns) await ddb.send(new PutCommand({ TableName: process.env.TABLE_META!,
+    // Keep-last-good: a transient empty Insights result (enabled:false) must not
+    // overwrite a good snapshot and blank the DNS lens until the next pass.
+    if (dns?.enabled) await ddb.send(new PutCommand({ TableName: process.env.TABLE_META!,
       Item: { pk: 'DNS#latest', sk: 'all', dns, cycleTs: now.toISOString() } }));
+    else if (dns) console.log(JSON.stringify({ level: 'info',
+      msg: 'dns aggregate empty — keeping last-good DNS#latest' }));
   }
   console.log(JSON.stringify({ level: 'info', msg: 'cycle done', stats, edges: edges.length }));
   return { ok: true, stats };

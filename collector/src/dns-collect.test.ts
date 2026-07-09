@@ -92,6 +92,30 @@ it('a Failed query on one group does not break the others', async () => {
   expect(agg.topDomains[0].name).toBe('api.shop.svc.cluster.local');
 });
 
+it('resolver records survive the cap even when coredns volume alone would exceed it', async () => {
+  const RESOLVER_MSG = JSON.stringify({ query_name: 'ddb.amazonaws.com.', query_type: 'A',
+    rcode: 'NOERROR', srcaddr: '10.100.1.20', answers: [{ Rdata: '52.1.2.3', Type: 'A' }] });
+  cw.on(StartQueryCommand, { logGroupName: '/aws/containerinsights/c/application' })
+    .resolves({ queryId: 'qc' });
+  cw.on(StartQueryCommand, { logGroupName: '/nfm-dashboard/resolver-dns' })
+    .resolves({ queryId: 'qr' });
+  cw.on(GetQueryResultsCommand, { queryId: 'qc' }).resolves({ status: 'Complete', results: [
+    [{ field: '@message', value: CORE_LINE }],
+    [{ field: '@message', value: CORE_LINE }],
+    [{ field: '@message', value: CORE_LINE }],
+  ] });
+  cw.on(GetQueryResultsCommand, { queryId: 'qr' }).resolves({ status: 'Complete', results: [
+    [{ field: '@message', value: RESOLVER_MSG }],
+  ] });
+  const flows = [{ edgeHash: 'e1', a: { ip: '10.100.1.20' }, b: { ip: '52.1.2.3' } }] as any;
+  // cap = 2: coredns alone (3 records) would fill it — resolver must be processed first
+  const agg = await collectDns(new CloudWatchLogsClient({}),
+    { ...baseOpts, flows, recordCap: 2 });
+  expect(agg.enabled).toBe(true);
+  expect(agg.nameFlow).toContainEqual({ ip: '52.1.2.3', name: 'ddb.amazonaws.com' });
+  expect(agg.topDomains.map(d => d.name)).toContain('ddb.amazonaws.com');
+});
+
 it('caps total parsed records and skips unparseable messages', async () => {
   cw.on(StartQueryCommand).resolves({ queryId: 'q1' });
   cw.on(GetQueryResultsCommand).resolves({ status: 'Complete', results: [

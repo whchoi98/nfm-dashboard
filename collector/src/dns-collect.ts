@@ -59,10 +59,12 @@ export async function collectDns(logs: CloudWatchLogsClient, opts: CollectDnsOpt
   const o = { startTime: opts.startTime, endTime: opts.endTime,
     pollDelayMs: opts.pollDelayMs ?? 2000, maxPolls: opts.maxPolls ?? 30 };
   const recordCap = opts.recordCap ?? 20000;
+  // Resolver group FIRST: records are capped in job order, and the resolver log is the
+  // only source of nameFlow — CoreDNS volume must never starve it out of the cap.
   const jobs: { group: string; query: string; parse: (msg: string) => DnsRecord | null }[] = [
-    ...opts.coreDnsGroups.map(group => ({ group, query: CORE_QUERY, parse: parseCore })),
     ...(opts.resolverGroup ? [{ group: opts.resolverGroup, query: RESOLVER_QUERY,
-      parse: parseResolverMsg }] : [])];
+      parse: parseResolverMsg }] : []),
+    ...opts.coreDnsGroups.map(group => ({ group, query: CORE_QUERY, parse: parseCore }))];
   const perGroup = await Promise.all(jobs.map(async j => ({
     ...j, messages: await runInsights(logs, j.group, j.query, o).catch(e => {
       console.error(JSON.stringify({ level: 'error', msg: 'insights query failed',

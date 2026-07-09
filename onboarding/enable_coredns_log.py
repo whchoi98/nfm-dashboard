@@ -13,7 +13,11 @@ def add_log_plugin(corefile: str) -> str:
     if re.search(r"^\s*log\s*$", corefile, re.M):
         return corefile                      # idempotent
     # insert `log` as the first plugin inside the top server block `{ ... }`
-    return re.sub(r"(\{\n)", r"\1    log\n", corefile, count=1)
+    new = re.sub(r"(\{\n)", r"\1    log\n", corefile, count=1)
+    if new == corefile:                      # `{` anchor didn't match — silent no-op
+        print(json.dumps({"level": "warn",
+                          "msg": "add_log_plugin no-op — Corefile block not matched"}))
+    return new
 
 
 def remove_log_plugin(corefile: str) -> str:
@@ -54,7 +58,7 @@ def _ensure_access(eks, cluster: str, role_arn: str):
 
 
 def _remove_access(eks, cluster: str, role_arn: str):
-    """Best-effort cleanup of the access entry (Delete path only)."""
+    """Best-effort cleanup of the access entry (runs after every cluster's processing)."""
     try:
         eks.delete_access_entry(clusterName=cluster, principalArn=role_arn)
     except Exception as e:                   # noqa: BLE001 — cleanup must never fail the delete
@@ -144,6 +148,20 @@ def send_cfn(event, status, reason="ok"):
         headers={"Content-Type": ""}), timeout=10)
 
 
+def cfn_outcome(request_type: str, attempted: int, failed: list[str]) -> tuple[str, str]:
+    """Decide the CFN response. Delete is always SUCCESS (never block stack deletion).
+
+    Create/Update: FAILED only when EVERY attempted cluster failed (and >0 attempted);
+    partial failure stays SUCCESS with the failures listed in the reason.
+    """
+    if not failed:
+        return "SUCCESS", "ok"
+    reason = f"failed clusters: {','.join(failed)} (see fn logs)"
+    if request_type != "Delete" and attempted > 0 and len(failed) == attempted:
+        return "FAILED", reason
+    return "SUCCESS", reason
+
+
 def handler(event, context):
     try:
         eks = boto3.client("eks", region_name=REGION)
@@ -153,16 +171,18 @@ def handler(event, context):
         failed = []
         for cl in clusters:
             try:                             # one cluster failure must not block others
-                _ensure_access(eks, cl, role_arn)
                 try:
+                    _ensure_access(eks, cl, role_arn)
                     _patch_with_retry(cl, is_delete)
                 finally:
-                    if is_delete:            # best-effort even if the patch failed —
-                        _remove_access(eks, cl, role_arn)  # never leave a dangling entry
+                    # transient access: revoke after each cluster for ALL request types —
+                    # _ensure_access re-grants on the next CR invocation, so the Lambda
+                    # role holds cluster-admin only while this run is patching.
+                    _remove_access(eks, cl, role_arn)
             except Exception as e:           # noqa: BLE001
                 print(json.dumps({"level": "error", "cluster": cl, "error": str(e)}))
                 failed.append(cl)
-        reason = "ok" if not failed else f"failed clusters: {','.join(failed)} (see fn logs)"
-        send_cfn(event, "SUCCESS", reason)
+        status, reason = cfn_outcome(event["RequestType"], len(clusters), failed)
+        send_cfn(event, status, reason)
     except Exception as e:                    # noqa: BLE001
         send_cfn(event, "SUCCESS" if event.get("RequestType") == "Delete" else "FAILED", str(e))
