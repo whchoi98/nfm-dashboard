@@ -34,3 +34,12 @@ export interface Coverage {
 export interface CycleStats { started: number; succeeded: number; failed: number;
   throttled: number; rows: number; }
 export interface CollectionStatus { cycleTs: string; stats: CycleStats; }
+
+// DNS aggregate written by the collector under DNS#latest/all (collector/src/dns.ts)
+export interface DnsAggregate { enabled: boolean;
+  topDomains: { name: string; count: number; internal: boolean }[];
+  failures: { key: string; label: string; nxdomain: number; servfail: number; total: number; failRate: number }[];
+  latency: { p50: number; p90: number; p95: number; max: number; count: number };
+  queryTypes: { type: string; count: number }[];
+  resolution: { nodes: { name: string }[]; links: { source: number; target: number; value: number }[] };
+  nameFlow: { ip: string; name: string }[]; }

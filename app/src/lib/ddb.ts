@@ -1,7 +1,8 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { listMonitorNames } from './cw-metrics';
-import type { CollectionStatus, Coverage, FlowEdge, TopologySnapshot, WiResult } from './types';
+import type { CollectionStatus, Coverage, DnsAggregate, FlowEdge, TopologySnapshot,
+  WiResult } from './types';
 
 const REGION = process.env.AWS_REGION ?? 'ap-northeast-2';
 const TABLE_FLOWS = process.env.TABLE_FLOWS ?? 'nfm-dashboard-flows';
@@ -49,6 +50,19 @@ export async function getWorkloadInsights():
     Key: { pk: 'WI#latest', sk: 'all' } }));
   if (!res.Item) return null;
   return { rows: (res.Item.rows as WiResult[] | undefined) ?? [], cycleTs: res.Item.cycleTs };
+}
+
+/** DNS aggregate precomputed by the collector under DNS#latest/all. */
+export async function getDns(): Promise<DnsAggregate | null> {
+  const res = await ddb().send(new GetCommand({ TableName: TABLE_META,
+    Key: { pk: 'DNS#latest', sk: 'all' } }));
+  return (res.Item?.dns as DnsAggregate | undefined) ?? null;
+}
+
+/** All flows across the n most-recent 5-min buckets (all monitors), concatenated. */
+export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
+  const results = await Promise.all(recentBuckets(n).map(b => queryFlowsByBucket(b)));
+  return results.flat();
 }
 
 async function queryAll(input: ConstructorParameters<typeof QueryCommand>[0]): Promise<FlowEdge[]> {
