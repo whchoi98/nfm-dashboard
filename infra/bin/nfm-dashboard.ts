@@ -4,6 +4,7 @@ import { NfmOnboardingStack } from '../lib/nfm-onboarding-stack';
 import { AgentCoreStack } from '../lib/agentcore-stack';
 import { AppStack } from '../lib/app-stack';
 import { OpsAlarmsStack } from '../lib/ops-alarms';
+import { DnsStack } from '../lib/dns-stack';
 
 const app = new cdk.App();
 const env = { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' };
@@ -13,3 +14,4 @@ new AgentCoreStack(app, 'NfmDash-AgentCore', { env });
 const appStack = new AppStack(app, 'NfmDash-App', { env });
 new OpsAlarmsStack(app, 'NfmDash-Ops', {
   env, alb: appStack.alb, targetGroup: appStack.targetGroup });
+new DnsStack(app, 'NfmDash-Dns', { env });
