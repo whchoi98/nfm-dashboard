@@ -2,12 +2,14 @@
 
 // NetworkGraph (Task 6) — WhaTap-style force-directed node-link topology.
 // buildGraphModel(topology) → circle nodes sized by traffic (sqrt scale) with
-// status colors + self-loop arcs, and curved directional edges with byte
-// labels (dashed when rate > threshold). Layout: d3-force simulation run for
-// ~300 ticks up-front in a memo keyed by the node/link id set, then fed to
-// React Flow as static positions (nodes stay draggable). Replaces TierFlowMap
-// in the /topology "graph" view.
-import { memo, useCallback, useMemo } from 'react';
+// status colors + self-loop arcs, and curved directional edges labeled with
+// the selected metric (dashed when DATA_TRANSFERRED throughput > threshold).
+// Layout: d3-force simulation run for ~300 ticks up-front in a memo keyed by
+// the structural node/link id set. Node positions then live in local state
+// (useNodesState): manual drags persist across value-only polls and focus
+// changes; positions reset only when the structural layoutKey changes.
+// Replaces TierFlowMap in the /topology "graph" view.
+import { memo, useCallback, useMemo, useRef } from 'react';
 import ReactFlow, {
   BaseEdge,
   Background,
@@ -16,6 +18,7 @@ import ReactFlow, {
   Handle,
   MarkerType,
   Position,
+  useNodesState,
   type Edge as RFEdge,
   type EdgeProps,
   type Node as RFNode,
@@ -27,7 +30,7 @@ import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
 import { buildGraphModel, type GraphModel, type GraphNode } from '@/lib/topology-graph';
 import { CATEGORY_COLORS, STATUS, TOKENS } from '@/lib/chart-tokens';
-import { formatBytes, formatMetricValue } from '@/lib/format';
+import { formatMetricValue } from '@/lib/format';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 const statusColor = (s: GraphNode['status']) => (s === 'idle' ? TOKENS.chartGrey : STATUS[s]);
@@ -35,6 +38,8 @@ const statusColor = (s: GraphNode['status']) => (s === 'idle' ? TOKENS.chartGrey
 // ── custom circle node ──────────────────────────────────────────────────────
 interface CircleNodeData extends GraphNode {
   focused: boolean;
+  /** Active metric — the self-loop label must match the edge labels' unit. */
+  metric: MetricName;
   selfLoopTitle: string;
 }
 
@@ -70,14 +75,14 @@ function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
           boxShadow: data.focused ? `0 0 0 3px ${TOKENS.chartBlue}` : undefined,
         }}
       />
-      {/* self-loop: arc anchored on top of the circle + its byte total */}
+      {/* self-loop: arc anchored on top of the circle + its selected-metric total */}
       {data.selfBytes > 0 ? (
         <div
           className="absolute -top-7 left-1/2 flex -translate-x-1/2 flex-col items-center"
           title={data.selfLoopTitle}
         >
           <span className="whitespace-nowrap text-[9px] font-medium tabular-nums text-ink/70 dark:text-white/70">
-            {formatBytes(data.selfBytes)}
+            {formatMetricValue(data.metric, data.selfBytes)}
           </span>
           <svg width="30" height="16" aria-hidden>
             <path d="M4,15 C4,2 26,2 26,15" fill="none" stroke={color} strokeWidth="1.5" />
@@ -223,16 +228,22 @@ function NetworkGraphInner({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layoutKey by design
   const positions = useMemo(() => computeLayout(model), [layoutKey]);
 
-  const { rfNodes, rfEdges } = useMemo(() => {
+  // Focus only counts while the focused node exists in the current model — a
+  // stale focusId (node unchecked, filter narrowed, poll churn) would
+  // otherwise mute EVERY edge with no focus ring to recover from.
+  const focusPresent = focusId != null && model.nodes.some((n) => n.id === focusId);
+  const activeFocusId = focusPresent ? focusId : null;
+
+  const { layoutNodes, rfEdges } = useMemo(() => {
     const radii = new Map(model.nodes.map((n) => [n.id, n.radius]));
-    const rfNodes: RFNode<CircleNodeData>[] = model.nodes.map((n) => {
+    const layoutNodes: RFNode<CircleNodeData>[] = model.nodes.map((n) => {
       const p = positions.get(n.id) ?? { x: 0, y: 0 };
       return {
         id: n.id,
         type: 'circle',
         // d3-force coordinates are circle centers; RF positions are top-left.
         position: { x: p.x - n.radius, y: p.y - n.radius },
-        data: { ...n, focused: n.id === focusId, selfLoopTitle: t('graph.selfLoop') },
+        data: { ...n, focused: n.id === activeFocusId, metric, selfLoopTitle: t('graph.selfLoop') },
         connectable: false,
       };
     });
@@ -246,7 +257,7 @@ function NetworkGraphInner({
         metric,
         dashed: l.dashed,
         category: l.category,
-        muted: focusId != null && l.source !== focusId && l.target !== focusId,
+        muted: activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId,
         sourceRadius: radii.get(l.source) ?? 0,
         targetRadius: radii.get(l.target) ?? 0,
       },
@@ -254,8 +265,35 @@ function NetworkGraphInner({
       // Thin curves stay clickable via a wide invisible hit area.
       interactionWidth: 16,
     }));
-    return { rfNodes, rfEdges };
-  }, [model, positions, focusId, metric, t]);
+    return { layoutNodes, rfEdges };
+  }, [model, positions, activeFocusId, metric, t]);
+
+  // Positions live in state so manual drags stick (onNodesChange applies RF's
+  // drag deltas). Sync from layoutNodes during render (React's "adjust state
+  // on prop change" pattern) so the key-remounted ReactFlow mounts with the
+  // fresh node set: structural change → reset to computed layout; value-only
+  // poll / focus change → refresh node DATA but keep each (possibly dragged)
+  // circle CENTER, compensating for radius changes.
+  const [rfNodes, setRfNodes, onNodesChange] = useNodesState<CircleNodeData>(layoutNodes);
+  const synced = useRef({ layoutKey, layoutNodes });
+  if (synced.current.layoutNodes !== layoutNodes) {
+    const structural = synced.current.layoutKey !== layoutKey;
+    synced.current = { layoutKey, layoutNodes };
+    if (structural) {
+      setRfNodes(layoutNodes);
+    } else {
+      setRfNodes((prev) => {
+        const prevById = new Map(prev.map((n) => [n.id, n]));
+        return layoutNodes.map((n) => {
+          const p = prevById.get(n.id);
+          if (!p) return n;
+          const cx = p.position.x + p.data.radius;
+          const cy = p.position.y + p.data.radius;
+          return { ...n, position: { x: cx - n.data.radius, y: cy - n.data.radius } };
+        });
+      });
+    }
+  }
 
   const handleEdgeClick = useCallback(
     (_: React.MouseEvent, edge: RFEdge) => onLinkSelect?.(edge.source, edge.target),
@@ -264,7 +302,7 @@ function NetworkGraphInner({
 
   return (
     <div data-testid="network-graph" className="h-[560px] w-full">
-      {rfNodes.length === 0 ? (
+      {model.nodes.length === 0 ? (
         <div className="flex h-full items-center justify-center text-sm text-ink/50 dark:text-white/50">
           {t('topology.empty')}
         </div>
@@ -274,6 +312,7 @@ function NetworkGraphInner({
           key={layoutKey}
           nodes={rfNodes}
           edges={rfEdges}
+          onNodesChange={onNodesChange}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
@@ -281,6 +320,8 @@ function NetworkGraphInner({
           minZoom={0.1}
           maxZoom={2}
           nodesConnectable={false}
+          // onNodesChange would otherwise honor Backspace node deletion.
+          deleteKeyCode={null}
           elementsSelectable
           onNodeClick={(_, node) => onNodeSelect?.(node.id)}
           onEdgeClick={handleEdgeClick}

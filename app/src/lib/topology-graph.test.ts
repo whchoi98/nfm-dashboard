@@ -1,6 +1,7 @@
 // TDD for buildGraphModel (Task 6) — pure WhaTap-style graph view model:
-// traffic-scaled radii, self-loop extraction, rate→dashed styling, tag
-// selection filtering, and status precedence. No I/O, no rendering.
+// traffic-scaled radii, self-loop extraction, DATA_TRANSFERRED-throughput
+// dashed styling (independent of the selected metric), tag selection
+// filtering, and status precedence. No I/O, no rendering.
 import { describe, expect, it } from 'vitest';
 import type { TopologySnapshot } from './types';
 import { buildGraphModel } from './topology-graph';
@@ -59,18 +60,49 @@ describe('buildGraphModel', () => {
     expect(a.traffic).toBe(4_196);
   });
 
-  it('marks links dashed only when rate exceeds the threshold (128 boundary)', () => {
+  it('marks links dashed only when the DATA_TRANSFERRED rate exceeds the threshold (128 boundary)', () => {
     const t = topo([
       { id: 'solid', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 128 }, category: 'INTRA_AZ' },
       { id: 'dashed', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: 129 }, category: 'INTRA_AZ' },
     ]);
-    // windowSeconds=1 → rate equals the raw value.
+    // windowSeconds=1 → rate equals the raw byte value.
     const m = buildGraphModel(t, { windowSeconds: 1, rateThreshold: 128 });
     const byId = new Map(m.links.map((l) => [l.id, l]));
     expect(byId.get('solid')!.rate).toBe(128);
     expect(byId.get('solid')!.dashed).toBe(false);
     expect(byId.get('dashed')!.rate).toBe(129);
     expect(byId.get('dashed')!.dashed).toBe(true);
+  });
+
+  it('derives dashed from DATA_TRANSFERRED throughput, independent of the selected metric', () => {
+    const t = topo([
+      // Huge RTT but tiny bytes → must stay SOLID even when RTT is selected.
+      { id: 'slow', source: 'a', target: 'b', metrics: { ROUND_TRIP_TIME: 9_999_999, DATA_TRANSFERRED: 10 }, category: 'INTRA_AZ' },
+      // Huge bytes but zero timeouts → must be DASHED even when TIMEOUTS is selected.
+      { id: 'busy', source: 'b', target: 'c', metrics: { TIMEOUTS: 0, DATA_TRANSFERRED: 10_000_000 }, category: 'INTER_AZ' },
+    ]);
+    for (const metric of ['ROUND_TRIP_TIME', 'TIMEOUTS', 'RETRANSMISSIONS', 'DATA_TRANSFERRED'] as const) {
+      const m = buildGraphModel(t, { metric, windowSeconds: 1, rateThreshold: 128 });
+      const byId = new Map(m.links.map((l) => [l.id, l]));
+      // rate is always bytes/s from DATA_TRANSFERRED, never the selected metric.
+      expect(byId.get('slow')!.rate).toBe(10);
+      expect(byId.get('slow')!.dashed).toBe(false);
+      expect(byId.get('busy')!.rate).toBe(10_000_000);
+      expect(byId.get('busy')!.dashed).toBe(true);
+    }
+    // The link VALUE (label/sizing) still tracks the selected metric.
+    const rtt = buildGraphModel(t, { metric: 'ROUND_TRIP_TIME', windowSeconds: 1 });
+    expect(new Map(rtt.links.map((l) => [l.id, l])).get('slow')!.value).toBe(9_999_999);
+  });
+
+  it('treats missing DATA_TRANSFERRED as zero rate (solid) under a non-byte metric', () => {
+    const t = topo([
+      { id: 'e1', source: 'a', target: 'b', metrics: { RETRANSMISSIONS: 1_000_000 }, category: 'INTRA_AZ' },
+    ]);
+    const m = buildGraphModel(t, { metric: 'RETRANSMISSIONS', windowSeconds: 1, rateThreshold: 128 });
+    expect(m.links[0].value).toBe(1_000_000);
+    expect(m.links[0].rate).toBe(0);
+    expect(m.links[0].dashed).toBe(false);
   });
 
   it('defaults rate to value / 300s and threshold to 128', () => {

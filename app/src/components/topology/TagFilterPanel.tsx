@@ -88,8 +88,11 @@ export default function TagFilterPanel({
                 onChange={() => toggle(n.id)}
                 className="accent-chartViolet"
               />
+              {/* status dot: dual-encoded (token color + accessible text label) */}
               <span
-                aria-hidden
+                role="img"
+                aria-label={t(`graph.status.${n.status}`)}
+                title={t(`graph.status.${n.status}`)}
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: statusColor(n.status) }}
               />

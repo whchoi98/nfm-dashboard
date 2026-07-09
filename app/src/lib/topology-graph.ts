@@ -1,8 +1,9 @@
 // app/src/lib/topology-graph.ts — pure view-model builder for the WhaTap-style
 // force-directed NetworkGraph (Task 6). Turns a TopologySnapshot into circle
-// nodes sized by traffic (sqrt scale), directional links with rate→dashed
-// styling, self-loop byte totals, and status per node. No I/O, no layout —
-// d3-force positioning happens in the component.
+// nodes sized by the selected metric (sqrt scale), directional links dashed by
+// DATA_TRANSFERRED throughput (independent of the selected metric), self-loop
+// totals, and status per node. No I/O, no layout — d3-force positioning
+// happens in the component.
 import type { DestCategory, MetricName, TopoNode, TopologySnapshot } from './types';
 
 export interface GraphNode {
@@ -11,6 +12,7 @@ export interface GraphNode {
   kind: TopoNode['kind'];
   radius: number;
   traffic: number;
+  /** Self-loop total in the SELECTED metric (historical field name kept). */
   selfBytes: number;
   status: 'ok' | 'warn' | 'danger' | 'idle';
 }
@@ -19,8 +21,11 @@ export interface GraphLink {
   id: string;
   source: string;
   target: string;
+  /** Selected-metric value — drives the edge label and node sizing. */
   value: number;
+  /** DATA_TRANSFERRED bytes/s over the window — always throughput, regardless of the selected metric. */
   rate: number;
+  /** rate > rateThreshold → dashed (throughput encoding, WhaTap "bps" reference). */
   dashed: boolean;
   category: DestCategory;
 }
@@ -38,7 +43,7 @@ export interface BuildGraphOpts {
   metric?: MetricName;
   /** Snapshot aggregation window used to derive per-second rates. */
   windowSeconds?: number;
-  /** Links with rate above this are drawn dashed. */
+  /** Links whose DATA_TRANSFERRED bytes/s rate exceeds this are drawn dashed. */
   rateThreshold?: number;
   /** Tag filter: non-empty set keeps only those nodes (+ links with both ends kept). */
   selectedIds?: Set<string> | null;
@@ -76,7 +81,11 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
       continue;
     }
     if (!keptIds.has(e.source) || !keptIds.has(e.target)) continue; // dangling after selection
-    const rate = value / windowSeconds;
+    // Solid/dashed always encodes DATA_TRANSFERRED throughput (bytes/s), never
+    // the selected sizing/label metric — RTT or counts against a bytes/s
+    // threshold would be meaningless.
+    const bytes = e.metrics.DATA_TRANSFERRED ?? 0;
+    const rate = bytes / windowSeconds;
     links.push({
       id: e.id,
       source: e.source,

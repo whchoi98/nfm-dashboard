@@ -139,6 +139,21 @@ export default function TopologyPage() {
   // Kept as the edge object (not id) so a poll refresh can't blank the panel.
   const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
 
+  // Cluster/category re-scoping rebuilds the topology with a disjoint node-id
+  // set — a stale tag selection would empty the graph (buildGraphModel keeps
+  // only selected ids) and a stale focus would mute every edge. Reset both.
+  useEffect(() => {
+    setSelectedIds(null);
+    setFocusId(null);
+  }, [cluster, category]);
+
+  // TagFilterPanel apply: commit the selection and drop the focus if the new
+  // selection removed the focused node (empty set = "all nodes" keeps it).
+  const applyTagSelection = (next: Set<string>) => {
+    setSelectedIds(next);
+    setFocusId((f) => (f != null && next.size > 0 && !next.has(f) ? null : f));
+  };
+
   const clusters = useMemo(
     () => [...new Set((data?.nodes ?? []).map((n) => n.cluster).filter((c): c is string => !!c))].sort(),
     [data],
@@ -285,7 +300,7 @@ export default function TopologyPage() {
         <Card className="min-w-0">
           {topology ? (
             view === 'graph' ? (
-              <TagFilterPanel nodes={tagNodes} selected={appliedTagIds} onApply={setSelectedIds} />
+              <TagFilterPanel nodes={tagNodes} selected={appliedTagIds} onApply={applyTagSelection} />
             ) : (
               <TopEdgesPanel topology={topology} metric={metric} onEdgeSelect={selectEdgeId} />
             )
