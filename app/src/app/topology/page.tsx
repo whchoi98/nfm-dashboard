@@ -1,31 +1,48 @@
 'use client';
 
+// /topology — tiered icon flow map (TierFlowMap) ↔ adjacency matrix
+// (AdjacencyMatrix) over /api/topology, with a Top-edges panel on the side.
+// Selecting an edge (ribbon click, matrix cell, or top-edges row) opens a
+// dialog that fetches /api/paths for that edge and renders its HopPath.
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
-import type { MetricName, TopoEdge, TopoNode, TopologySnapshot } from '@/lib/types';
-import { CATEGORY_ORDER } from '@/lib/chart-tokens';
+import type { FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
+import { resolveEdge, type TierLevel } from '@/lib/topology';
 import { formatMetricValue } from '@/lib/format';
-import TopologyGraph from '@/components/topology/TopologyGraph';
+import TierFlowMap from '@/components/topology/TierFlowMap';
+import AdjacencyMatrix from '@/components/topology/AdjacencyMatrix';
+import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
+import HopPath from '@/components/HopPath';
 import { CategoryChip } from '@/components/FlowTable';
 import { Card, Select } from '@/components/ui/Controls';
 
 const METRICS: MetricName[] = ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS', 'ROUND_TRIP_TIME'];
+const LEVELS: { value: TierLevel; labelKey: string }[] = [
+  { value: 'cluster', labelKey: 'topology.levelCluster' },
+  { value: 'namespace', labelKey: 'topology.levelNamespace' },
+  { value: 'service', labelKey: 'topology.levelService' },
+  { value: 'pod', labelKey: 'topology.levelPod' },
+];
 
-function EdgePanel({
+// Edge detail dialog: hop path fetched from /api/paths for the selected edge,
+// plus its topology metrics and a link to the full /paths page.
+// Desktop: right-side sheet. Mobile: bottom sheet.
+function EdgeHopPanel({
   edge,
-  nodeById,
+  labelOf,
   onClose,
 }: {
   edge: TopoEdge;
-  nodeById: Map<string, TopoNode>;
+  labelOf: (id: string) => string;
   onClose: () => void;
 }) {
   const { t } = useLanguage();
-  const a = nodeById.get(edge.source);
-  const b = nodeById.get(edge.target);
+  const { data, error, loading } = usePolling<{ series: FlowEdge[]; latest: FlowEdge | null }>(
+    `/api/paths?edge=${encodeURIComponent(edge.id)}`,
+  );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -34,12 +51,12 @@ function EdgePanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    // Desktop: overlay card pinned to the right of the graph. Mobile: bottom sheet.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={t('topology.edgeDetail')}
-      className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-card border border-black/5 bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg md:absolute md:inset-x-auto md:bottom-4 md:right-4 md:top-4 md:z-10 md:max-h-none md:w-80 md:rounded-card md:pb-5 dark:border-white/10 dark:bg-ink"
+      data-testid="edge-hop-panel"
+      className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-card border border-black/5 bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-lg md:inset-x-auto md:bottom-4 md:right-4 md:top-4 md:max-h-none md:w-[26rem] md:rounded-card md:pb-5 dark:border-white/10 dark:bg-ink"
     >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('topology.edgeDetail')}</h2>
@@ -53,9 +70,9 @@ function EdgePanel({
         </button>
       </div>
       <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <span className="truncate" title={a?.label}>{a?.label ?? edge.source}</span>
+        <span className="truncate" title={labelOf(edge.source)}>{labelOf(edge.source)}</span>
         <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink/40 dark:text-white/40" aria-hidden />
-        <span className="truncate" title={b?.label}>{b?.label ?? edge.target}</span>
+        <span className="truncate" title={labelOf(edge.target)}>{labelOf(edge.target)}</span>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <CategoryChip category={edge.category} />
@@ -64,6 +81,17 @@ function EdgePanel({
             :{edge.targetPort}
           </span>
         ) : null}
+      </div>
+      <div className="mb-4 rounded-card bg-surface p-3 dark:bg-white/5">
+        {error ? (
+          <p className="text-sm text-ink/60 dark:text-white/60">{t('common.error')}</p>
+        ) : loading && !data ? (
+          <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
+        ) : data?.latest ? (
+          <HopPath edge={data.latest} />
+        ) : (
+          <p className="text-sm text-ink/40 dark:text-white/40">{t('paths.noData')}</p>
+        )}
       </div>
       <dl className="flex flex-col gap-2">
         {METRICS.map((m) => (
@@ -89,118 +117,115 @@ function EdgePanel({
 export default function TopologyPage() {
   const { t } = useLanguage();
   const { data, loading, error } = usePolling<TopologySnapshot>('/api/topology');
-  const [cluster, setCluster] = useState('');
-  const [namespace, setNamespace] = useState('');
-  const [category, setCategory] = useState('');
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [view, setView] = useState<'graph' | 'matrix'>('graph');
+  const [level, setLevel] = useState<TierLevel>('namespace');
+  const [metric, setMetric] = useState<MetricName>('DATA_TRANSFERRED');
+  // Kept as the edge object (not id) so a poll refresh can't blank the panel.
+  const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
 
-  const nodes = useMemo(() => data?.nodes ?? [], [data]);
-  const edges = useMemo(() => data?.edges ?? [], [data]);
+  const labelOf = useMemo(() => {
+    const labels = new Map((data?.nodes ?? []).map((n) => [n.id, n.label]));
+    return (id: string) => labels.get(id) ?? id;
+  }, [data]);
 
-  const clusters = useMemo(
-    () => [...new Set(nodes.map((n) => n.cluster).filter((c): c is string => !!c))].sort(),
-    [nodes],
-  );
-  const namespaces = useMemo(
-    () => [...new Set(nodes.map((n) => n.namespace).filter((c): c is string => !!c))].sort(),
-    [nodes],
-  );
-
-  const { fNodes, fEdges, nodeById } = useMemo(() => {
-    // Nodes whose cluster/namespace is set and differs are dropped; nodes without
-    // the attribute (vpc/external) survive and are pruned later if isolated.
-    const keep = nodes.filter(
-      (n) =>
-        (!cluster || !n.cluster || n.cluster === cluster) &&
-        (!namespace || !n.namespace || n.namespace === namespace),
-    );
-    const ids = new Set(keep.map((n) => n.id));
-    const fEdges = edges.filter(
-      (e) => ids.has(e.source) && ids.has(e.target) && (!category || e.category === category),
-    );
-    const filtering = !!(cluster || namespace || category);
-    const touched = new Set(fEdges.flatMap((e) => [e.source, e.target]));
-    const fNodes = filtering ? keep.filter((n) => touched.has(n.id)) : keep;
-    return { fNodes, fEdges, nodeById: new Map(nodes.map((n) => [n.id, n])) };
-  }, [nodes, edges, cluster, namespace, category]);
-
-  const selectedEdge = selectedEdgeId ? fEdges.find((e) => e.id === selectedEdgeId) ?? null : null;
+  // Top-edges rows carry a real TopoEdge id.
+  const selectEdgeId = (id: string) => {
+    const e = data?.edges.find((x) => x.id === id);
+    if (e) setSelectedEdge(e);
+  };
+  // Matrix cells / tier ribbons carry aggregated entity ids → resolve to the
+  // heaviest underlying edge for the current metric.
+  const selectPair = (source: string, target: string) => {
+    if (!data) return;
+    const e = resolveEdge(data, level, source, target, metric);
+    if (e) setSelectedEdge(e);
+  };
+  const selectTierLink = (linkId: string) => {
+    const i = linkId.indexOf('→'); // TierLink id = `${source}→${target}`
+    if (i >= 0) selectPair(linkId.slice(0, i), linkId.slice(i + 1));
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-lg font-semibold">{t('nav.topology')}</h1>
         <div className="flex flex-wrap items-end gap-2">
+          <div
+            role="group"
+            aria-label={t('topology.view')}
+            className="flex h-9 items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5 dark:border-white/15 dark:bg-ink"
+          >
+            {(['graph', 'matrix'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                data-testid={`topology-view-${v}`}
+                className={`h-full rounded-md px-3 text-xs font-medium ${
+                  view === v
+                    ? 'bg-ink text-white dark:bg-white dark:text-ink'
+                    : 'text-ink/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10'
+                }`}
+              >
+                {v === 'graph' ? t('topology.viewGraph') : t('topology.viewMatrix')}
+              </button>
+            ))}
+          </div>
           <Select
-            label={t('topology.cluster')}
-            value={cluster}
-            onChange={setCluster}
-            allLabel={t('filter.all')}
-            options={clusters.map((c) => ({ value: c, label: c }))}
+            label={t('topology.level')}
+            value={level}
+            onChange={(v) => setLevel(v as TierLevel)}
+            options={LEVELS.map((l) => ({ value: l.value, label: t(l.labelKey) }))}
           />
           <Select
-            label={t('topology.namespace')}
-            value={namespace}
-            onChange={setNamespace}
-            allLabel={t('filter.all')}
-            options={namespaces.map((n) => ({ value: n, label: n }))}
-          />
-          <Select
-            label={t('topology.category')}
-            value={category}
-            onChange={setCategory}
-            allLabel={t('filter.all')}
-            options={CATEGORY_ORDER.map((c) => ({ value: c, label: t(`category.${c}`) }))}
+            label={t('topology.metric')}
+            value={metric}
+            onChange={(v) => setMetric(v as MetricName)}
+            options={METRICS.map((m) => ({ value: m, label: t(`metric.${m}`) }))}
           />
         </div>
       </div>
 
-      {/* Legend: node kinds + edge categories, dual-encoded with shape + label */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink/60 dark:text-white/60">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-4 rounded bg-accentBlue" aria-hidden /> {t('topology.kindPod')}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-4 rounded bg-accentLav" aria-hidden /> {t('topology.kindNode')}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-4 rounded bg-chartSky" aria-hidden /> {t('topology.kindVpc')}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-4 rounded border border-dashed border-ink/40 dark:border-white/40" aria-hidden />{' '}
-          {t('topology.kindExternal')}
-        </span>
-        <span className="ml-2 border-l border-black/10 pl-4 dark:border-white/10">{t('topology.edgeHint')}</span>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <Card className="min-w-0">
+          {error ? (
+            <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+              {t('common.error')}
+            </div>
+          ) : loading && !data ? (
+            <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+              {t('common.loading')}
+            </div>
+          ) : data ? (
+            view === 'graph' ? (
+              <TierFlowMap
+                topology={data}
+                level={level}
+                onLevelChange={setLevel}
+                onEdgeSelect={selectTierLink}
+              />
+            ) : (
+              <AdjacencyMatrix topology={data} metric={metric} level={level} onCellSelect={selectPair} />
+            )
+          ) : (
+            <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+              {t('topology.empty')}
+            </div>
+          )}
+        </Card>
+        <Card className="min-w-0">
+          {data ? (
+            <TopEdgesPanel topology={data} metric={metric} onEdgeSelect={selectEdgeId} />
+          ) : (
+            <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
+          )}
+        </Card>
       </div>
 
-      <div
-        data-testid="topology-graph"
-        className="relative h-[calc(100vh-17rem)] min-h-96 overflow-hidden rounded-card bg-surface text-ink dark:bg-white/5 dark:text-white"
-      >
-        {error ? (
-          <div className="flex h-full items-center justify-center text-sm text-ink/40 dark:text-white/40">
-            {t('common.error')}
-          </div>
-        ) : loading && !data ? (
-          <div className="flex h-full items-center justify-center text-sm text-ink/40 dark:text-white/40">
-            {t('common.loading')}
-          </div>
-        ) : fNodes.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-ink/40 dark:text-white/40">
-            {t('common.collecting')} — {t('overview.collectingHint')}
-          </div>
-        ) : (
-          <TopologyGraph
-            nodes={fNodes}
-            edges={fEdges}
-            selectedEdgeId={selectedEdgeId}
-            onEdgeSelect={setSelectedEdgeId}
-          />
-        )}
-        {selectedEdge ? (
-          <EdgePanel edge={selectedEdge} nodeById={nodeById} onClose={() => setSelectedEdgeId(null)} />
-        ) : null}
-      </div>
+      {selectedEdge ? (
+        <EdgeHopPanel edge={selectedEdge} labelOf={labelOf} onClose={() => setSelectedEdge(null)} />
+      ) : null}
     </div>
   );
 }

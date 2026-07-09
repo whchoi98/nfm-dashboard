@@ -1,6 +1,6 @@
 // app/src/lib/topology.test.ts
 import { it, expect } from 'vitest';
-import { resourceKindOf, endpointKind, buildHops, buildTiers, buildMatrix, rankEdges } from './topology';
+import { resourceKindOf, endpointKind, buildHops, buildTiers, buildMatrix, rankEdges, resolveEdge } from './topology';
 import type { FlowEdge, TopologySnapshot } from './types';
 
 it('resourceKindOf maps component types', () => {
@@ -39,4 +39,14 @@ it('rankEdges desc by metric', () => {
     { id:'a', source:'x', target:'y', metrics:{ DATA_TRANSFERRED:10 }, category:'INTRA_AZ' },
     { id:'b', source:'x', target:'z', metrics:{ DATA_TRANSFERRED:99 }, category:'INTRA_AZ' } ] } as any;
   expect(rankEdges(topo,'DATA_TRANSFERRED',1)[0].id).toBe('b');
+});
+it('resolveEdge picks the heaviest underlying edge for an aggregated pair', () => {
+  const topo: TopologySnapshot = { generatedAt:'', nodes:[
+    { id:'pod:shop/api', kind:'pod', label:'api', namespace:'shop' },
+    { id:'pod:shop/db', kind:'pod', label:'db', namespace:'shop' },
+    { id:'pod:mon/g', kind:'pod', label:'g', namespace:'mon' } ], edges:[
+    { id:'e1', source:'pod:shop/api', target:'pod:mon/g', metrics:{ DATA_TRANSFERRED:100 }, category:'INTER_AZ' },
+    { id:'e2', source:'pod:shop/db', target:'pod:mon/g', metrics:{ DATA_TRANSFERRED:900 }, category:'INTRA_AZ' } ] };
+  expect(resolveEdge(topo, 'namespace', 'shop', 'mon', 'DATA_TRANSFERRED')?.id).toBe('e2');
+  expect(resolveEdge(topo, 'namespace', 'mon', 'shop', 'DATA_TRANSFERRED')).toBeNull(); // direction matters
 });

@@ -163,3 +163,27 @@ export function rankEdges(topo: TopologySnapshot, metric: MetricName, n: number)
     .sort((a, b) => (b.metrics[metric] ?? 0) - (a.metrics[metric] ?? 0))
     .slice(0, n);
 }
+
+/**
+ * Resolve an aggregated pair (TierLink source/target or matrix row/col entity
+ * ids at the given level) back to the heaviest underlying TopoEdge by the
+ * metric — the topology page uses it to open the hop-path panel with a real
+ * `/api/paths?edge=` hash. Returns null when no underlying edge matches.
+ */
+export function resolveEdge(
+  topo: TopologySnapshot,
+  level: TierLevel,
+  sourceId: string,
+  targetId: string,
+  metric: MetricName,
+): TopoEdge | null {
+  const { byNodeId } = aggregateNodes(topo, level);
+  let best: TopoEdge | null = null;
+  for (const e of topo.edges) {
+    const s = byNodeId.get(e.source)?.id ?? e.source;
+    const t = byNodeId.get(e.target)?.id ?? e.target;
+    if (s !== sourceId || t !== targetId) continue;
+    if (!best || (e.metrics[metric] ?? 0) > (best.metrics[metric] ?? 0)) best = e;
+  }
+  return best;
+}

@@ -7,7 +7,7 @@
 // edge = flow ribbon (width ∝ log(bytes), color = CATEGORY_COLORS[category]).
 // Clicking a node drills the whole map one level deeper
 // (cluster→namespace→service→pod); clicking an edge reports its link id.
-// Replaces TopologyGraph.tsx (deleted in Task 6).
+// Replaces the old force-graph topology view (deleted in Task 6).
 import { memo, useCallback, useMemo } from 'react';
 import ReactFlow, {
   Background,

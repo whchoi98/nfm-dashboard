@@ -1,12 +1,16 @@
 'use client';
 
+// /paths — hop-path stepper (HopPath) for the edge chosen via the pod-pair
+// picker or the ?edge= query. With nothing selected, the top topology edges
+// (TopEdgesPanel) act as a "popular paths" starting point.
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Route } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { FlowEdge, TopologySnapshot } from '@/lib/types';
-import PathView from '@/components/PathView';
+import HopPath from '@/components/HopPath';
+import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
 import { Card, Select } from '@/components/ui/Controls';
 
 // Mounted only when an edge is chosen, so the poll only runs with a real hash.
@@ -38,7 +42,7 @@ function PathResult({ edgeId }: { edgeId: string }) {
   }
   return (
     <Card>
-      <PathView latest={data.latest} series={data.series} />
+      <HopPath edge={data.latest} />
     </Card>
   );
 }
@@ -124,7 +128,12 @@ function PathsContent() {
         <PathResult edgeId={edgeId} />
       ) : (
         <Card>
-          <p className="text-sm text-ink/50 dark:text-white/50">{t('paths.pickHint')}</p>
+          <p className="mb-4 text-sm text-ink/50 dark:text-white/50">{t('paths.pickHint')}</p>
+          {topo ? (
+            <TopEdgesPanel topology={topo} metric="DATA_TRANSFERRED" onEdgeSelect={selectEdge} />
+          ) : (
+            <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
+          )}
         </Card>
       )}
     </div>
