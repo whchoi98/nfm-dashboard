@@ -159,10 +159,13 @@ export function buildMatrix(topo: TopologySnapshot, metric: MetricName, level: T
 
 /**
  * Pre-filter a snapshot before the tier/matrix/top-edges builders run.
- * `cluster` keeps only nodes of that cluster plus edges whose BOTH endpoints
- * survive; `category` keeps only edges of that category (nodes untouched).
- * Empty string = no filtering on that axis; returns the input unchanged when
- * nothing is filtered so referential equality is preserved for memoization.
+ * `cluster` keeps nodes of that cluster — leniently: nodes WITHOUT a cluster
+ * (only pods carry one per collector/src/storage.ts; node/vpc/external don't)
+ * also survive so the outer TierFlowMap lanes stay populated — plus edges whose
+ * BOTH endpoints survive. `category` keeps only edges of that category. When
+ * any filter is active, nodes left with no surviving edge are pruned. Empty
+ * string = no filtering on that axis; returns the input unchanged when nothing
+ * is filtered so referential equality is preserved for memoization.
  */
 export function filterTopology(
   topo: TopologySnapshot,
@@ -173,11 +176,15 @@ export function filterTopology(
   let nodes = topo.nodes;
   let edges = topo.edges;
   if (cluster) {
-    nodes = nodes.filter((n) => n.cluster === cluster);
+    nodes = nodes.filter((n) => !n.cluster || n.cluster === cluster);
     const ids = new Set(nodes.map((n) => n.id));
     edges = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
   }
   if (category) edges = edges.filter((e) => e.category === category);
+  // A filter is active here: drop nodes no surviving edge references, so the
+  // lenient rule can't leave disconnected infra floating in the views.
+  const referenced = new Set(edges.flatMap((e) => [e.source, e.target]));
+  nodes = nodes.filter((n) => referenced.has(n.id));
   return { ...topo, nodes, edges };
 }
 
