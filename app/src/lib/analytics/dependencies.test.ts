@@ -1,7 +1,26 @@
 // app/src/lib/analytics/dependencies.test.ts
 import { it, expect } from 'vitest';
-import { paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens } from './dependencies';
+import { paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens, serviceGraph } from './dependencies';
 import type { FlowEdge } from '../types';
+
+it('serviceGraph collapses mutual a→b/b→a into ONE deterministic link (bytes summed)', () => {
+  const flow = (src: string, dst: string, value: number) => ({
+    metric: 'DATA_TRANSFERRED', value,
+    a: { podNamespace: 'n', serviceName: src },
+    b: { podNamespace: 'n', serviceName: dst },
+  });
+  // Same mutual traffic in both scan orders — output must be identical either way.
+  const forward = serviceGraph([flow('a', 'b', 3), flow('b', 'a', 5)] as any);
+  const reverse = serviceGraph([flow('b', 'a', 5), flow('a', 'b', 3)] as any);
+  for (const g of [forward, reverse]) {
+    expect(g.links).toHaveLength(1);
+    const [link] = g.links;
+    expect(link.value).toBe(8);
+    // Deterministic orientation: source = lexicographically smaller node name.
+    expect(g.nodes[link.source].name).toBe('n/a');
+    expect(g.nodes[link.target].name).toBe('n/b');
+  }
+});
 
 it('paretoTalkers cumulative %', () => {
   const flows = [

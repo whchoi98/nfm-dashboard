@@ -24,6 +24,8 @@ const TREND_ICONS: Record<StatTrend, typeof TrendingUp> = {
  * SnowUI-style stat tile: big value + delta badge + mini sparkline.
  * Trend is dual-encoded (lucide icon direction + signed %), never color-alone;
  * an optional status hue tints the sparkline and the status dot.
+ * `testId` overrides the label-derived root data-testid — required for
+ * non-ASCII/Korean labels, whose slug collapses to the colliding 'stat-'.
  */
 export default function StatDelta({
   label,
@@ -33,6 +35,7 @@ export default function StatDelta({
   trend,
   spark,
   status,
+  testId,
 }: {
   label: string;
   value: string | number;
@@ -41,6 +44,7 @@ export default function StatDelta({
   trend?: StatTrend;
   spark?: number[];
   status?: StatStatus;
+  testId?: string;
 }) {
   const effectiveTrend: StatTrend =
     trend ?? (deltaPct == null || deltaPct === 0 ? 'flat' : deltaPct > 0 ? 'up' : 'down');
@@ -50,7 +54,7 @@ export default function StatDelta({
 
   return (
     <div
-      data-testid={`stat-${slug(label)}`}
+      data-testid={testId ?? `stat-${slug(label)}`}
       className="rounded-card bg-surface p-5 text-ink dark:bg-white/5 dark:text-white"
     >
       <p className="flex items-center gap-1.5 text-xs font-medium text-ink/60 dark:text-white/60">

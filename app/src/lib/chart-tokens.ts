@@ -1,8 +1,8 @@
 // Chart color tokens (mirrors tailwind.config.ts — keep in sync).
-// Categorical hues are assigned in FIXED order and never cycled (dataviz rule).
-// The pastel palette passes CVD separation (ΔE≥32) but sits below the 3:1 light-mode
-// contrast bar, so every chart ships legends, direct value labels or tooltips, and
-// tables/side panels as the mandated relief.
+// CVD separation (ΔE≥32) was validated for the original 8 tokens; the expanded
+// hues are not all ≥32 apart, so dual-encoding (legends, direct value labels or
+// tooltips, tables/side panels) is the mandated relief. The pastel palette also
+// sits below the 3:1 light-mode contrast bar, and some charts cycle SERIES_COLORS.
 import type { DestCategory } from './types';
 
 export type { DestCategory } from './types';
@@ -58,6 +58,6 @@ export const CATEGORY_ORDER: DestCategory[] = [
 /** Status colors (pastel) — always dual-encoded with an icon or text label, never color alone. */
 export const STATUS = {
   ok: TOKENS.accentMint,
-  warn: '#FFE5B4',
-  danger: '#FFB4B4',
+  warn: TOKENS.chartAmber,
+  danger: '#FFB4B4', // no matching TOKENS hue — status-only pastel red, defined here
 } as const;

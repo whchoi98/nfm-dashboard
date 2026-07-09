@@ -42,27 +42,31 @@ function pairOf(f: FlowEdge, kind: EntityKind): [string, string] {
 
 /**
  * service↔service Sankey from DATA_TRANSFERRED flows: nodes are service entity keys
- * (entityKey 'service' — falls back pod→ip, ns-prefixed), links a→b with bytes summed.
+ * (entityKey 'service' — falls back pod→ip, ns-prefixed), ONE link per UNORDERED
+ * service pair with bytes of both directions summed. Mutual a→b/b→a traffic would
+ * otherwise form a 2-node cycle whose losing direction the Sankey cycle-guard drops
+ * in scan order (non-deterministic under-report); collapsing here orients each link
+ * deterministically: source = lexicographically smaller key, target = larger.
  * Node index is assigned on first insertion; links carry numeric indices.
  * Self-edges (a and b collapse to the same service) are skipped — Sankey layouts
  * reject circular links and a self-loop carries no dependency information.
  */
 export function serviceGraph(flows: FlowEdge[]): SankeyData {
   const nodeIndex = new Map<string, number>();
-  const links = new Map<string, number>(); // "srcIdx>tgtIdx" -> bytes
+  // "lo\x1fhi" (sorted keys, unit-separator escape avoids label collisions) -> bytes.
+  const pairs = new Map<string, number>();
   for (const f of dataFlows(flows)) {
-    const aKey = entityKey(f.a, 'service');
-    const bKey = entityKey(f.b, 'service');
-    if (aKey === bKey) continue;
-    for (const key of [aKey, bKey]) if (!nodeIndex.has(key)) nodeIndex.set(key, nodeIndex.size);
-    const lk = `${nodeIndex.get(aKey)}>${nodeIndex.get(bKey)}`;
-    links.set(lk, (links.get(lk) ?? 0) + f.value);
+    const [lo, hi] = pairOf(f, 'service');
+    if (lo === hi) continue;
+    for (const key of [lo, hi]) if (!nodeIndex.has(key)) nodeIndex.set(key, nodeIndex.size);
+    const pk = `${lo}\x1f${hi}`;
+    pairs.set(pk, (pairs.get(pk) ?? 0) + f.value);
   }
   return {
     nodes: [...nodeIndex.keys()].map((name) => ({ name })),
-    links: [...links].map(([k, value]) => {
-      const [source, target] = k.split('>').map(Number);
-      return { source, target, value };
+    links: [...pairs].map(([pk, value]) => {
+      const [lo, hi] = pk.split('\x1f');
+      return { source: nodeIndex.get(lo)!, target: nodeIndex.get(hi)!, value };
     }),
   };
 }

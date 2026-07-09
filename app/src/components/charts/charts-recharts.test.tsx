@@ -45,6 +45,11 @@ describe('StatDelta', () => {
     wrap(<StatDelta label="P95 RTT" value={42} />);
     expect(screen.getByTestId('stat-p95-rtt')).toBeTruthy();
   });
+
+  it('uses the explicit testId over the label slug (non-ASCII labels slug to "stat-")', () => {
+    wrap(<StatDelta label="총 바이트" value={1} testId="stat-total-bytes-ko" />);
+    expect(screen.getByTestId('stat-total-bytes-ko')).toBeTruthy();
+  });
 });
 
 describe('Scatter', () => {
