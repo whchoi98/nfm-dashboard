@@ -63,6 +63,7 @@
   "topology.kindVpc": "VPC",
   "topology.kindExternal": "외부",
   "topology.edgeHint": "선 굵기 = 전송량, 색 = 카테고리",
+  "topology.empty": "표시할 토폴로지 데이터가 없습니다",
   "flows.latestBucket": "최신 ({time})",
   "flows.bucket": "시간 버킷",
   "flows.monitor": "모니터",

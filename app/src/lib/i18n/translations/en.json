@@ -63,6 +63,7 @@
   "topology.kindVpc": "VPC",
   "topology.kindExternal": "External",
   "topology.edgeHint": "Edge width = data transferred, color = category",
+  "topology.empty": "No topology data to display",
   "flows.latestBucket": "Latest ({time})",
   "flows.bucket": "Time bucket",
   "flows.monitor": "Monitor",
