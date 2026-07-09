@@ -35,6 +35,7 @@ export default function Heatmap({
   unit,
   colorForValue,
   valueFormatter = (n: number) => String(n),
+  onCellSelect,
 }: {
   rows: string[];
   cols: string[];
@@ -43,6 +44,8 @@ export default function Heatmap({
   /** Optional override: full CSS color for a value given the data min/max. */
   colorForValue?: (value: number, min: number, max: number) => string;
   valueFormatter?: (n: number) => string;
+  /** Optional cell click callback; when set, value cells render as buttons. */
+  onCellSelect?: (row: string, col: string) => void;
 }) {
   const { t } = useLanguage();
 
@@ -112,16 +115,33 @@ export default function Heatmap({
                 );
               }
               const strong = !colorForValue && intensity(v) > 0.55;
+              const style = {
+                backgroundColor: cellColor(v),
+                // High-alpha pastel fills are light in both themes → keep ink text readable.
+                color: strong ? TOKENS.ink : undefined,
+              };
+              const title = `${r} × ${c}: ${fmt(v)}`;
+              // Same visual cell either way; a real <button> only when clicks are wired.
+              if (onCellSelect) {
+                return (
+                  <button
+                    key={`${r}-${c}`}
+                    type="button"
+                    onClick={() => onCellSelect(r, c)}
+                    className="flex h-9 cursor-pointer items-center justify-center rounded-sm text-[11px] font-medium tabular-nums"
+                    style={style}
+                    title={title}
+                  >
+                    {valueFormatter(v)}
+                  </button>
+                );
+              }
               return (
                 <div
                   key={`${r}-${c}`}
                   className="flex h-9 items-center justify-center rounded-sm text-[11px] font-medium tabular-nums"
-                  style={{
-                    backgroundColor: cellColor(v),
-                    // High-alpha pastel fills are light in both themes → keep ink text readable.
-                    color: strong ? TOKENS.ink : undefined,
-                  }}
-                  title={`${r} × ${c}: ${fmt(v)}`}
+                  style={style}
+                  title={title}
                 >
                   {valueFormatter(v)}
                 </div>
