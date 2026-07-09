@@ -34,3 +34,12 @@ it('nameFlow correlates resolver answer IP to a flow remote IP', () => {
   const a = aggregateDns(recs, flows);
   expect(a.nameFlow).toContainEqual({ ip: '52.1.2.3', name: 'ddb.ap-northeast-2.amazonaws.com' });
 });
+it('nameFlow only counts resolver records', () => {
+  const recs = [
+    { source:'coredns', name:'svc.local', qtype:'A', rcode:'NOERROR', answerIps:['10.0.0.9'] },
+    { source:'resolver', name:'ddb.amazonaws.com', qtype:'A', rcode:'NOERROR', answerIps:['10.0.0.8'] },
+  ] as any;
+  const flows = [{ edgeHash:'e', a:{ip:'x'}, b:{ip:'10.0.0.9'} }, { edgeHash:'f', a:{ip:'y'}, b:{ip:'10.0.0.8'} }] as any;
+  const nf = aggregateDns(recs, flows).nameFlow;
+  expect(nf).toEqual([{ ip:'10.0.0.8', name:'ddb.amazonaws.com' }]);
+});

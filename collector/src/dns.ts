@@ -35,7 +35,7 @@ export function aggregateDns(records: DnsRecord[], flows: FlowEdge[] = []): DnsA
   durs.sort((a, b) => a - b);
   const flowIps = new Set(flows.flatMap(fl => [fl.a?.ip, fl.b?.ip].filter(Boolean) as string[]));
   const nameFlowSet = new Map<string, string>();
-  for (const r of records) for (const ip of r.answerIps) if (flowIps.has(ip)) nameFlowSet.set(ip, r.name);
+  for (const r of records) if (r.source === 'resolver') for (const ip of r.answerIps) if (flowIps.has(ip)) nameFlowSet.set(ip, r.name);
   return { enabled: true,
     topDomains: [...byName].map(([name, count]) => ({ name, count, internal: internalName(name) }))
       .sort((a, b) => b.count - a.count).slice(0, 50),
