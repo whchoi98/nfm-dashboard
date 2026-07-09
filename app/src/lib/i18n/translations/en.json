@@ -60,6 +60,8 @@
   "topology.viewMatrix": "Matrix",
   "topology.level": "Level",
   "topology.metric": "Metric",
+  "topology.cluster": "Cluster",
+  "topology.category": "Category",
   "topology.levelCluster": "Cluster",
   "topology.levelNamespace": "Namespace",
   "topology.levelService": "Service",

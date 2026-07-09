@@ -157,6 +157,30 @@ export function buildMatrix(topo: TopologySnapshot, metric: MetricName, level: T
   return { rows, cols, cells: [...sums.values()] };
 }
 
+/**
+ * Pre-filter a snapshot before the tier/matrix/top-edges builders run.
+ * `cluster` keeps only nodes of that cluster plus edges whose BOTH endpoints
+ * survive; `category` keeps only edges of that category (nodes untouched).
+ * Empty string = no filtering on that axis; returns the input unchanged when
+ * nothing is filtered so referential equality is preserved for memoization.
+ */
+export function filterTopology(
+  topo: TopologySnapshot,
+  cluster: string,
+  category: DestCategory | '',
+): TopologySnapshot {
+  if (!cluster && !category) return topo;
+  let nodes = topo.nodes;
+  let edges = topo.edges;
+  if (cluster) {
+    nodes = nodes.filter((n) => n.cluster === cluster);
+    const ids = new Set(nodes.map((n) => n.id));
+    edges = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+  }
+  if (category) edges = edges.filter((e) => e.category === category);
+  return { ...topo, nodes, edges };
+}
+
 /** Top-n edges sorted desc by the metric (missing metric counts as 0; ties keep input order). */
 export function rankEdges(topo: TopologySnapshot, metric: MetricName, n: number): TopoEdge[] {
   return [...topo.edges]

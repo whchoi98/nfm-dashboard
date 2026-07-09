@@ -2,6 +2,8 @@
 
 // /topology — tiered icon flow map (TierFlowMap) ↔ adjacency matrix
 // (AdjacencyMatrix) over /api/topology, with a Top-edges panel on the side.
+// The toolbar's cluster/category Selects pre-filter the snapshot before it
+// reaches any of the three views (filterTopology).
 // Selecting an edge (ribbon click, matrix cell, or top-edges row) opens a
 // dialog that fetches /api/paths for that edge and renders its HopPath.
 import { useEffect, useMemo, useState } from 'react';
@@ -9,8 +11,9 @@ import Link from 'next/link';
 import { ArrowRight, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
-import type { FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
-import { resolveEdge, type TierLevel } from '@/lib/topology';
+import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
+import { filterTopology, resolveEdge, type TierLevel } from '@/lib/topology';
+import { CATEGORY_ORDER } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import TierFlowMap from '@/components/topology/TierFlowMap';
 import AdjacencyMatrix from '@/components/topology/AdjacencyMatrix';
@@ -120,8 +123,21 @@ export default function TopologyPage() {
   const [view, setView] = useState<'graph' | 'matrix'>('graph');
   const [level, setLevel] = useState<TierLevel>('namespace');
   const [metric, setMetric] = useState<MetricName>('DATA_TRANSFERRED');
+  // '' = all (the Select's allLabel option) — no filtering on that axis.
+  const [cluster, setCluster] = useState('');
+  const [category, setCategory] = useState<DestCategory | ''>('');
   // Kept as the edge object (not id) so a poll refresh can't blank the panel.
   const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
+
+  const clusters = useMemo(
+    () => [...new Set((data?.nodes ?? []).map((n) => n.cluster).filter((c): c is string => !!c))].sort(),
+    [data],
+  );
+  // Cluster/category scoping applied BEFORE the tier/matrix/top-edges builders.
+  const topology = useMemo(
+    () => (data ? filterTopology(data, cluster, category) : null),
+    [data, cluster, category],
+  );
 
   const labelOf = useMemo(() => {
     const labels = new Map((data?.nodes ?? []).map((n) => [n.id, n.label]));
@@ -130,14 +146,14 @@ export default function TopologyPage() {
 
   // Top-edges rows carry a real TopoEdge id.
   const selectEdgeId = (id: string) => {
-    const e = data?.edges.find((x) => x.id === id);
+    const e = topology?.edges.find((x) => x.id === id);
     if (e) setSelectedEdge(e);
   };
   // Matrix cells / tier ribbons carry aggregated entity ids → resolve to the
-  // heaviest underlying edge for the current metric.
+  // heaviest underlying edge for the current metric (within the filtered set).
   const selectPair = (source: string, target: string) => {
-    if (!data) return;
-    const e = resolveEdge(data, level, source, target, metric);
+    if (!topology) return;
+    const e = resolveEdge(topology, level, source, target, metric);
     if (e) setSelectedEdge(e);
   };
   const selectTierLink = (linkId: string) => {
@@ -184,6 +200,20 @@ export default function TopologyPage() {
             onChange={(v) => setMetric(v as MetricName)}
             options={METRICS.map((m) => ({ value: m, label: t(`metric.${m}`) }))}
           />
+          <Select
+            label={t('topology.cluster')}
+            value={cluster}
+            onChange={setCluster}
+            allLabel={t('filter.all')}
+            options={clusters.map((c) => ({ value: c, label: c }))}
+          />
+          <Select
+            label={t('topology.category')}
+            value={category}
+            onChange={(v) => setCategory(v as DestCategory | '')}
+            allLabel={t('filter.all')}
+            options={CATEGORY_ORDER.map((c) => ({ value: c, label: t(`category.${c}`) }))}
+          />
         </div>
       </div>
 
@@ -197,16 +227,16 @@ export default function TopologyPage() {
             <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">
               {t('common.loading')}
             </div>
-          ) : data ? (
+          ) : topology ? (
             view === 'graph' ? (
               <TierFlowMap
-                topology={data}
+                topology={topology}
                 level={level}
                 onLevelChange={setLevel}
                 onEdgeSelect={selectTierLink}
               />
             ) : (
-              <AdjacencyMatrix topology={data} metric={metric} level={level} onCellSelect={selectPair} />
+              <AdjacencyMatrix topology={topology} metric={metric} level={level} onCellSelect={selectPair} />
             )
           ) : (
             <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">
@@ -215,8 +245,8 @@ export default function TopologyPage() {
           )}
         </Card>
         <Card className="min-w-0">
-          {data ? (
-            <TopEdgesPanel topology={data} metric={metric} onEdgeSelect={selectEdgeId} />
+          {topology ? (
+            <TopEdgesPanel topology={topology} metric={metric} onEdgeSelect={selectEdgeId} />
           ) : (
             <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
           )}
@@ -224,7 +254,14 @@ export default function TopologyPage() {
       </div>
 
       {selectedEdge ? (
-        <EdgeHopPanel edge={selectedEdge} labelOf={labelOf} onClose={() => setSelectedEdge(null)} />
+        // key: remount per edge so the hop-path poll restarts — otherwise
+        // usePolling keeps the previous edge's data visible under the new header.
+        <EdgeHopPanel
+          key={selectedEdge.id}
+          edge={selectedEdge}
+          labelOf={labelOf}
+          onClose={() => setSelectedEdge(null)}
+        />
       ) : null}
     </div>
   );

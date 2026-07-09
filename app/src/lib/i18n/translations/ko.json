@@ -60,6 +60,8 @@
   "topology.viewMatrix": "매트릭스",
   "topology.level": "집계 수준",
   "topology.metric": "지표",
+  "topology.cluster": "클러스터",
+  "topology.category": "카테고리",
   "topology.levelCluster": "클러스터",
   "topology.levelNamespace": "네임스페이스",
   "topology.levelService": "서비스",
