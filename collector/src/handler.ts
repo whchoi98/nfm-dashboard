@@ -3,17 +3,20 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { EC2Client } from '@aws-sdk/client-ec2';
 import { IAMClient } from '@aws-sdk/client-iam';
+import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs';
 import { runQueryMatrix } from './nfm-query.js';
 import { buildTopology, writeCycle } from './storage.js';
 import { categoriesForCycle } from './categories.js';
 import { discoverOnboarding } from './onboard.js';
 import { collectWorkloadInsights } from './wi-query.js';
+import { collectDns } from './dns-collect.js';
 import type { MetricName } from './types.js';
 
 const nfm = new NetworkFlowMonitorClient({});
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true } });
 const ec2 = new EC2Client({}), iam = new IAMClient({});
+const cwlogs = new CloudWatchLogsClient({});
 
 export const handler = async () => {
   const monitorPairs = (process.env.MONITORS ?? '').split(',').filter(Boolean)
@@ -35,7 +38,8 @@ export const handler = async () => {
   const { edges, stats } = await runQueryMatrix(nfm, {
     monitors: monitorPairs.map(([m]) => m),
     metrics: ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS', 'ROUND_TRIP_TIME'] as MetricName[],
-    categories: categoriesForCycle(cycle, Number(process.env.EXTENDED_CATEGORY_EVERY ?? 3)),
+    // `|| 3` (not ??): an empty or non-numeric env value must not silently disable rotation.
+    categories: categoriesForCycle(cycle, Number(process.env.EXTENDED_CATEGORY_EVERY) || 3),
     startTime, endTime, bucket, concurrency: Number(process.env.CONCURRENCY ?? 5),
     statusPollMax: 30 });
   const topology = buildTopology(edges, monitorToCluster, now.toISOString());
@@ -45,6 +49,17 @@ export const handler = async () => {
     .catch(err => { console.error('wi failed', err); return undefined; });
   if (wi) await ddb.send(new PutCommand({ TableName: process.env.TABLE_META!,
     Item: { pk: 'WI#latest', sk: 'all', rows: wi, cycleTs: now.toISOString() } }));
+  // DNS pass every DNS_COLLECT_EVERY cycles (~15 min at rate(5 minutes)).
+  if (cycle % (Number(process.env.DNS_COLLECT_EVERY) || 3) === 0) {
+    const nowSec = Math.floor(now.getTime() / 1000);
+    const dns = await collectDns(cwlogs, {
+      coreDnsGroups: (process.env.DNS_CORE_GROUPS ?? '').split(',').map(s => s.trim()).filter(Boolean),
+      resolverGroup: process.env.DNS_RESOLVER_GROUP ?? '/nfm-dashboard/resolver-dns',
+      startTime: nowSec - 16 * 60, endTime: nowSec, flows: edges })
+      .catch(err => { console.error('dns failed', err); return undefined; });
+    if (dns) await ddb.send(new PutCommand({ TableName: process.env.TABLE_META!,
+      Item: { pk: 'DNS#latest', sk: 'all', dns, cycleTs: now.toISOString() } }));
+  }
   console.log(JSON.stringify({ level: 'info', msg: 'cycle done', stats, edges: edges.length }));
   return { ok: true, stats };
 };

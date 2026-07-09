@@ -37,7 +37,11 @@ export class DataStack extends cdk.Stack {
       handler: 'handler.handler', memorySize: 512, timeout: cdk.Duration.seconds(270),
       code: lambda.Code.fromAsset(collectorDist),
       environment: { TABLE_FLOWS: this.flows.tableName, TABLE_META: this.meta.tableName,
-        MONITORS: this.node.tryGetContext('nfmMonitors') ?? '', CONCURRENCY: '5' } });
+        MONITORS: this.node.tryGetContext('nfmMonitors') ?? '', CONCURRENCY: '5',
+        EXTENDED_CATEGORY_EVERY: '3', DNS_COLLECT_EVERY: '3',
+        DNS_CORE_GROUPS: ['ekscluster01-iptables', 'ekscluster01-ipvs', 'ekscluster01-nftables',
+          'eksworkshop'].map(c => `/aws/containerinsights/${c}/application`).join(','),
+        DNS_RESOLVER_GROUP: '/nfm-dashboard/resolver-dns' } });
     this.flows.grantWriteData(this.collector);
     this.meta.grantReadWriteData(this.collector);
     this.collector.addToRolePolicy(new iam.PolicyStatement({ actions: [
@@ -59,6 +63,16 @@ export class DataStack extends cdk.Stack {
       actions: ['iam:AttachRolePolicy'], resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*'],
       conditions: { ArnEquals: { 'iam:PolicyARN':
         'arn:aws:iam::aws:policy/CloudWatchNetworkFlowMonitorAgentPublishPolicy' } } }));
+    // DNS pass: Logs Insights over CoreDNS (Container Insights) + Resolver query log groups.
+    // StartQuery supports log-group scoping; GetQueryResults/StopQuery take only a queryId
+    // (no resource type in the CWL service authorization reference), so they need '*'.
+    this.collector.addToRolePolicy(new iam.PolicyStatement({ actions: ['logs:StartQuery'],
+      resources: [
+        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/containerinsights/*',
+        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/nfm-dashboard/resolver-dns',
+        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/nfm-dashboard/resolver-dns:*'] }));
+    this.collector.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['logs:GetQueryResults', 'logs:StopQuery'], resources: ['*'] }));
 
     const schedRole = new iam.Role(this, 'SchedRole', {
       assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com') });
