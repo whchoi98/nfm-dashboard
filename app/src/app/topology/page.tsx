@@ -1,10 +1,11 @@
 'use client';
 
-// /topology — tiered icon flow map (TierFlowMap) ↔ adjacency matrix
-// (AdjacencyMatrix) over /api/topology, with a Top-edges panel on the side.
-// The toolbar's cluster/category Selects pre-filter the snapshot before it
-// reaches any of the three views (filterTopology).
-// Selecting an edge (ribbon click, matrix cell, or top-edges row) opens a
+// /topology — WhaTap-style force-directed graph (NetworkGraph) ↔ adjacency
+// matrix (AdjacencyMatrix) over /api/topology. Graph mode pairs with a
+// TagFilterPanel (draft→apply node selection) and a LIVE/pause legend header;
+// matrix mode keeps the Top-edges panel. The toolbar's cluster/category
+// Selects pre-filter the snapshot before it reaches any view (filterTopology).
+// Selecting an edge (graph edge, matrix cell, or top-edges row) opens a
 // dialog that fetches /api/paths for that edge and renders its HopPath.
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -13,9 +14,12 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
 import { filterTopology, resolveEdge, type TierLevel } from '@/lib/topology';
+import { buildGraphModel } from '@/lib/topology-graph';
 import { CATEGORY_ORDER } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
-import TierFlowMap from '@/components/topology/TierFlowMap';
+import NetworkGraph from '@/components/topology/NetworkGraph';
+import GraphLegend from '@/components/topology/GraphLegend';
+import TagFilterPanel from '@/components/topology/TagFilterPanel';
 import AdjacencyMatrix from '@/components/topology/AdjacencyMatrix';
 import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
 import HopPath from '@/components/HopPath';
@@ -119,13 +123,19 @@ function EdgeHopPanel({
 
 export default function TopologyPage() {
   const { t } = useLanguage();
-  const { data, loading, error } = usePolling<TopologySnapshot>('/api/topology');
+  // LIVE/pause toggle: paused stops the poll while keeping the last snapshot.
+  const [paused, setPaused] = useState(false);
+  const { data, loading, error } = usePolling<TopologySnapshot>('/api/topology', 30000, !paused);
   const [view, setView] = useState<'graph' | 'matrix'>('graph');
   const [level, setLevel] = useState<TierLevel>('namespace');
   const [metric, setMetric] = useState<MetricName>('DATA_TRANSFERRED');
   // '' = all (the Select's allLabel option) — no filtering on that axis.
   const [cluster, setCluster] = useState('');
   const [category, setCategory] = useState<DestCategory | ''>('');
+  // Tag filter applied by TagFilterPanel; null = all nodes.
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+  // Node last clicked in the graph → blue focus ring + edge highlighting.
+  const [focusId, setFocusId] = useState<string | null>(null);
   // Kept as the edge object (not id) so a poll refresh can't blank the panel.
   const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
 
@@ -144,21 +154,40 @@ export default function TopologyPage() {
     return (id: string) => labels.get(id) ?? id;
   }, [data]);
 
+  // TagFilterPanel row list: full node set of the filtered snapshot (before
+  // tag selection) with graph statuses, so hidden nodes stay re-checkable.
+  // NOTE: reliability breach/warn wiring into node status is out of scope for
+  // Task 6 — no breaches/warns sets are passed, so statuses are ok/idle only.
+  const tagNodes = useMemo(
+    () =>
+      topology
+        ? buildGraphModel(topology, { metric }).nodes.map(({ id, label, status }) => ({ id, label, status }))
+        : [],
+    [topology, metric],
+  );
+  const appliedTagIds = useMemo(
+    () => selectedIds ?? new Set(tagNodes.map((n) => n.id)),
+    [selectedIds, tagNodes],
+  );
+
   // Top-edges rows carry a real TopoEdge id.
   const selectEdgeId = (id: string) => {
     const e = topology?.edges.find((x) => x.id === id);
     if (e) setSelectedEdge(e);
   };
-  // Matrix cells / tier ribbons carry aggregated entity ids → resolve to the
-  // heaviest underlying edge for the current metric (within the filtered set).
+  // Matrix cells carry aggregated entity ids → resolve to the heaviest
+  // underlying edge for the current metric (within the filtered set).
   const selectPair = (source: string, target: string) => {
     if (!topology) return;
     const e = resolveEdge(topology, level, source, target, metric);
     if (e) setSelectedEdge(e);
   };
-  const selectTierLink = (linkId: string) => {
-    const i = linkId.indexOf('→'); // TierLink id = `${source}→${target}`
-    if (i >= 0) selectPair(linkId.slice(0, i), linkId.slice(i + 1));
+  // Graph edges carry raw node ids — 'pod' level keeps every id as-is, so this
+  // resolves the heaviest TopoEdge between the exact pair.
+  const selectGraphLink = (source: string, target: string) => {
+    if (!topology) return;
+    const e = resolveEdge(topology, 'pod', source, target, metric);
+    if (e) setSelectedEdge(e);
   };
 
   return (
@@ -229,12 +258,21 @@ export default function TopologyPage() {
             </div>
           ) : topology ? (
             view === 'graph' ? (
-              <TierFlowMap
-                topology={topology}
-                level={level}
-                onLevelChange={setLevel}
-                onEdgeSelect={selectTierLink}
-              />
+              <div className="flex flex-col gap-3">
+                <GraphLegend
+                  generatedAt={data?.generatedAt}
+                  paused={paused}
+                  onTogglePause={() => setPaused((p) => !p)}
+                />
+                <NetworkGraph
+                  topology={topology}
+                  metric={metric}
+                  selectedIds={selectedIds}
+                  focusId={focusId}
+                  onNodeSelect={setFocusId}
+                  onLinkSelect={selectGraphLink}
+                />
+              </div>
             ) : (
               <AdjacencyMatrix topology={topology} metric={metric} level={level} onCellSelect={selectPair} />
             )
@@ -246,7 +284,11 @@ export default function TopologyPage() {
         </Card>
         <Card className="min-w-0">
           {topology ? (
-            <TopEdgesPanel topology={topology} metric={metric} onEdgeSelect={selectEdgeId} />
+            view === 'graph' ? (
+              <TagFilterPanel nodes={tagNodes} selected={appliedTagIds} onApply={setSelectedIds} />
+            ) : (
+              <TopEdgesPanel topology={topology} metric={metric} onEdgeSelect={selectEdgeId} />
+            )
           ) : (
             <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
           )}

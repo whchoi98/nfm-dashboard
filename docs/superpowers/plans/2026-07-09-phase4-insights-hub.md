@@ -153,3 +153,41 @@ Tab selection in URL (?tab=cost). Each widget: empty-state + loading. Synced cro
 - [ ] 5 tabs each render Phase-2 charts on live data with empty/loading states — Task 4 headless.
 - [ ] per-monitor Overview (avg/sum/sum/min traffic + NHI) + Historical explorer (flow tables + row→HopPath) + nav — Task 5 headless.
 - [ ] tokens-only, t() ko+en, mobile-safe, full suite green + build. App-only (redeploy Phase 6 or on request).
+
+---
+
+## Task 6 (added 2026-07-09, user directive): WhaTap-style NetworkGraph topology
+
+**Why:** User supplied a concrete reference (WhaTap network-topology screenshot) and said "토폴로지는 [이미지]처럼 구현" — a force-directed node-link graph. This REPLACES TierFlowMap in the `/topology` "graph" view. Matrix view stays. TierFlowMap component may remain in tree (unused) or be removed if trivial; do NOT break matrix.
+
+**Reference features to reproduce:** force-directed graph; nodes = circles **sized by traffic** (bigger = more bytes), colored by status (green/mint=ok, amber=warn, red=danger, gray=idle), **blue ring** on focused node; **self-loop** arc + byte label for source==target; **curved directional edges** with a byte label and arrowhead; edge style **solid when rate ≤ threshold, dashed when > threshold** (legend); LIVE header (timestamp from `generatedAt` + pause toggle that pauses polling); a **right-side tag filter panel** = search + "전체 선택" + per-node checkboxes with status dot + `Total N / Selected M` counts + 취소/적용 (draft→apply); zoom controls (reactflow `<Controls/>`).
+
+**New dep:** `d3-force` + `@types/d3-force` (`npm i -w app d3-force @types/d3-force`) — layout only. (recharts already vendors most d3; d3-force is small.)
+
+**Files:**
+- Create `app/src/lib/topology-graph.ts` (+ `.test.ts`): pure model builder.
+- Create `app/src/components/topology/NetworkGraph.tsx`: reactflow custom circle nodes + curved labeled edges + d3-force layout hook + `<Controls/>`. testid `network-graph`.
+- Create `app/src/components/topology/TagFilterPanel.tsx` (+ smoke): draft/apply node selector. testid `tag-filter-panel`.
+- Create `app/src/components/topology/GraphLegend.tsx` (or inline): LIVE + pause + solid/dashed legend. testid `graph-legend`.
+- Modify `app/src/app/topology/page.tsx`: graph view → NetworkGraph; right panel in graph mode → TagFilterPanel (matrix mode keeps TopEdgesPanel); add `selectedIds` + `paused` state + legend/LIVE header. Edge click → existing EdgeHopPanel; node click → focus ring.
+- Modify `app/src/lib/use-polling.ts`: add optional `enabled = true` 3rd param (when false: skip fetch + interval, keep last data) for pause. Backward-compatible.
+- i18n: `topology.viewGraph` exists; add `graph.*` keys (live, paused, pause, resume, selectedTags, selectAll, apply, cancel, total, selected, searchTag, legendSolid, legendDashed, selfLoop) ko+en.
+
+**Model interface (produce):**
+```ts
+export interface GraphNode { id:string; label:string; kind:TopoNode['kind']; radius:number; traffic:number; selfBytes:number; status:'ok'|'warn'|'danger'|'idle'; }
+export interface GraphLink { id:string; source:string; target:string; value:number; rate:number; dashed:boolean; category:DestCategory; }
+export interface GraphModel { nodes:GraphNode[]; links:GraphLink[]; total:number; selected:number; }
+export interface BuildGraphOpts { metric?:MetricName; windowSeconds?:number; rateThreshold?:number; selectedIds?:Set<string>|null; breaches?:Set<string>; warns?:Set<string>; radiusRange?:[number,number]; }
+export function buildGraphModel(topo:TopologySnapshot, opts?:BuildGraphOpts): GraphModel
+```
+Rules: metric default DATA_TRANSFERRED; value(edge)=edge.metrics[metric]??0; source==target → node.selfBytes (not a link); node.traffic = Σ incident link values + selfBytes; radius = sqrt-scale(traffic)→radiusRange (default [18,56], all-zero→min); status precedence danger>warn>(traffic==0?idle):ok; rate=value/(windowSeconds??300); dashed = rate>threshold(default 128); selectedIds non-empty → keep only those nodes + links with both ends kept; `total`=all topo nodes, `selected`=rendered node count.
+
+**Steps:**
+- [x] 1. `npm i -w app d3-force @types/d3-force`.
+- [x] 2. Failing test `topology-graph.test.ts`: sizing monotonic+clamped; self-loop→selfBytes; dashed boundary (rate 128 solid / 129 dashed); selectedIds filter drops nodes+dangling links; status precedence; empty topo. RED.
+- [x] 3. Implement `topology-graph.ts` → GREEN.
+- [x] 4. Implement NetworkGraph (force layout via d3-force ~300 ticks memoized on node/link id set; reactflow nodes draggable; curved bezier edges + labels + arrow + dashed; self-loop; focus ring; empty-state) + TagFilterPanel (draft/apply) + GraphLegend + use-polling `enabled`. Component smoke tests for TagFilterPanel (toggle, select-all, search, apply calls onChange with draft; cancel resets).
+- [x] 5. Wire /topology page. `npx -w app vitest run` green; `npx -w app tsc --noEmit` clean; `npm -w app run build` OK.
+- [x] 6. Headless (chromium, `~/.cache/ms-playwright/chromium_headless_shell-1228`): `AUTH_DISABLED=1 npm -w app run dev` PORT 3036 → `/topology`: assert `network-graph` renders circles sized differently on live data; `graph-legend` + LIVE + pause toggles polling; `tag-filter-panel` — uncheck a node + 적용 → that node disappears from graph; edge click → `edge-hop-panel`; toggle to matrix → `adjacency-matrix` still works. light/dark/iPhone 390×844 no h-scroll, 0 console errors. Kill dev.
+- [x] 7. Commit `feat(app): WhaTap-style force-directed network topology graph`.

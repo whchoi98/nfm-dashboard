@@ -13,8 +13,10 @@ export interface Polling<T> {
  * Each effect run owns a `cancelled` flag and an AbortController, so a
  * response belonging to a superseded url/interval (or an unmounted
  * component) is discarded instead of overwriting the current url's data.
+ * `enabled=false` pauses polling entirely (no fetch, no interval) while
+ * keeping the last received data — used by the topology LIVE/pause toggle.
  */
-export function usePolling<T>(url: string, ms = 30000): Polling<T> {
+export function usePolling<T>(url: string, ms = 30000, enabled = true): Polling<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,6 +24,10 @@ export function usePolling<T>(url: string, ms = 30000): Polling<T> {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     const ctrl = new AbortController();
 
@@ -51,7 +57,7 @@ export function usePolling<T>(url: string, ms = 30000): Polling<T> {
       ctrl.abort();
       clearInterval(id);
     };
-  }, [url, ms, tick]);
+  }, [url, ms, tick, enabled]);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
