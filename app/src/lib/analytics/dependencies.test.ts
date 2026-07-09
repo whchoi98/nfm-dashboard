@@ -1,6 +1,6 @@
 // app/src/lib/analytics/dependencies.test.ts
 import { it, expect } from 'vitest';
-import { paretoTalkers, hopUsage, dependenciesLens } from './dependencies';
+import { paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens } from './dependencies';
 import type { FlowEdge } from '../types';
 
 it('paretoTalkers cumulative %', () => {
@@ -19,6 +19,14 @@ it('hopUsage counts componentType, OTHER for missing', () => {
   const h = hopUsage(flows);
   expect(h.find(x=>x.type==='TransitGateway')!.count).toBe(1);
   expect(h.find(x=>x.type==='OTHER')!.count).toBe(1);
+});
+it('hopUsage/pathTree count each flow once (DATA_TRANSFERRED only)', () => {
+  const flows = [
+    { metric:'DATA_TRANSFERRED', value:10, a:{}, b:{}, traversedConstructs:[{componentType:'TransitGateway'}] },
+    { metric:'RETRANSMISSIONS', value:1, a:{}, b:{}, traversedConstructs:[{componentType:'TransitGateway'}] },
+  ] as any;
+  expect(hopUsage(flows).find(h=>h.type==='TransitGateway')!.count).toBe(1);
+  expect(pathFrequencyTree(flows).value).toBe(1);
 });
 it('dependenciesLens shape', () => {
   const l = dependenciesLens([{metric:'DATA_TRANSFERRED',value:1,a:{podNamespace:'n',serviceName:'a'},b:{podNamespace:'n',serviceName:'b'},traversedConstructs:[]}] as any);

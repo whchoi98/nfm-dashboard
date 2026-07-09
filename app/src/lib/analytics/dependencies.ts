@@ -109,10 +109,14 @@ function hopSequence(f: FlowEdge): string[] {
   return (f.traversedConstructs ?? []).map((c) => c.componentType || OTHER);
 }
 
-/** Traversed-construct componentType counts across all flow rows (missing → 'OTHER'), desc by count. */
+/**
+ * Traversed-construct componentType counts (missing → 'OTHER'), desc by count.
+ * Only DATA_TRANSFERRED rows are counted — the collector emits one row per metric
+ * per edge, so counting all rows would tally the same physical flow up to 4 times.
+ */
 export function hopUsage(flows: FlowEdge[]): HopCount[] {
   const counts = new Map<string, number>();
-  for (const f of flows) {
+  for (const f of dataFlows(flows)) {
     for (const type of hopSequence(f)) counts.set(type, (counts.get(type) ?? 0) + 1);
   }
   return [...counts.entries()]
@@ -124,11 +128,12 @@ export function hopUsage(flows: FlowEdge[]): HopCount[] {
  * Prefix tree of hop-type sequences for flame/icicle charts: every flow's sequence
  * (componentType order, missing → 'OTHER') is merged under a root named 'all'.
  * `value` = number of flows whose path passes through the node (root = all flows);
- * children keep first-insertion order.
+ * children keep first-insertion order. Only DATA_TRANSFERRED rows are counted so
+ * each physical flow contributes exactly once (see hopUsage).
  */
 export function pathFrequencyTree(flows: FlowEdge[]): PathNode {
   const root: PathNode = { name: 'all', value: 0, children: [] };
-  for (const f of flows) {
+  for (const f of dataFlows(flows)) {
     root.value += 1;
     let node = root;
     for (const type of hopSequence(f)) {
