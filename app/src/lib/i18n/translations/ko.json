@@ -36,6 +36,7 @@
   "metric.TIMEOUTS": "타임아웃",
   "metric.ROUND_TRIP_TIME": "왕복 지연(RTT)",
   "chart.empty": "아직 데이터가 없습니다",
+  "chart.count": "건수",
   "table.empty": "표시할 플로우가 없습니다",
   "filter.all": "전체",
   "filter.apply": "적용",
