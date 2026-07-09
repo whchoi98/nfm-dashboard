@@ -37,6 +37,7 @@
   "metric.ROUND_TRIP_TIME": "Round Trip Time",
   "chart.empty": "No data yet",
   "chart.count": "Count",
+  "chart.totalCost": "Total cost",
   "table.empty": "No flows to show",
   "filter.all": "All",
   "filter.apply": "Apply",
