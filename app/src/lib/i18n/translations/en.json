@@ -222,7 +222,7 @@
   "agents.noStandalone": "No standalone EC2 agents registered.",
   "chat.title": "AI Assistant",
   "chat.placeholder": "Ask about your network…",
-  "chat.openPopup": "Open as popup",
+  "chat.openInNewWindow": "Open in new window",
   "chat.send": "Send",
   "chat.regenerate": "Regenerate",
   "chat.thinking": "Thinking…",

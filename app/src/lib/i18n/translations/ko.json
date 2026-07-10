@@ -223,7 +223,7 @@
   "chat.title": "AI 어시스턴트",
   "chat.placeholder": "네트워크에 대해 질문하세요…",
   "chat.send": "보내기",
-  "chat.openPopup": "팝업으로 열기",
+  "chat.openInNewWindow": "새 창으로 열기",
   "chat.regenerate": "다시 생성",
   "chat.thinking": "생각 중…",
   "chat.tool": "도구 실행 중: {name}",
