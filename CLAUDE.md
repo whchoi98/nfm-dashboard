@@ -1,0 +1,86 @@
+# Project Context
+
+## Overview
+**NFM Dashboard** (v1.0.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
+Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUNT_ID>`, region `ap-northeast-2`.
+
+> The global `~/.claude/CLAUDE.md` (Korean-first responses) and the spec-driven workflow in `docs/superpowers/` take precedence for language and process. This file only adds project-specific context — keep it complementary and concise.
+
+## Tech Stack
+- Node.js npm-workspaces monorepo, TypeScript throughout
+- `app`: Next.js 16 (App Router) + React 19, Tailwind CSS v4 design tokens (SnowUI), recharts + reactflow, vitest
+- `collector`: AWS Lambda (esbuild bundle → `dist/handler.mjs`), AWS SDK v3
+- `infra`: AWS CDK v2 (TypeScript)
+- AI: Amazon Bedrock (Converse API) + AgentCore gateway (MCP over SigV4)
+- Data: DynamoDB (`nfm-dashboard-flows`, `nfm-dashboard-meta`) + CloudWatch metrics
+
+## Project Structure
+```
+app/          - Next.js 16 dashboard (src/app pages, src/app/api routes, src/lib, src/components)
+collector/    - NFM data-collector Lambda (5-min cycle, esbuild → dist/handler.mjs)
+infra/        - CDK stacks: NfmDash-Data / Onboarding / AgentCore / App / Ops / Dns
+scripts/      - build-push.sh (ECR image), smoke.sh (e2e), setup-gateway.sh
+tools/        - AgentCore MCP tool Lambdas (Python: nfm_mcp, ddb_mcp, network_mcp) + create_gateway.py
+onboarding/   - NFM / CoreDNS onboarding scripts (Python)
+e2e/          - Playwright smoke tests
+docs/         - decisions/ (ADRs), reference/ (layer docs), runbooks/, superpowers/ (spec workflow)
+```
+
+## Conventions
+- TypeScript everywhere; vitest tests co-located (`*.test.ts` / `*.test.tsx` next to source).
+- Tailwind v4 + SnowUI design tokens; chart colors ONLY from `app/src/lib/chart-tokens.ts` (keep in sync with `app/tailwind.config.ts`).
+- i18n ko/en: ALL UI strings go through `t()` (`app/src/lib/i18n`, `translations/{ko,en}.json`) — no hardcoded UI strings.
+- Data access via `app/src/lib/ddb.ts` (DynamoDB) and `app/src/lib/cw-metrics.ts` (CloudWatch). The 5-minute bucket formula in `ddb.ts` MUST match the collector exactly.
+
+## Key Commands
+```bash
+npm -w app run dev                 # dashboard dev server
+npm -w app run build               # production build
+npx -w app vitest run              # app tests
+npx -w app tsc --noEmit            # typecheck
+npm -w collector run build         # collector bundle (esbuild)
+npm -w collector run test          # collector tests
+bash scripts/build-push.sh <sha>   # build + push container image to ECR
+cd infra && npx cdk deploy <Stack> --require-approval never -c imageTag=<sha>
+#   ALL cdk commands need -c imageTag; non-App stacks may use -c imageTag=unused
+bash scripts/smoke.sh              # e2e smoke test
+```
+
+<!-- AUTO-MANAGED:references -->
+## Implementation References
+- [Infrastructure](docs/reference/infrastructure.md) — CloudFront + ALB + ECS Fargate runtime, image build/deploy
+- [Data](docs/reference/data.md) — DynamoDB single-table (flows/meta) + CloudWatch metrics
+- [API](docs/reference/api.md) — Next.js route handlers under `app/src/app/api/`
+- [IaC](docs/reference/iac.md) — CDK stacks in `infra/`
+- [Frontend](docs/reference/frontend.md) — Next.js App Router pages, i18n
+- [UI](docs/reference/ui.md) — components, charts, design tokens
+- [Security](docs/reference/security.md) — Cognito auth, origin-verify, SigV4
+- [Agent · LLM](docs/reference/agent-llm.md) — Bedrock Converse + AgentCore gateway chatbot
+<!-- /AUTO-MANAGED:references -->
+
+---
+
+## Auto-Sync Rules
+
+Rules below are applied automatically after Plan mode exit and on major code changes.
+
+### Post-Plan Mode Actions
+After exiting Plan mode (`/plan`), before starting implementation:
+
+1. **Architecture decision made** -> Update `docs/architecture.md`
+2. **Technical choice/trade-off made** -> Create `docs/decisions/ADR-NNN-title.md`
+3. **New module added** -> Create `CLAUDE.md` in that module directory
+4. **Operational procedure defined** -> Create runbook in `docs/runbooks/`
+5. **Changes needed in this file** -> Update relevant sections above
+
+### Code Change Sync Rules
+- New top-level directory in `app/src/`, `collector/src/`, or a new workspace -> Must create `CLAUDE.md` alongside
+- API endpoint added/changed -> Update `app/src/app/api/CLAUDE.md` and `docs/reference/api.md`
+- DynamoDB schema/access pattern changed -> Update `app/src/lib/CLAUDE.md`, `collector/CLAUDE.md`, and `docs/reference/data.md`
+- CDK stack added/changed -> Update `infra/CLAUDE.md` and `docs/reference/iac.md` / `docs/reference/infrastructure.md`
+- Auth/perimeter changed -> Update `docs/reference/security.md`
+- Bedrock model / gateway tooling changed -> Update `docs/reference/agent-llm.md`
+
+### ADR Numbering
+Find the highest number in `docs/decisions/ADR-*.md` and increment by 1.
+Format: `ADR-NNN-concise-title.md`

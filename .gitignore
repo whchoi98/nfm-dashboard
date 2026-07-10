@@ -8,3 +8,10 @@ test-results/
 *.tsbuildinfo
 .env*
 e2e/.auth.json
+
+# --- appended by project-init scaffolder ---
+!.env.example
+coverage/
+*.local
+.DS_Store
+.claude/settings.local.json

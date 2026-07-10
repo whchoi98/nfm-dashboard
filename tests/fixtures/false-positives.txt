@@ -1,0 +1,12 @@
+# False-positive samples: no line here may be flagged by secret-scan patterns.
+dGhpcyBpcyBhIHRlc3Q=
+password = ""
+password: "short"
+secret = 'tiny'
+api_key = "nfm"
+AKIAIOSFODNN
+ghp_notarealtoken
+xoxb-not-a-token
+AUTH_DISABLED=1 npm -w app run dev
+const passwordField = document.querySelector('#pw')
+aws_access_key_id = AKIA_PLACEHOLDER
