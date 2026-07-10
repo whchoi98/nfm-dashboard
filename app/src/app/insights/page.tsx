@@ -14,6 +14,9 @@ import FilterBar from '@/components/analytics/FilterBar';
 import { HoverSyncProvider } from '@/components/analytics/HoverSync';
 import CostTab from './tabs/CostTab';
 import ReliabilityTab from './tabs/ReliabilityTab';
+import LatencyTab from './tabs/LatencyTab';
+import DependenciesTab from './tabs/DependenciesTab';
+import DnsTab from './tabs/DnsTab';
 import type { TabProps } from './tabs/shared';
 
 interface TabDef {
@@ -22,11 +25,14 @@ interface TabDef {
   Comp: React.ComponentType<TabProps>;
 }
 
-// Tab registry — 4b appends latency/dependencies/dns here (their
-// insights.tab.* labels already exist in both locales).
+// Tab registry — only the ACTIVE tab component mounts, so each lens is
+// fetched on demand.
 const TABS: TabDef[] = [
   { key: 'cost', labelKey: 'insights.tab.cost', Comp: CostTab },
   { key: 'reliability', labelKey: 'insights.tab.reliability', Comp: ReliabilityTab },
+  { key: 'latency', labelKey: 'insights.tab.latency', Comp: LatencyTab },
+  { key: 'dependencies', labelKey: 'insights.tab.dependencies', Comp: DependenciesTab },
+  { key: 'dns', labelKey: 'insights.tab.dns', Comp: DnsTab },
 ];
 
 export default function InsightsPage() {

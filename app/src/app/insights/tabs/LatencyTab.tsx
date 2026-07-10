@@ -1,0 +1,168 @@
+'use client';
+// Latency tab (Task 4b): RTT percentile tiles, intra- vs inter-AZ compare,
+// distribution histogram, slowest-path toplist, RTT trend and the day×hour
+// heatmap. NFM emits ROUND_TRIP_TIME for few flows, so an empty window is the
+// normal case — every widget falls back to the dedicated latency empty-state.
+import { useMemo } from 'react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { usePolling } from '@/lib/use-polling';
+import { lensQuery } from '@/lib/analytics/filters';
+import type { LatencyLensResult } from '@/lib/analytics/latency';
+import { formatMicros } from '@/lib/format';
+import Widget from '@/components/analytics/Widget';
+import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
+import { useHoverSync } from '@/components/analytics/HoverSync';
+import StatDelta from '@/components/charts/StatDelta';
+import TimeSeries from '@/components/charts/TimeSeries';
+import Distribution from '@/components/charts/Distribution';
+import Heatmap, { type HeatmapCell } from '@/components/charts/Heatmap';
+import { LensState, type TabProps } from './shared';
+
+const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+export default function LatencyTab({ filters }: TabProps) {
+  const { t, lang } = useLanguage();
+  const { data, error, loading } = usePolling<LatencyLensResult>(
+    `/api/analytics/latency${lensQuery(filters)}`,
+  );
+  const firstLoad = loading && !data;
+  // Shared crosshair label, same read-only pattern as ReliabilityTab's NHI widget.
+  const { activeT } = useHoverSync();
+  const emptyLabel = t('insights.latency.empty');
+
+  // Toplist contract: rows pre-sorted desc by value (mean RTT in µs).
+  const slowRows: ToplistRow[] = useMemo(
+    () =>
+      [...(data?.slowest ?? [])]
+        .sort((a, b) => b.rtt - a.rtt)
+        .slice(0, 10)
+        .map((r) => ({ label: r.label, value: r.rtt })),
+    [data],
+  );
+
+  // Localized short weekday names, index 0 = Sunday (matches RttHeatmapCell.day).
+  const dayNames = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(lang, { weekday: 'short', timeZone: 'UTC' });
+    // 2023-01-01 was a Sunday.
+    return Array.from({ length: 7 }, (_, d) => fmt.format(new Date(Date.UTC(2023, 0, 1 + d))));
+  }, [lang]);
+
+  // hourHeatmap cells → Heatmap's row/col/cell shape (only observed days/hours).
+  const heat = useMemo(() => {
+    const src = data?.hourHeatmap ?? [];
+    const hourLabel = (h: number) => String(h).padStart(2, '0');
+    const days = [...new Set(src.map((c) => c.day))].sort((a, b) => a - b);
+    const hours = [...new Set(src.map((c) => c.hour))].sort((a, b) => a - b);
+    const cells: HeatmapCell[] = src.map((c) => ({
+      row: dayNames[c.day],
+      col: hourLabel(c.hour),
+      value: c.value,
+    }));
+    return { rows: days.map((d) => dayNames[d]), cols: hours.map(hourLabel), cells };
+  }, [data, dayNames]);
+
+  const overall = data?.overall;
+  const trendPoints = data?.trend.points ?? [];
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <Widget title={t('insights.latency.summary')} testId="widget-latency-summary">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={(overall?.count ?? 0) === 0}
+          emptyLabel={emptyLabel}
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatDelta
+              label={t('insights.latency.p50')}
+              value={formatMicros(overall?.p50 ?? 0)}
+              testId="stat-latency-p50"
+            />
+            <StatDelta
+              label={t('insights.latency.p90')}
+              value={formatMicros(overall?.p90 ?? 0)}
+              testId="stat-latency-p90"
+            />
+            <StatDelta
+              label={t('insights.latency.p95')}
+              value={formatMicros(overall?.p95 ?? 0)}
+              testId="stat-latency-p95"
+            />
+          </div>
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.latency.intraInter')} testId="widget-latency-intra-inter">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={(data?.intra.count ?? 0) === 0 && (data?.inter.count ?? 0) === 0}
+          emptyLabel={emptyLabel}
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <StatDelta
+              label={`${t('category.INTRA_AZ')} p50`}
+              value={formatMicros(data?.intra.p50 ?? 0)}
+              testId="stat-latency-intra"
+            />
+            <StatDelta
+              label={`${t('category.INTER_AZ')} p50`}
+              value={formatMicros(data?.inter.p50 ?? 0)}
+              testId="stat-latency-inter"
+            />
+          </div>
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.latency.distribution')} testId="widget-latency-distribution">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={(data?.distribution ?? []).length === 0}
+          emptyLabel={emptyLabel}
+        >
+          <Distribution bins={data?.distribution ?? []} unit="µs" height={220} />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.latency.slowest')} testId="widget-latency-slowest">
+        <LensState loading={firstLoad} error={error} empty={slowRows.length === 0} emptyLabel={emptyLabel}>
+          <Toplist rows={slowRows} valueFormatter={formatMicros} testId="toplist-latency-slowest" />
+        </LensState>
+      </Widget>
+
+      <Widget
+        title={t('insights.latency.trend')}
+        testId="widget-latency-trend"
+        className="md:col-span-2"
+        actions={
+          activeT ? (
+            <span className="text-[11px] tabular-nums text-ink/50 dark:text-white/50">
+              {timeLabel(activeT)}
+            </span>
+          ) : undefined
+        }
+      >
+        <LensState loading={firstLoad} error={error} empty={trendPoints.length === 0} emptyLabel={emptyLabel}>
+          <TimeSeries
+            series={[{ name: t('metric.ROUND_TRIP_TIME'), points: trendPoints }]}
+            valueFormatter={formatMicros}
+            height={220}
+          />
+        </LensState>
+      </Widget>
+
+      <Widget
+        title={t('insights.latency.heatmap')}
+        testId="widget-latency-heatmap"
+        className="md:col-span-2 xl:col-span-3"
+      >
+        <LensState loading={firstLoad} error={error} empty={heat.cells.length === 0} emptyLabel={emptyLabel}>
+          <Heatmap rows={heat.rows} cols={heat.cols} cells={heat.cells} valueFormatter={formatMicros} />
+        </LensState>
+      </Widget>
+    </div>
+  );
+}
