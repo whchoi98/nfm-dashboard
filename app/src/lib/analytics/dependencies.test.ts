@@ -1,7 +1,10 @@
 // app/src/lib/analytics/dependencies.test.ts
 import { it, expect } from 'vitest';
-import { paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens, serviceGraph } from './dependencies';
-import type { FlowEdge } from '../types';
+import {
+  paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens, serviceGraph,
+  capSankeyLinks, capPathTreeBreadth, SANKEY_MAX_LINKS, PATH_TREE_MAX_CHILDREN,
+  type SankeyData, type PathNode,
+} from './dependencies';
 
 it('serviceGraph collapses mutual a→b/b→a into ONE deterministic link (bytes summed)', () => {
   const flow = (src: string, dst: string, value: number) => ({
@@ -52,4 +55,86 @@ it('dependenciesLens shape', () => {
   expect(l.sankey.nodes.length).toBeGreaterThan(0);
   expect(Array.isArray(l.pareto)).toBe(true);
   expect(l.pathTree.name).toBe('all');
+  // Legibility caps must NOT touch a small graph.
+  expect(l.sankeyTruncated).toBe(false);
+  expect(l.pathTreeTruncated).toBe(false);
+});
+
+// ---- Legibility caps (§16 polish) ------------------------------------------
+
+/** Star graph: hub node 0 → spokes 1..n with value = spoke index. */
+function starSankey(n: number): SankeyData {
+  return {
+    nodes: Array.from({ length: n + 1 }, (_, i) => ({ name: i === 0 ? 'hub' : `s${i}` })),
+    links: Array.from({ length: n }, (_, i) => ({ source: 0, target: i + 1, value: i + 1 })),
+  };
+}
+
+it('capSankeyLinks keeps the top-N links by value and only their nodes (reindexed)', () => {
+  const capped = capSankeyLinks(starSankey(10), 3);
+  expect(capped.truncated).toBe(true);
+  expect(capped.data.links).toHaveLength(3);
+  // Top 3 by value = spokes 10, 9, 8 (a subset of the original link values).
+  expect(capped.data.links.map((l) => l.value).sort((a, b) => b - a)).toEqual([10, 9, 8]);
+  // Only referenced nodes survive: hub + 3 spokes.
+  expect(capped.data.nodes.map((n) => n.name).sort()).toEqual(['hub', 's10', 's8', 's9']);
+  // Every remapped index is in range and every kept node is referenced by a kept link.
+  const referenced = new Set<number>();
+  for (const l of capped.data.links) {
+    expect(Number.isInteger(l.source) && l.source >= 0 && l.source < capped.data.nodes.length).toBe(true);
+    expect(Number.isInteger(l.target) && l.target >= 0 && l.target < capped.data.nodes.length).toBe(true);
+    referenced.add(l.source);
+    referenced.add(l.target);
+  }
+  expect(referenced.size).toBe(capped.data.nodes.length);
+});
+
+it('capSankeyLinks passes small graphs through unchanged (same reference)', () => {
+  const small = starSankey(3);
+  const out = capSankeyLinks(small, 3);
+  expect(out.truncated).toBe(false);
+  expect(out.data).toBe(small);
+});
+
+it('capSankeyLinks defaults to SANKEY_MAX_LINKS=40', () => {
+  expect(SANKEY_MAX_LINKS).toBe(40);
+  const out = capSankeyLinks(starSankey(60));
+  expect(out.truncated).toBe(true);
+  expect(out.data.links).toHaveLength(40);
+});
+
+it('capPathTreeBreadth keeps top-K children per level and flags truncation', () => {
+  const wide: PathNode = {
+    name: 'all',
+    value: 100,
+    children: Array.from({ length: 5 }, (_, i) => ({
+      name: `hop${i}`,
+      value: i + 1,
+      children: Array.from({ length: 4 }, (_, j) => ({ name: `leaf${j}`, value: j + 1, children: [] })),
+    })),
+  };
+  const out = capPathTreeBreadth(wide, 2);
+  expect(out.truncated).toBe(true);
+  const assertBreadth = (n: PathNode) => {
+    expect(n.children.length).toBeLessThanOrEqual(2);
+    n.children.forEach(assertBreadth);
+  };
+  assertBreadth(out.tree);
+  // Top-K by value, original (first-insertion) order preserved among survivors.
+  expect(out.tree.children.map((c) => c.name)).toEqual(['hop3', 'hop4']);
+  expect(out.tree.children[0].children.map((c) => c.name)).toEqual(['leaf2', 'leaf3']);
+  // Input tree is not mutated.
+  expect(wide.children).toHaveLength(5);
+  expect(wide.children[3].children).toHaveLength(4);
+});
+
+it('capPathTreeBreadth passes narrow trees through unchanged (same reference)', () => {
+  const narrow: PathNode = {
+    name: 'all', value: 2,
+    children: [{ name: 'a', value: 2, children: [{ name: 'b', value: 1, children: [] }] }],
+  };
+  const out = capPathTreeBreadth(narrow, 2);
+  expect(out.truncated).toBe(false);
+  expect(out.tree).toBe(narrow);
+  expect(PATH_TREE_MAX_CHILDREN).toBe(12);
 });

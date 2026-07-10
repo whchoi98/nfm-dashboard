@@ -97,9 +97,11 @@ function NodeShape({
 }: NodeShapeProps & { maxDepth: number; valueFormatter: (n: number) => string }) {
   if (!Number.isFinite(x) || !Number.isFinite(y) || width <= 0 || height <= 0) return <g />;
   const atEnd = maxDepth > 0 && (payload?.depth ?? 0) >= maxDepth;
+  // Draw-only clamp: tiny flows otherwise get sub-pixel rects that disappear.
+  const drawH = Math.max(height, 2);
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={2} fill={SERIES_COLORS[index % SERIES_COLORS.length]}>
+      <rect x={x} y={y} width={width} height={drawH} rx={2} fill={SERIES_COLORS[index % SERIES_COLORS.length]}>
         <title>{`${payload?.name ?? ''}: ${valueFormatter(Number(payload?.value ?? 0))}`}</title>
       </rect>
       <text
@@ -131,6 +133,17 @@ export default function Sankey({
   const { t } = useLanguage();
   const { nodes, links, maxDepth } = useMemo(() => sanitize(data), [data]);
 
+  // recharts keeps nodePadding FIXED: on dense graphs (~20+ nodes per column at
+  // 320px) 24px padding alone exceeds the height budget and node heights go
+  // <= 0, so NodeShape drops every rect. Shrink padding as node count grows —
+  // padding gets at most half the usable height in the worst-case (densest
+  // ~half-the-nodes) column, clamped to [4, 24].
+  const nodePadding = useMemo(() => {
+    const perColumn = Math.max(2, Math.ceil(nodes.length / 2));
+    const usable = Math.max(0, height - 16); // top+bottom margins
+    return Math.max(4, Math.min(24, Math.floor((usable * 0.5) / (perColumn - 1))));
+  }, [nodes.length, height]);
+
   if (nodes.length === 0 || links.length === 0) {
     return (
       <div
@@ -148,7 +161,7 @@ export default function Sankey({
       <ResponsiveContainer width="100%" height={height}>
         <RechartsSankey
           data={{ nodes, links }}
-          nodePadding={24}
+          nodePadding={nodePadding}
           nodeWidth={12}
           margin={{ top: 8, right: 90, bottom: 8, left: 8 }}
           link={{ stroke: TOKENS.chartBlue, strokeOpacity: 0.45, fill: 'none' }}

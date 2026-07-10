@@ -1,9 +1,8 @@
 'use client';
 // Reliability tab (Task 4a): summary tiles, retransmission hotspot toplist,
 // breach table, NHI timeseries + per-monitor swimlanes and the RTT×retrans
-// scatter. Consumes the shared HoverSync context (TimeSeries does not expose
-// hover callbacks yet, so 4a only READS activeT — 4b's timeseries widgets can
-// start producing it without touching this tab).
+// scatter. The NHI timeseries both PRODUCES the shared HoverSync activeT
+// (hover → setActiveT) and reads it back for the header badge/crosshair.
 import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
@@ -28,9 +27,9 @@ export default function ReliabilityTab({ filters }: TabProps) {
     `/api/analytics/reliability${lensQuery(filters)}`,
   );
   const firstLoad = loading && !data;
-  // Shared crosshair: read-only in 4a (no producer yet) — shows the hovered
-  // bucket next to the NHI widget title once a producer exists.
-  const { activeT } = useHoverSync();
+  // Shared crosshair: hovering the NHI timeseries sets activeT (badge next to
+  // the widget title + synced reference line on sibling timeseries widgets).
+  const { activeT, setActiveT } = useHoverSync();
 
   const breaches = useMemo(() => data?.breaches ?? [], [data]);
   const breachKeys = useMemo(() => new Set(breaches.map((b) => b.key)), [breaches]);
@@ -154,6 +153,8 @@ export default function ReliabilityTab({ filters }: TabProps) {
             series={[{ name: t('kpi.nhi'), points: nhiPoints }]}
             valueFormatter={(n) => String(n)}
             height={220}
+            activeT={activeT}
+            onActiveTimeChange={setActiveT}
           />
         </LensState>
       </Widget>

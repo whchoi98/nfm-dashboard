@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
+import { capSankeyLinks, SANKEY_MAX_LINKS } from '@/lib/analytics/dependencies';
 import type { DnsAggregate } from '@/lib/types';
 import { formatCount } from '@/lib/format';
 import Widget from '@/components/analytics/Widget';
@@ -45,6 +46,14 @@ export default function DnsTab() {
       [...(data?.queryTypes ?? [])]
         .sort((a, b) => b.count - a.count)
         .map((r) => ({ label: r.type, value: r.count })),
+    [data],
+  );
+
+  // The resolution sankey is collector-built (can't cap at the source): live
+  // aggregates carry 500+ links which render as a hairball, so cap client-side
+  // to the top links (capSankeyLinks reindexes nodes/links consistently).
+  const resolution = useMemo(
+    () => (data?.resolution ? capSankeyLinks(data.resolution) : null),
     [data],
   );
 
@@ -115,7 +124,16 @@ export default function DnsTab() {
         className="md:col-span-2"
       >
         <LensState loading={firstLoad} error={error}>
-          <Sankey data={data.resolution} valueFormatter={formatCount} height={320} />
+          <Sankey
+            data={resolution?.data ?? { nodes: [], links: [] }}
+            valueFormatter={formatCount}
+            height={320}
+          />
+          {resolution?.truncated ? (
+            <p className="mt-2 text-[11px] text-ink/50 dark:text-white/50">
+              {t('insights.capFlows', { n: SANKEY_MAX_LINKS })}
+            </p>
+          ) : null}
         </LensState>
       </Widget>
     </div>

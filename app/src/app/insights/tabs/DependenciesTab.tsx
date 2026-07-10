@@ -6,7 +6,11 @@ import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { lensQuery } from '@/lib/analytics/filters';
-import type { DependenciesLensResult } from '@/lib/analytics/dependencies';
+import {
+  PATH_TREE_MAX_CHILDREN,
+  SANKEY_MAX_LINKS,
+  type DependenciesLensResult,
+} from '@/lib/analytics/dependencies';
 import { CATEGORY_ORDER, type DestCategory } from '@/lib/chart-tokens';
 import { formatBytes, formatCount } from '@/lib/format';
 import Widget from '@/components/analytics/Widget';
@@ -20,6 +24,11 @@ import { LensState, type TabProps } from './shared';
 
 const EMPTY_SANKEY: SankeyInput = { nodes: [], links: [] };
 const EMPTY_TREE: IcicleNode = { name: '', value: 0, children: [] };
+
+/** Footnote under a capped chart so the top-N truncation is not silent. */
+function CapNote({ text }: { text: string }) {
+  return <p className="mt-2 text-[11px] text-ink/50 dark:text-white/50">{text}</p>;
+}
 
 export default function DependenciesTab({ filters }: TabProps) {
   const { t } = useLanguage();
@@ -73,6 +82,9 @@ export default function DependenciesTab({ filters }: TabProps) {
       >
         <LensState loading={firstLoad} error={error}>
           <Sankey data={data?.sankey ?? EMPTY_SANKEY} valueFormatter={formatBytes} height={320} />
+          {data?.sankeyTruncated ? (
+            <CapNote text={t('insights.capFlows', { n: SANKEY_MAX_LINKS })} />
+          ) : null}
         </LensState>
       </Widget>
 
@@ -107,6 +119,9 @@ export default function DependenciesTab({ filters }: TabProps) {
       >
         <LensState loading={firstLoad} error={error}>
           <Icicle tree={pathTree} valueFormatter={formatCount} />
+          {data?.pathTreeTruncated ? (
+            <CapNote text={t('insights.capBranches', { n: PATH_TREE_MAX_CHILDREN })} />
+          ) : null}
         </LensState>
       </Widget>
     </div>

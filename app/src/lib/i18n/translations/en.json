@@ -185,6 +185,8 @@
   "insights.deps.pareto": "Top talkers (Pareto)",
   "insights.deps.pathTree": "Network path composition",
   "insights.deps.pathRoot": "All flows",
+  "insights.capFlows": "Showing top {n} flows only",
+  "insights.capBranches": "Showing top {n} branches per level",
   "insights.dns.title": "DNS insights",
   "insights.dns.latency": "Resolver latency",
   "insights.dns.topDomains": "Top domains",

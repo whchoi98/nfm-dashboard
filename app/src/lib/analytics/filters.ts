@@ -43,6 +43,45 @@ export function rangeToBuckets(range: TimeRange): number {
   }
 }
 
+/** Widest flows window a lens route will fetch: 24h of 5-minute buckets. */
+const MAX_BUCKETS = 288;
+const DEFAULT_BUCKETS = 12;
+
+function bucketsFrom(url: URL): number {
+  const raw = Number(url.searchParams.get('buckets'));
+  // Guard is `>= 1`, NOT `> 0`: a fractional 0<raw<1 (e.g. ?buckets=0.5) would
+  // otherwise floor to 0 and getFlowsWindow(0) returns an empty window.
+  return Number.isFinite(raw) && raw >= 1
+    ? Math.max(1, Math.min(Math.floor(raw), MAX_BUCKETS))
+    : DEFAULT_BUCKETS;
+}
+
+/**
+ * Parse `?buckets=` for the /api/analytics/* flow routes: valid values are
+ * floored and clamped to [1, 288]; missing/NaN/<1 falls back to 12 (1h).
+ */
+export function parseBuckets(req: Request): number {
+  return bucketsFrom(new URL(req.url));
+}
+
+/**
+ * One-pass query parse shared by all /api/analytics/* flow routes:
+ * buckets (see parseBuckets) plus the raw namespace/category values that feed
+ * applyFlowFilters (null when absent — applyFlowFilters treats that as no-op).
+ */
+export function parseLensParams(req: Request): {
+  buckets: number;
+  namespace: string | null;
+  category: string | null;
+} {
+  const url = new URL(req.url);
+  return {
+    buckets: bucketsFrom(url),
+    namespace: url.searchParams.get('namespace'),
+    category: url.searchParams.get('category'),
+  };
+}
+
 /**
  * Filter a flows window by optional namespace/category before a lens runs.
  * Missing/'all' values are no-ops; namespace matches EITHER endpoint's

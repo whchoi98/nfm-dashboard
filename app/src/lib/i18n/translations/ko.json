@@ -185,6 +185,8 @@
   "insights.deps.pareto": "상위 트래픽 쌍 (파레토)",
   "insights.deps.pathTree": "네트워크 경로 구성",
   "insights.deps.pathRoot": "전체 흐름",
+  "insights.capFlows": "상위 {n}개 흐름만 표시",
+  "insights.capBranches": "단계별 상위 {n}개 분기만 표시",
   "insights.dns.title": "DNS 인사이트",
   "insights.dns.latency": "리졸버 지연",
   "insights.dns.topDomains": "상위 도메인",

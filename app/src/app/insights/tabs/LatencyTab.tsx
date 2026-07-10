@@ -27,8 +27,9 @@ export default function LatencyTab({ filters }: TabProps) {
     `/api/analytics/latency${lensQuery(filters)}`,
   );
   const firstLoad = loading && !data;
-  // Shared crosshair label, same read-only pattern as ReliabilityTab's NHI widget.
-  const { activeT } = useHoverSync();
+  // Shared crosshair: the RTT trend produces activeT on hover and reads it
+  // back (badge + reference line), same pattern as ReliabilityTab's NHI widget.
+  const { activeT, setActiveT } = useHoverSync();
   const emptyLabel = t('insights.latency.empty');
 
   // Toplist contract: rows pre-sorted desc by value (mean RTT in µs).
@@ -150,6 +151,8 @@ export default function LatencyTab({ filters }: TabProps) {
             series={[{ name: t('metric.ROUND_TRIP_TIME'), points: trendPoints }]}
             valueFormatter={formatMicros}
             height={220}
+            activeT={activeT}
+            onActiveTimeChange={setActiveT}
           />
         </LensState>
       </Widget>

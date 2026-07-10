@@ -7,7 +7,9 @@ import {
   applyFlowFilters,
   DEFAULT_FILTERS,
   lensQuery,
+  parseBuckets,
   parseFilters,
+  parseLensParams,
   rangeToBuckets,
 } from './filters';
 
@@ -114,6 +116,40 @@ describe('applyFlowFilters', () => {
     expect(
       applyFlowFilters(flows, { category: 'INTER_AZ', namespace: 'shop' }).map((f) => f.edgeHash),
     ).toEqual(['3']);
+  });
+});
+
+describe('parseBuckets', () => {
+  const req = (qs: string) => new Request(`http://localhost/api/analytics/cost${qs}`);
+
+  it('defaults to 12 for missing, non-numeric or sub-1 values', () => {
+    expect(parseBuckets(req(''))).toBe(12); // no param
+    expect(parseBuckets(req('?buckets=abc'))).toBe(12);
+    expect(parseBuckets(req('?buckets=0'))).toBe(12);
+    // 0 < raw < 1 must NOT pass the guard and floor to 0 (empty window).
+    expect(parseBuckets(req('?buckets=0.5'))).toBe(12);
+    expect(parseBuckets(req('?buckets=-3'))).toBe(12);
+  });
+
+  it('floors and clamps valid values into [1, 288]', () => {
+    expect(parseBuckets(req('?buckets=5'))).toBe(5);
+    expect(parseBuckets(req('?buckets=5.9'))).toBe(5);
+    expect(parseBuckets(req('?buckets=1'))).toBe(1);
+    expect(parseBuckets(req('?buckets=9999'))).toBe(288);
+  });
+});
+
+describe('parseLensParams', () => {
+  it('parses buckets + namespace/category in one pass', () => {
+    const req = new Request(
+      'http://localhost/api/analytics/cost?buckets=36&namespace=shop&category=INTER_AZ',
+    );
+    expect(parseLensParams(req)).toEqual({ buckets: 36, namespace: 'shop', category: 'INTER_AZ' });
+  });
+
+  it('yields defaults/nulls when params are absent', () => {
+    const req = new Request('http://localhost/api/analytics/cost');
+    expect(parseLensParams(req)).toEqual({ buckets: 12, namespace: null, category: null });
   });
 });
 
