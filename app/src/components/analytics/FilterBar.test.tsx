@@ -51,6 +51,24 @@ describe('FilterBar', () => {
     expect(setFilter).toHaveBeenCalledWith('metric', 'TIMEOUTS');
   });
 
+  it('omits hidden controls via the hide prop (insights hub hides cluster/metric)', () => {
+    wrap(
+      <FilterBar
+        filters={DEFAULT_FILTERS}
+        setFilter={vi.fn()}
+        namespaces={['default']}
+        hide={['cluster', 'metric']}
+      />,
+    );
+    const root = screen.getByTestId('filter-bar');
+    expect(within(root).getAllByRole('combobox')).toHaveLength(3);
+    expect(within(root).queryByLabelText(ko['filter.cluster'])).toBeNull();
+    expect(within(root).queryByLabelText(ko['filter.metric'])).toBeNull();
+    expect(within(root).getByLabelText(ko['filter.range'])).toBeTruthy();
+    expect(within(root).getByLabelText(ko['filter.namespace'])).toBeTruthy();
+    expect(within(root).getByLabelText(ko['filter.category'])).toBeTruthy();
+  });
+
   it('renders without optional clusters/namespaces (only "all" offered)', () => {
     wrap(<FilterBar filters={DEFAULT_FILTERS} setFilter={vi.fn()} />);
     const cluster = screen.getByLabelText(ko['filter.cluster']) as HTMLSelectElement;

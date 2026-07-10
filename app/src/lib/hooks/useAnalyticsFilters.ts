@@ -53,7 +53,9 @@ export function useAnalyticsFilters(): {
       } catch {
         // sessionStorage unavailable (private mode/quota) — state still updates.
       }
-      const q = new URLSearchParams();
+      // Start from the current query so unrelated params (e.g. the hub's ?tab=)
+      // survive filter changes; filter keys are then overwritten.
+      const q = new URLSearchParams(window.location.search);
       for (const [key, val] of Object.entries(next)) q.set(key, String(val));
       router.replace(`${window.location.pathname}?${q.toString()}`, { scroll: false });
     },

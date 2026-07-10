@@ -1,53 +1,121 @@
 'use client';
-
+// Insights hub (Phase 4 Task 4a): sticky global FilterBar + tab strip over the
+// active tab's bento grid of lens widgets (Datadog timeboard composition).
+// Tabs live in the TABS registry so Task 4b can append latency/dependencies/dns
+// entries without touching the shell; only the ACTIVE tab component mounts, so
+// each lens is fetched on demand.
+import { Suspense, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
-import type { WiResult } from '@/lib/types';
-import { CATEGORY_ORDER, type DestCategory } from '@/lib/chart-tokens';
-import { formatBytes } from '@/lib/format';
-import CategoryBars, { type ByCategory } from '@/components/charts/CategoryBars';
-import CategoryDonut from '@/components/charts/CategoryDonut';
-import { Card } from '@/components/ui/Controls';
+import type { TopologySnapshot } from '@/lib/types';
+import { useAnalyticsFilters } from '@/lib/hooks/useAnalyticsFilters';
+import FilterBar from '@/components/analytics/FilterBar';
+import { HoverSyncProvider } from '@/components/analytics/HoverSync';
+import CostTab from './tabs/CostTab';
+import ReliabilityTab from './tabs/ReliabilityTab';
+import type { TabProps } from './tabs/shared';
 
-interface InsightsData {
-  byCategory: ByCategory;
-  rows: WiResult[];
+interface TabDef {
+  key: string;
+  labelKey: string;
+  Comp: React.ComponentType<TabProps>;
 }
 
-export default function InsightsPage() {
-  const { t } = useLanguage();
-  const { data, error, loading } = usePolling<InsightsData>('/api/insights');
+// Tab registry — 4b appends latency/dependencies/dns here (their
+// insights.tab.* labels already exist in both locales).
+const TABS: TabDef[] = [
+  { key: 'cost', labelKey: 'insights.tab.cost', Comp: CostTab },
+  { key: 'reliability', labelKey: 'insights.tab.reliability', Comp: ReliabilityTab },
+];
 
-  const byCategory = data?.byCategory ?? null;
-  const donutValues = byCategory
-    ? (Object.fromEntries(
-        CATEGORY_ORDER.map((c) => [c, byCategory[c]?.dataTransferred ?? 0]),
-      ) as Record<DestCategory, number>)
-    : null;
+export default function InsightsPage() {
+  // useAnalyticsFilters (via useSearchParams) requires a Suspense boundary
+  // above it during prerender — the fallback flashes at most one frame.
+  return (
+    <Suspense fallback={<HubFallback />}>
+      <InsightsHub />
+    </Suspense>
+  );
+}
+
+function HubFallback() {
+  const { t } = useLanguage();
+  return (
+    <p className="py-8 text-center text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
+  );
+}
+
+function InsightsHub() {
+  const { t } = useLanguage();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { filters, setFilter } = useAnalyticsFilters();
+
+  // Active tab lives in ?tab= (default 'cost'); component state is the source
+  // of truth after hydration, the URL is kept in sync for deep links.
+  const urlTab = searchParams?.get('tab');
+  const [tab, setTab] = useState<string>(
+    TABS.some((x) => x.key === urlTab) ? (urlTab as string) : TABS[0].key,
+  );
+
+  // Namespace options for the FilterBar come from the topology snapshot
+  // (cluster/metric are hidden — the hub does not wire them).
+  const { data: topology } = usePolling<TopologySnapshot>('/api/topology');
+  const namespaces = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of topology?.nodes ?? []) if (n.namespace) set.add(n.namespace);
+    return [...set].sort();
+  }, [topology]);
+
+  const selectTab = (key: string) => {
+    setTab(key);
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search);
+    q.set('tab', key);
+    router.replace(`${window.location.pathname}?${q.toString()}`, { scroll: false });
+  };
+
+  const active = TABS.find((x) => x.key === tab) ?? TABS[0];
+  const ActiveComp = active.Comp;
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.insights')}</h1>
 
-      {error ? (
-        <Card>
-          <p className="text-sm text-ink/60 dark:text-white/60">{t('common.error')}</p>
-        </Card>
-      ) : loading && !data ? (
-        <Card>
-          <p className="text-sm text-ink/40 dark:text-white/40">{t('common.loading')}</p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <Card title={t('insights.byCategory')} className="xl:col-span-2">
-            <CategoryBars byCategory={byCategory} />
-          </Card>
-          <Card title={t('insights.distribution')}>
-            <CategoryDonut values={donutValues} valueFormatter={formatBytes} />
-            <p className="mt-3 text-[11px] text-ink/50 dark:text-white/50">{t('insights.distributionHint')}</p>
-          </Card>
-        </div>
-      )}
+      <FilterBar
+        filters={filters}
+        setFilter={setFilter}
+        namespaces={namespaces}
+        hide={['cluster', 'metric']}
+      />
+
+      <div className="flex flex-wrap gap-1" role="group" aria-label={t('nav.insights')}>
+        {TABS.map(({ key, labelKey }) => {
+          const isActive = key === active.key;
+          return (
+            <button
+              key={key}
+              type="button"
+              data-testid={`insights-tab-${key}`}
+              aria-pressed={isActive}
+              onClick={() => selectTab(key)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-ink text-white dark:bg-white dark:text-ink'
+                  : 'text-ink/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10'
+              }`}
+            >
+              {t(labelKey)}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Shared crosshair context for the active tab's timeseries widgets. */}
+      <HoverSyncProvider>
+        <ActiveComp filters={filters} />
+      </HoverSyncProvider>
     </div>
   );
 }

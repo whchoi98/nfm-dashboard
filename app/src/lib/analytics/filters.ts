@@ -1,6 +1,6 @@
 // Global analytics-hub filter primitives (pure — no React/browser deps).
 // Every hub widget consumes AnalyticsFilters; 'all' is the no-filter sentinel.
-import type { MetricName } from '../types';
+import type { FlowEdge, MetricName } from '../types';
 
 export type TimeRange = '15m' | '1h' | '3h' | '24h';
 
@@ -41,6 +41,36 @@ export function rangeToBuckets(range: TimeRange): number {
     case '24h':
       return 288;
   }
+}
+
+/**
+ * Filter a flows window by optional namespace/category before a lens runs.
+ * Missing/'all' values are no-ops; namespace matches EITHER endpoint's
+ * podNamespace (a flow touching the namespace belongs to it).
+ * Used by all /api/analytics/* flow routes so every lens filters consistently.
+ */
+export function applyFlowFilters(
+  flows: FlowEdge[],
+  opts: { namespace?: string | null; category?: string | null },
+): FlowEdge[] {
+  let out = flows;
+  if (opts.category && opts.category !== 'all') {
+    out = out.filter((f) => f.category === opts.category);
+  }
+  if (opts.namespace && opts.namespace !== 'all') {
+    out = out.filter(
+      (f) => f.a.podNamespace === opts.namespace || f.b.podNamespace === opts.namespace,
+    );
+  }
+  return out;
+}
+
+/** Query string for /api/analytics/* lens routes derived from the hub filters. */
+export function lensQuery(filters: AnalyticsFilters): string {
+  let qs = `?buckets=${rangeToBuckets(filters.range)}`;
+  if (filters.namespace !== 'all') qs += `&namespace=${encodeURIComponent(filters.namespace)}`;
+  if (filters.category !== 'all') qs += `&category=${encodeURIComponent(filters.category)}`;
+  return qs;
 }
 
 /** Coerce an unknown record (URL query, sessionStorage JSON) into AnalyticsFilters,
