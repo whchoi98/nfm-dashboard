@@ -273,6 +273,5 @@
   "diagnose.meta": "Model {model} · {sec}s",
   "auth.login": "Log in",
   "auth.loginError": "Login failed. Please try again.",
-  "auth.logout": "Log out",
-  "footer.attribution": "Design: SnowUI (CC BY 4.0)"
+  "auth.logout": "Log out"
 }

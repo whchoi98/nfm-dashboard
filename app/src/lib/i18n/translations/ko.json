@@ -273,6 +273,5 @@
   "diagnose.meta": "모델 {model} · {sec}초",
   "auth.login": "로그인",
   "auth.loginError": "로그인에 실패했습니다. 다시 시도해 주세요.",
-  "auth.logout": "로그아웃",
-  "footer.attribution": "디자인: SnowUI (CC BY 4.0)"
+  "auth.logout": "로그아웃"
 }
