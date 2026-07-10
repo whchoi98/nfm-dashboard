@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { APP_VERSION } from '@/lib/version';
 import { NAV_ITEMS, isActive } from './nav';
 
 export default function Sidebar() {
@@ -37,6 +38,10 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      {/* Version label — synced to CHANGELOG.md via APP_VERSION (lib/version.ts). */}
+      <div data-testid="app-version" className="mt-auto px-2 pt-6 text-[11px] text-ink/40 dark:text-white/40">
+        NFM Dashboard v{APP_VERSION}
+      </div>
     </aside>
   );
 }

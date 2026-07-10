@@ -2,7 +2,8 @@
 
 // /monitors/[name] — per-monitor detail with two tabs (?view=):
 //  - overview: NHI badge + 4 traffic-summary tiles (AWS semantics: avg/sum/
-//    sum/min), NHI band + DataTransferred timeseries, CloudWatch deep link.
+//    sum/min), NHI striped band + DataTransferred timeseries, each chart with
+//    CloudWatch "view in metrics" + "create an alarm" deep links.
 //  - historical: metric-filterable FlowTable of the monitor's flows; a row
 //    click opens a HopPath sheet (topology EdgeHopPanel pattern).
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -11,6 +12,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ExternalLink, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
+import { cloudWatchCreateAlarmUrl, cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
 import type { FlowEdge, MetricName } from '@/lib/types';
 import type { MonitorDetail } from '@/lib/monitors';
 import { formatBytes, formatCount, formatMetricValue, formatMicros } from '@/lib/format';
@@ -19,6 +21,7 @@ import TimeSeries from '@/components/charts/TimeSeries';
 import StatusBadge from '@/components/cards/StatusBadge';
 import FlowTable, { CategoryChip } from '@/components/FlowTable';
 import HopPath from '@/components/HopPath';
+import NhiBand from '@/components/monitors/NhiBand';
 import { Card, Select } from '@/components/ui/Controls';
 
 const METRICS: MetricName[] = [
@@ -41,17 +44,34 @@ function safeDecode(s: string): string {
   }
 }
 
-/** Best-effort CloudWatch metrics-console deep link for this monitor. The
- *  console hash uses its own '*'-escaped percent-encoding; if the query part
- *  ever drifts, the console still opens on the metrics home for the region. */
-function cloudWatchUrl(monitorArn?: string): string {
-  const region = monitorArn?.split(':')[3] || process.env.AWS_REGION || 'ap-northeast-2';
-  const base = `https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#metricsV2`;
-  const query = monitorArn
-    ? `{AWS/NetworkFlowMonitor,MonitorId} MonitorId="${monitorArn}"`
-    : 'AWS/NetworkFlowMonitor';
-  const escaped = encodeURIComponent(query).replace(/%/g, '*').replace(/'/g, '*27');
-  return `${base}:graph=~();query=~'${escaped}'`;
+/** Per-chart CloudWatch console links (AWS console parity): "View in
+ *  metrics" + "Create an alarm" for one NFM metric of this monitor. */
+function CloudWatchLinks({ monitorArn, metricName }: { monitorArn?: string; metricName: string }) {
+  const { t } = useLanguage();
+  const linkCls =
+    'flex items-center gap-1 text-xs font-medium text-ink/60 hover:text-ink dark:text-white/60 dark:hover:text-white';
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <a
+        href={cloudWatchMetricsUrl({ monitorArn })}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkCls}
+      >
+        {t('monitors.viewInMetrics')}
+        <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+      </a>
+      <a
+        href={cloudWatchCreateAlarmUrl({ monitorArn, metricName })}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkCls}
+      >
+        {t('monitors.createAlarm')}
+        <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+      </a>
+    </div>
+  );
 }
 
 function Overview({ d }: { d: MonitorDetail }) {
@@ -91,27 +111,16 @@ function Overview({ d }: { d: MonitorDetail }) {
         </p>
       ) : null}
 
-      <Card title={t('monitors.nhi')}>
-        <TimeSeries
-          series={[{ name: t('monitors.nhi'), points: d.nhiTimeline.points }]}
-          height={140}
-          valueFormatter={(n) => String(n)}
-        />
+      <Card
+        title={t('monitors.nhi')}
+        action={<CloudWatchLinks monitorArn={d.monitorArn} metricName="HealthIndicator" />}
+      >
+        <NhiBand points={d.nhiTimeline.points} />
       </Card>
 
       <Card
         title={t('metric.DATA_TRANSFERRED')}
-        action={
-          <a
-            href={cloudWatchUrl(d.monitorArn)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs font-medium text-ink/60 hover:text-ink dark:text-white/60 dark:hover:text-white"
-          >
-            {t('monitors.viewInCloudWatch')}
-            <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
-          </a>
-        }
+        action={<CloudWatchLinks monitorArn={d.monitorArn} metricName="DataTransferred" />}
       >
         <TimeSeries
           series={[{ name: t('metric.DATA_TRANSFERRED'), points: d.dataSeries.points }]}

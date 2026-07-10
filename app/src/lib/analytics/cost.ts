@@ -44,7 +44,7 @@ function pairOf(f: FlowEdge, kind: EntityKind): [string, string] {
   return a <= b ? [a, b] : [b, a];
 }
 
-/** All-zero per-category record (all 7 DestCategory keys always present). */
+/** All-zero per-category record (every DestCategory key always present). */
 function zeroByCategory(): Record<DestCategory, number> {
   return Object.fromEntries(CATEGORY_ORDER.map((c) => [c, 0])) as Record<DestCategory, number>;
 }
@@ -114,7 +114,7 @@ export function regionArcs(flows: FlowEdge[]): RegionArc[] {
   return [...arcs.values()].sort((x, y) => y.usd - x.usd || y.bytes - x.bytes);
 }
 
-/** Per-bucket byte composition by category (all 7 keys, 0-filled) — for streamgraph/100% stack. */
+/** Per-bucket byte composition by category (every DestCategory key, 0-filled) — for streamgraph/100% stack. */
 export function categoryStream(flows: FlowEdge[]): CategoryStreamPoint[] {
   const perBucket = groupBy(dataFlows(flows), (f) => f.bucket);
   return [...perBucket.entries()]

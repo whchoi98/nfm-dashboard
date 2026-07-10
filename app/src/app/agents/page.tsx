@@ -1,13 +1,26 @@
 'use client';
 
+// /agents (Phase 6 Task 4): coverage StatDelta tiles, policy/tagged rate
+// gauges, a collection-cycle history sparkline (STATUS#collect rows), the
+// standalone agent table and the last-cycle status card.
 import { CircleCheck, CircleX } from 'lucide-react';
+import { Line, LineChart, ResponsiveContainer } from 'recharts';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { CollectionStatus, Coverage } from '@/lib/types';
 import { formatCount } from '@/lib/format';
-import KpiCard from '@/components/cards/KpiCard';
+import { SERIES_COLORS } from '@/lib/chart-tokens';
+import Gauge, { type GaugeStatus } from '@/components/charts/Gauge';
+import StatDelta from '@/components/charts/StatDelta';
 import CollectionStatusCard from '@/components/cards/CollectionStatusCard';
 import { Card } from '@/components/ui/Controls';
+
+// Coverage-rate thresholds: onboarding aims at the full fleet, so <90% warns
+// and <60% is danger — lab-scale heuristics, revisit with real fleet sizes.
+const RATE_OK = 90;
+const RATE_WARN = 60;
+const rateStatus = (pct: number): GaugeStatus =>
+  pct >= RATE_OK ? 'ok' : pct >= RATE_WARN ? 'warn' : 'danger';
 
 // Boolean cell dual-encoded: icon + text, never color alone.
 function BoolCell({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
@@ -23,13 +36,54 @@ function BoolCell({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
   );
 }
 
+/** Card-width collection-cycle sparkline (monitors-page Spark pattern). */
+function CycleSpark({ values }: { values: number[] }) {
+  const rows = values.map((v, i) => ({ i, v }));
+  return (
+    <div className="h-16 w-full" aria-hidden>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <Line
+            type="monotone"
+            dataKey="v"
+            stroke={SERIES_COLORS[0]}
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function AgentsPage() {
   const { t } = useLanguage();
-  const { data, error, loading } = usePolling<{ coverage: Coverage | null; status: CollectionStatus | null }>(
-    '/api/agents',
-  );
+  const { data, error, loading } = usePolling<{
+    coverage: Coverage | null;
+    status: CollectionStatus | null;
+    history: CollectionStatus[];
+  }>('/api/agents');
+  const firstLoad = loading && !data;
+
   const coverage = data?.coverage;
   const standalone = coverage?.standalone ?? [];
+  const total = standalone.length;
+  const taggedCount = standalone.filter((s) => s.tagged).length;
+  const policyCount = standalone.filter((s) => s.policyAttached).length;
+  const taggedPct = total ? Math.round((taggedCount / total) * 100) : 0;
+  const policyPct = total ? Math.round((policyCount / total) * 100) : 0;
+
+  // getCollectionHistory returns oldest→newest — feed the spark left-to-right.
+  const history = data?.history ?? [];
+  const cycleRows = history.map((h) => h.stats.rows);
+  const lastCycle = history[history.length - 1];
+
+  const bodyNotice = (text: string) => (
+    <p className="flex h-40 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+      {text}
+    </p>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -42,26 +96,72 @@ export default function AgentsPage() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
+        <StatDelta
+          testId="stat-agents-eks-nodes"
           label={t('overview.eksNodes')}
-          value={loading && !data ? '…' : formatCount(coverage?.eksNodeCount ?? 0)}
-          accent="blue"
+          value={firstLoad ? '…' : formatCount(coverage?.eksNodeCount ?? 0)}
         />
-        <KpiCard
+        <StatDelta
+          testId="stat-agents-standalone"
           label={t('overview.standaloneAgents')}
-          value={loading && !data ? '…' : formatCount(standalone.length)}
-          accent="lav"
+          value={firstLoad ? '…' : formatCount(total)}
         />
-        <KpiCard
+        <StatDelta
+          testId="stat-agents-tagged"
           label={t('agents.tagged')}
-          value={loading && !data ? '…' : `${standalone.filter((s) => s.tagged).length}/${standalone.length}`}
-          accent="blue"
+          value={firstLoad ? '…' : `${taggedCount}/${total}`}
         />
-        <KpiCard
+        <StatDelta
+          testId="stat-agents-policy"
           label={t('agents.policyAttached')}
-          value={loading && !data ? '…' : `${standalone.filter((s) => s.policyAttached).length}/${standalone.length}`}
-          accent="lav"
+          value={firstLoad ? '…' : `${policyCount}/${total}`}
         />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <Card title={t('agents.policyRate')} testId="agents-gauge-policy">
+          {firstLoad ? (
+            bodyNotice(t('common.loading'))
+          ) : (
+            <Gauge
+              value={policyPct}
+              max={total ? 100 : 0}
+              label={`${policyCount}/${total}`}
+              status={total ? rateStatus(policyPct) : undefined}
+              valueFormatter={(n) => `${n}%`}
+            />
+          )}
+        </Card>
+        <Card title={t('agents.taggedRate')} testId="agents-gauge-tagged">
+          {firstLoad ? (
+            bodyNotice(t('common.loading'))
+          ) : (
+            <Gauge
+              value={taggedPct}
+              max={total ? 100 : 0}
+              label={`${taggedCount}/${total}`}
+              status={total ? rateStatus(taggedPct) : undefined}
+              valueFormatter={(n) => `${n}%`}
+            />
+          )}
+        </Card>
+        <Card
+          title={t('agents.collectionCycles')}
+          testId="agents-cycles"
+          className="sm:col-span-2 xl:col-span-1"
+        >
+          {history.length < 2 ? (
+            bodyNotice(firstLoad ? t('common.loading') : t('chart.empty'))
+          ) : (
+            <>
+              <CycleSpark values={cycleRows} />
+              <p className="mt-3 text-[11px] text-ink/50 dark:text-white/50">
+                {t('agents.cyclesWindow', { count: history.length })}
+                {` · ${t('status.rows')}: ${formatCount(lastCycle.stats.rows)}`}
+              </p>
+            </>
+          )}
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

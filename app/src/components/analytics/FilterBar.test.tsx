@@ -27,9 +27,9 @@ describe('FilterBar', () => {
     );
     const root = screen.getByTestId('filter-bar');
     expect(within(root).getAllByRole('combobox')).toHaveLength(5);
-    // Category select: 'all' + the 7 fixed destination categories.
+    // Category select: 'all' + the 11 fixed destination categories.
     const category = within(root).getByLabelText(ko['filter.category']) as HTMLSelectElement;
-    expect(category.options).toHaveLength(8);
+    expect(category.options).toHaveLength(12);
     expect(category.value).toBe('all');
   });
 

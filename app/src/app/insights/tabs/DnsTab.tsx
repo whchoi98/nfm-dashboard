@@ -71,7 +71,32 @@ export default function DnsTab() {
     [data],
   );
 
-  // Loading / error / logging-disabled all collapse to a single guidance card.
+  // First load (aggregate not fetched yet): a pulsing skeleton approximating
+  // the real widget grid, so `widget-dns-disabled` renders ONLY once the
+  // aggregate is loaded and enabled===false — never as a flash while loading.
+  // A first-load error falls through to the guidance card (LensState shows it).
+  if (!data && !error) {
+    return (
+      <div
+        data-testid="dns-skeleton"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+        aria-busy="true"
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="animate-pulse rounded-card bg-surface p-5 dark:bg-white/5">
+            <div className="mb-4 h-4 w-32 rounded-card bg-ink/10 dark:bg-white/10" />
+            <div className="h-28 rounded-card bg-ink/5 dark:bg-white/10" />
+          </div>
+        ))}
+        <div className="animate-pulse rounded-card bg-surface p-5 md:col-span-2 dark:bg-white/5">
+          <div className="mb-4 h-4 w-40 rounded-card bg-ink/10 dark:bg-white/10" />
+          <div className="h-64 rounded-card bg-ink/5 dark:bg-white/10" />
+        </div>
+      </div>
+    );
+  }
+
+  // Error / logging-disabled collapse to a single guidance card.
   if (!data?.enabled) {
     return (
       <div className="grid grid-cols-1 gap-4">

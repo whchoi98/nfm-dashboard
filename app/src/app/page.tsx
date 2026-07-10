@@ -1,29 +1,51 @@
 'use client';
 
+// Overview (Phase 6 Task 1): fleet-wide §15.4 KPI tiles (StatDelta with
+// half-window delta + sparkline), NHI badge, hover-synced traffic chart with
+// a CloudWatch deep link, top cost talkers and breach count teasers linking
+// into the insights hub, plus collection status + agent coverage.
 import Link from 'next/link';
-import { Hourglass } from 'lucide-react';
+import { ExternalLink, Hourglass } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { CollectionStatus, Coverage } from '@/lib/types';
 import type { NfmSeries } from '@/lib/cw-metrics';
+import type { OverviewKpis } from '@/lib/overview-metrics';
+import { cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
-import KpiCard from '@/components/cards/KpiCard';
+import { formatUsd } from '@/app/insights/tabs/shared';
+import StatDelta, { type StatStatus } from '@/components/charts/StatDelta';
 import StatusBadge from '@/components/cards/StatusBadge';
 import CollectionStatusCard from '@/components/cards/CollectionStatusCard';
 import TimeSeries, { type TimeSeriesInput } from '@/components/charts/TimeSeries';
+import Widget from '@/components/analytics/Widget';
+import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
+import { HoverSyncProvider, useHoverSync } from '@/components/analytics/HoverSync';
 import { Card } from '@/components/ui/Controls';
 
-interface OverviewData {
-  kpis: {
-    dataTransferred: number;
-    retransmissions: number;
-    timeouts: number;
-    rttAvg: number | null;
-    nhi: number | null;
-  };
+interface OverviewData extends OverviewKpis {
+  topTalkers: { label: string; usd: number; bytes: number }[];
+  breachCount: number;
   series: Record<string, NfmSeries>;
   status: CollectionStatus | null;
   coverage: Coverage | null;
+}
+
+// Lab-scale status thresholds for the 1-hour fleet window (heuristics like the
+// cost tab's WARN/DANGER_USD — revisit after observing real data).
+const RETRANS_WARN = 1_000;
+const RETRANS_DANGER = 10_000;
+const TIMEOUT_WARN = 1;
+const TIMEOUT_DANGER = 100;
+const BREACH_DANGER = 5;
+
+function statusFor(
+  v: number | null | undefined,
+  warnAt: number,
+  dangerAt: number,
+): StatStatus | undefined {
+  if (v == null) return undefined;
+  return v >= dangerAt ? 'danger' : v >= warnAt ? 'warn' : 'ok';
 }
 
 function trafficSeries(series: Record<string, NfmSeries>): TimeSeriesInput[] {
@@ -35,9 +57,23 @@ function trafficSeries(series: Record<string, NfmSeries>): TimeSeriesInput[] {
     }));
 }
 
+/** Traffic chart wired to the shared hover context (crosshair sync). */
+function SyncedTrafficChart({ series }: { series: TimeSeriesInput[] }) {
+  const { activeT, setActiveT } = useHoverSync();
+  return (
+    <TimeSeries
+      series={series}
+      valueFormatter={formatBytes}
+      activeT={activeT}
+      onActiveTimeChange={setActiveT}
+    />
+  );
+}
+
 export default function OverviewPage() {
   const { t } = useLanguage();
   const { data, loading, error } = usePolling<OverviewData>('/api/overview');
+  const firstLoad = loading && !data;
 
   const kpis = data?.kpis;
   const traffic = data ? trafficSeries(data.series) : [];
@@ -45,18 +81,47 @@ export default function OverviewPage() {
     !!data &&
     !data.status &&
     traffic.length === 0 &&
-    (kpis?.dataTransferred ?? 0) === 0 &&
-    (kpis?.retransmissions ?? 0) === 0;
+    (kpis?.dataTransferred.value ?? 0) === 0 &&
+    (kpis?.retransmissions.value ?? 0) === 0;
 
   const coverage = data?.coverage;
   const taggedCount = coverage?.standalone.filter((s) => s.tagged).length ?? 0;
   const policyCount = coverage?.standalone.filter((s) => s.policyAttached).length ?? 0;
 
+  // Toplist contract: rows pre-sorted desc by value (USD); sub = bytes moved.
+  const talkerRows: ToplistRow[] = [...(data?.topTalkers ?? [])]
+    .sort((a, b) => b.usd - a.usd)
+    .map((r) => ({ label: r.label, value: r.usd, sub: formatBytes(r.bytes) }));
+
+  const breachCount = data?.breachCount ?? 0;
+  const rttUnit =
+    data && data.rttP50 != null && data.rttP95 != null
+      ? t('overview.rttPercentiles', {
+          p50: formatMicros(data.rttP50),
+          p95: formatMicros(data.rttP95),
+        })
+      : undefined;
+
+  const insightsLink = (tab: string) => (
+    <Link
+      href={`/insights?tab=${tab}`}
+      className="text-xs font-medium text-ink/60 hover:text-ink hover:underline dark:text-white/60 dark:hover:text-white"
+    >
+      {t('nav.insights')} →
+    </Link>
+  );
+
+  const bodyNotice = (text: string) => (
+    <p className="flex h-32 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+      {text}
+    </p>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">{t('nav.overview')}</h1>
-        <StatusBadge value={kpis?.nhi ?? null} testId="nhi-badge" />
+        <StatusBadge value={data?.nhi ?? null} testId="nhi-badge" />
       </div>
 
       {error ? (
@@ -80,38 +145,88 @@ export default function OverviewPage() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label={t('kpi.dataTransferred')}
-          value={loading && !data ? '…' : formatBytes(kpis?.dataTransferred ?? 0)}
-          accent="blue"
+        <StatDelta
           testId="kpi-dataTransferred"
+          label={t('kpi.dataTransferred')}
+          value={firstLoad ? '…' : formatBytes(kpis?.dataTransferred.value ?? 0)}
+          deltaPct={kpis?.dataTransferred.deltaPct ?? undefined}
+          spark={kpis?.dataTransferred.spark}
         />
-        <KpiCard
-          label={t('kpi.retransmissions')}
-          value={loading && !data ? '…' : formatCount(kpis?.retransmissions ?? 0)}
-          accent="lav"
+        <StatDelta
           testId="kpi-retransmissions"
+          label={t('kpi.retransmissions')}
+          value={firstLoad ? '…' : formatCount(kpis?.retransmissions.value ?? 0)}
+          deltaPct={kpis?.retransmissions.deltaPct ?? undefined}
+          spark={kpis?.retransmissions.spark}
+          status={statusFor(kpis?.retransmissions.value, RETRANS_WARN, RETRANS_DANGER)}
         />
-        <KpiCard
-          label={t('kpi.timeouts')}
-          value={loading && !data ? '…' : formatCount(kpis?.timeouts ?? 0)}
-          accent="blue"
+        <StatDelta
           testId="kpi-timeouts"
+          label={t('kpi.timeouts')}
+          value={firstLoad ? '…' : formatCount(kpis?.timeouts.value ?? 0)}
+          deltaPct={kpis?.timeouts.deltaPct ?? undefined}
+          spark={kpis?.timeouts.spark}
+          status={statusFor(kpis?.timeouts.value, TIMEOUT_WARN, TIMEOUT_DANGER)}
         />
-        <KpiCard
-          label={t('kpi.rtt')}
-          value={loading && !data ? '…' : kpis?.rttAvg != null ? formatMicros(kpis.rttAvg) : '—'}
-          accent="lav"
+        {/* RTT is often sparse — value stays "—" until a sample exists. */}
+        <StatDelta
           testId="kpi-rtt"
+          label={t('kpi.rtt')}
+          value={firstLoad ? '…' : kpis?.rtt.value != null ? formatMicros(kpis.rtt.value) : '—'}
+          unit={rttUnit}
+          deltaPct={kpis?.rtt.deltaPct ?? undefined}
+          spark={kpis?.rtt.spark}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card title={t('overview.traffic')} className="xl:col-span-2">
-          <TimeSeries series={traffic} valueFormatter={formatBytes} />
-        </Card>
-        <div className="flex flex-col gap-4">
+      <HoverSyncProvider>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Widget
+            title={t('overview.traffic')}
+            className="md:col-span-2"
+            testId="widget-overview-traffic"
+            actions={
+              <a
+                href={cloudWatchMetricsUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs font-medium text-ink/60 hover:text-ink dark:text-white/60 dark:hover:text-white"
+              >
+                {t('monitors.viewInCloudWatch')}
+                <ExternalLink size={12} strokeWidth={1.5} aria-hidden />
+              </a>
+            }
+          >
+            {firstLoad ? bodyNotice(t('common.loading')) : <SyncedTrafficChart series={traffic} />}
+          </Widget>
+
+          <Widget
+            title={t('overview.topTalkers')}
+            testId="widget-overview-talkers"
+            actions={insightsLink('cost')}
+          >
+            {firstLoad ? (
+              bodyNotice(t('common.loading'))
+            ) : (
+              <Toplist rows={talkerRows} valueFormatter={formatUsd} testId="toplist-overview-talkers" />
+            )}
+          </Widget>
+
+          <Widget
+            title={t('insights.reliability.breaches')}
+            testId="widget-overview-breaches"
+            actions={insightsLink('reliability')}
+          >
+            <StatDelta
+              testId="stat-overview-breaches"
+              label={t('overview.breachesWindow')}
+              value={firstLoad ? '…' : formatCount(breachCount)}
+              status={data ? statusFor(breachCount, 1, BREACH_DANGER) : undefined}
+            />
+          </Widget>
+
           <CollectionStatusCard status={data?.status ?? null} />
+
           <Card
             title={t('overview.coverage')}
             action={
@@ -153,7 +268,7 @@ export default function OverviewPage() {
             )}
           </Card>
         </div>
-      </div>
+      </HoverSyncProvider>
     </div>
   );
 }

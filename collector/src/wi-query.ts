@@ -2,17 +2,25 @@ import { NetworkFlowMonitorClient, ListScopesCommand,
   StartQueryWorkloadInsightsTopContributorsCommand,
   GetQueryStatusWorkloadInsightsTopContributorsCommand,
   GetQueryResultsWorkloadInsightsTopContributorsCommand,
-  StopQueryWorkloadInsightsTopContributorsCommand } from '@aws-sdk/client-networkflowmonitor';
+  StopQueryWorkloadInsightsTopContributorsCommand,
+  type DestinationCategory } from '@aws-sdk/client-networkflowmonitor';
+import type { DestCategory } from './types.js';
 
 export type WiMetricName = 'DATA_TRANSFERRED' | 'RETRANSMISSIONS' | 'TIMEOUTS';
-export type WiCategory = 'INTRA_AZ' | 'INTER_AZ' | 'INTER_VPC';
+// WI queries cover every NFM destination category (all 11, verified against the live API).
+export type WiCategory = DestCategory;
 
 export interface WiRow { accountId?: string; localSubnetId?: string; localAz?: string;
   localVpcId?: string; remoteIdentifier?: string; value?: number; }
 export interface WiResult { metric: string; category: string; rows: WiRow[]; }
 
 const METRICS: WiMetricName[] = ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS'];
-const CATEGORIES: WiCategory[] = ['INTRA_AZ', 'INTER_AZ', 'INTER_VPC'];
+// All 11 categories every cycle: 3 metrics × 11 = 33 query lifecycles at concurrency 5
+// (~7 waves × ~3-7s typical ≈ 25-50s) — comfortably inside the 270s Lambda timeout
+// alongside the flows matrix, so no rotation/merge is needed.
+const CATEGORIES: WiCategory[] = ['INTRA_AZ', 'INTER_AZ', 'INTER_VPC', 'INTER_REGION',
+  'AMAZON_S3', 'AMAZON_DYNAMODB', 'UNCLASSIFIED',
+  'INTERNET', 'TRANSIT_GATEWAY', 'LOCAL_ZONE', 'AWS_SERVICE'];
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -36,7 +44,10 @@ async function runOne(client: NetworkFlowMonitorClient, scopeId: string, metric:
   try {
     const { queryId } = await withRetry(() => client.send(
       new StartQueryWorkloadInsightsTopContributorsCommand({ scopeId, metricName: metric,
-        destinationCategory: category, startTime: window.startTime, endTime: window.endTime,
+        // Cast: the bundled SDK's DestinationCategory enum is stale (7 values); the live API
+        // accepts all 11 (incl. INTERNET/AWS_SERVICE/TRANSIT_GATEWAY/LOCAL_ZONE, verified 2026-07).
+        destinationCategory: category as DestinationCategory,
+        startTime: window.startTime, endTime: window.endTime,
         limit: 100 })), base);
     for (let i = 0; i < 30; i++) {
       const { status } = await withRetry(() => client.send(

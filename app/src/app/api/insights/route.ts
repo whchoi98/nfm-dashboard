@@ -12,6 +12,11 @@ const emptyByCategory = (): Record<DestCategory, CategoryTotals> => ({
   AMAZON_S3: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
   AMAZON_DYNAMODB: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
   INTER_REGION: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  // WI-only categories — flows never emit these; they stay 0 in the topology fallback.
+  INTERNET: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  AWS_SERVICE: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  TRANSIT_GATEWAY: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
+  LOCAL_ZONE: { dataTransferred: 0, retransmissions: 0, timeouts: 0 },
 });
 const METRIC_KEY: Record<string, keyof CategoryTotals> = {
   DATA_TRANSFERRED: 'dataTransferred', RETRANSMISSIONS: 'retransmissions', TIMEOUTS: 'timeouts',

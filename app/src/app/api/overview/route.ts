@@ -1,30 +1,31 @@
-import { getTopology, getCollectionStatus, getCoverage } from '@/lib/ddb';
+// /api/overview — landing-page payload: fleet-wide §15.4 KPIs (value + half-
+// window deltaPct + per-bucket sparkline) from CloudWatch NFM metrics, top
+// cost talkers and reliability breach count from ONE shared flows window,
+// plus the existing per-monitor series / collection status / coverage.
+import { getCollectionStatus, getCoverage, getFlowsWindow } from '@/lib/ddb';
 import { getNfmMetrics, type NfmSeries } from '@/lib/cw-metrics';
+import { buildOverviewKpis } from '@/lib/overview-metrics';
+import { costLens } from '@/lib/analytics/cost';
+import { reliabilityLens } from '@/lib/analytics/reliability';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const [topology, status, coverage, series] = await Promise.all([
-      getTopology(), getCollectionStatus(), getCoverage(),
+    const [status, coverage, series, flows] = await Promise.all([
+      getCollectionStatus(),
+      getCoverage(),
       getNfmMetrics(60).catch(() => ({} as Record<string, NfmSeries>)),
+      getFlowsWindow(12), // 10s-cached; feeds BOTH lenses below
     ]);
-    const kpis = { dataTransferred: 0, retransmissions: 0, timeouts: 0,
-      rttAvg: null as number | null, nhi: null as number | null };
-    let rttSum = 0, rttCount = 0;
-    for (const e of topology?.edges ?? []) {
-      kpis.dataTransferred += e.metrics.DATA_TRANSFERRED ?? 0;
-      kpis.retransmissions += e.metrics.RETRANSMISSIONS ?? 0;
-      kpis.timeouts += e.metrics.TIMEOUTS ?? 0;
-      if (e.metrics.ROUND_TRIP_TIME != null) { rttSum += e.metrics.ROUND_TRIP_TIME; rttCount++; }
-    }
-    if (rttCount) kpis.rttAvg = rttSum / rttCount;
-    // Network Health Indicator: worst latest HealthIndicator value (0 = healthy) across monitors
-    const latest = Object.values(series)
-      .filter(s => s.metric === 'HealthIndicator' && s.values.length > 0)
-      .map(s => s.values[s.values.length - 1]);
-    if (latest.length) kpis.nhi = Math.max(...latest);
-    return Response.json({ kpis, series, status, coverage });
+    const { kpis, rttP50, rttP95, nhi } = buildOverviewKpis(series);
+    const topTalkers = costLens(flows)
+      .top.slice(0, 6)
+      .map(({ label, usd, bytes }) => ({ label, usd, bytes }));
+    const breachCount = reliabilityLens(flows).breaches.length;
+    return Response.json({
+      kpis, rttP50, rttP95, nhi, topTalkers, breachCount, series, status, coverage,
+    });
   } catch (e) {
     console.error('[api/overview]', e);
     return Response.json({ error: 'internal error' }, { status: 500 });

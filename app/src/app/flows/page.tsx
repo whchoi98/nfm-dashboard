@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { FlowEdge } from '@/lib/types';
+import type { CategoryStreamPoint } from '@/lib/analytics/cost';
+import { flowAggregates } from '@/lib/flow-aggregates';
+import { CATEGORY_ORDER } from '@/lib/chart-tokens';
+import { formatBytes } from '@/lib/format';
 import FlowTable from '@/components/FlowTable';
+import Widget from '@/components/analytics/Widget';
+import Toplist from '@/components/analytics/Toplist';
+import CategoryDonut from '@/components/charts/CategoryDonut';
+import StreamGraph from '@/components/charts/StreamGraph';
+import { LensState } from '@/app/insights/tabs/shared';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
 
 /** n most-recent 5-minute grid buckets, newest first (mirrors collector formula). */
@@ -80,6 +89,17 @@ export default function FlowsPage() {
 
   const podMode = !!(applied.ns && applied.pod);
 
+  // Aggregate strip inputs: pure client-side rollups over the CURRENT result
+  // set (top talkers + category mix), plus the server-cached cost-lens stream
+  // for the window-wide activity chart.
+  const aggregates = useMemo(() => flowAggregates(flows), [flows]);
+  const activity = usePolling<{ stream: CategoryStreamPoint[] }>('/api/analytics/cost?buckets=12');
+  const stream = useMemo(() => activity.data?.stream ?? [], [activity.data]);
+  const streamKeys = useMemo(
+    () => CATEGORY_ORDER.filter((c) => stream.some((p) => (p.values[c] ?? 0) > 0)),
+    [stream],
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.flows')}</h1>
@@ -140,6 +160,24 @@ export default function FlowsPage() {
           </p>
         ) : null}
       </Card>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Widget title={t('flows.topTalkers')} testId="widget-flows-top-talkers">
+          <Toplist
+            rows={aggregates.topTalkers}
+            valueFormatter={formatBytes}
+            testId="toplist-flows-talkers"
+          />
+        </Widget>
+        <Widget title={t('flows.categoryMix')} testId="widget-flows-category-mix">
+          <CategoryDonut values={aggregates.byCategory} valueFormatter={formatBytes} />
+        </Widget>
+        <Widget title={t('flows.activity')} testId="widget-flows-activity">
+          <LensState loading={activity.loading && !activity.data} error={activity.error}>
+            <StreamGraph data={stream} keys={streamKeys} valueFormatter={formatBytes} height={192} />
+          </LensState>
+        </Widget>
+      </div>
 
       <Card
         title={t('flows.tableTitle')}
