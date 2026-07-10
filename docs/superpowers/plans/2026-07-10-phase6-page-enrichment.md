@@ -150,3 +150,38 @@ interface OverviewData {
 - [ ] Footer removed (README untouched, i18n parity kept) + DNS skeleton — T5.
 - [ ] e2e testId contract intact; i18n ko+en parity; tokens-only theme-aware; mobile-safe; RTT empty states.
 - [ ] Full suite + build green; final review clean; deployed from main + prod smoke 2× — T6.
+
+---
+
+## ADDENDUM (2026-07-10, user directives): Workload Insights page, monitor-detail enrichment, version label
+
+Two user requests after screenshot analysis (screenshots/NFM_*.png, nfm_monitor_*.png, *workload_insight*.png = AWS NFM Workload-Insights + Monitor-detail console views). Decisions: version **v1.0.0**; Workload Insights = **new /workload menu page**.
+
+### Task 5 (EXTENDED) — footer removal + version label + CHANGELOG + DNS skeleton
+- In addition to removing `FooterAttribution` (AppShell): create `CHANGELOG.md` (Keep-a-Changelog format) with top entry `## [1.0.0] - 2026-07-10` summarizing the shipped dashboard (Phases 1-5). Create `app/src/lib/version.ts` `export const APP_VERSION = '1.0.0'` (single source; keep in sync with CHANGELOG top + app/package.json version→1.0.0). Add a version label at the **Sidebar bottom** (mt-auto) under the "NFM Dashboard" brand: `NFM Dashboard v{APP_VERSION}` (small, muted, token). Mobile: also surface in the MobileTabs "more"/settings area or the Topbar if sensible (optional). Keep README attribution (do not touch). Remove `footer.attribution` from ko+en (parity).
+
+### Task 7 — Workload Insights page (/workload)
+**Files:** Create `app/src/app/workload/page.tsx`, `app/src/app/api/workload/route.ts` (or reuse an existing WI reader), `app/src/components/workload/*` as needed; add nav item; i18n.
+**Data:** `WI#latest/all` (WiResult { metric; category; rows: WiRow[] }; WiRow { accountId?, localSubnetId?, localAz?, localVpcId?, remoteIdentifier?, value? }) via a ddb reader (getWorkloadInsights — check lib/ddb.ts; add if missing). Per-AZ/overall timeseries from getNfmMetrics.
+**UI (AWS Workload-Insights parity):** a **flow-type/category selector** (our 7 DestCategory + 'all'); per-metric sections (DATA_TRANSFERRED, RETRANSMISSIONS, TIMEOUTS, ROUND_TRIP_TIME) each = a `TimeSeries` (per-AZ or overall) + a **Top Contributors table** (columns: subnet / AZ / VPC / local region / account / remote resource / category / value; filter box + pagination via existing table patterns). Reuse FlowTable-style table or a compact table; empty-states (RTT sparse). testids `workload-page`, `workload-metric-<name>`, `workload-contributors`. nav `nav.workload` (icon e.g. Layers/Boxes). t() ko+en. Deep-link "상위 기여자" rows are informational (no drilldown required v1).
+
+### Task 8 — /monitors/[name] detail enrichment
+**Files:** Modify `app/src/app/monitors/[name]/page.tsx` (+ a small NhiBand component if needed).
+- **NHI striped band**: render the monitor's NHI timeline as a horizontal **hatched band** (정상=accentMint hatch / 저하됨=chartViolet-or-danger hatch) across the window (AWS style), replacing/augmenting the current NHI viz. Legend 정상/저하됨.
+- **Per-chart CloudWatch links**: on each metric chart (data transferred, retransmissions/timeouts, RTT) add "지표에서 보기 / View in metrics" + "Create an alarm" links (reuse `lib/cloudwatch-url.ts` from Task 1; alarm link = CloudWatch create-alarm console URL for that NFM metric/monitor — best-effort). t() ko+en.
+- Keep existing tiles + historical explorer + HopPath (already matches AWS "Network path" stepper).
+
+### Revised order: T1→T2→T3→T4→T5(extended)→T7→T8→T6(final verify+review+deploy LAST).
+
+---
+
+## Task 9 (user directive: include all NFM flow categories) — WI collector category expansion + DestCategory widening + collector redeploy
+
+**Verified via live API:** StartQueryWorkloadInsightsTopContributors `destinationCategory` accepts 11 values [INTRA_AZ, INTER_AZ, INTER_VPC, INTER_REGION, AMAZON_S3, AMAZON_DYNAMODB, UNCLASSIFIED, INTERNET, AWS_SERVICE, TRANSIT_GATEWAY, LOCAL_ZONE]. Bundled SDK enum is stale (7) — the wire accepts the strings. Collector currently queries only CORE 3.
+
+**Files:** collector/src/{wi-query,categories,types}.ts (+tests), app/src/lib/types.ts (DestCategory), app/src/lib/chart-tokens.ts (CATEGORY_COLORS + CATEGORY_ORDER), app/src/lib/i18n/translations/{ko,en}.json (category.*), any exhaustive Record<DestCategory,...>. Deploy: rebuild collector + `cdk deploy NfmDash-Data` (SUBJECT TO USER AUTHORIZATION).
+- Widen `DestCategory` 7→11 (both collector + app copies stay identical) adding INTERNET, AWS_SERVICE, TRANSIT_GATEWAY, LOCAL_ZONE.
+- wi-query.ts: widen `WiCategory`/`CATEGORIES` to all 11; cast the SDK command's `destinationCategory` (SDK type stale). 3 metrics × 11 = 33 async query lifecycles/cycle — assess the existing concurrency limiter + Lambda timeout: if it fits, query all 11 every cycle (freshest); ELSE rotate (CORE every cycle + rest every Nth) AND merge-preserve into WI#latest (store per metric×category so a rotation cycle does not drop previously-collected categories — change handler storage from overwrite to merge if rotating).
+- chart-tokens: add 4 colors (distinct, CVD-aware) + append to CATEGORY_ORDER. i18n: category.INTERNET='인터넷'/'Internet', category.AWS_SERVICE='AWS Service', category.TRANSIT_GATEWAY='Transit Gateway', category.LOCAL_ZONE='Local Zone' (ko+en). Fix any exhaustive DestCategory switch/Record (insights route, analytics category maps).
+- Tests: wi-query collects 11 categories (or rotates correctly + merges); app tsc/build compiles with widened union. Collector `npm -w collector run build` compiles (SDK-cast ok).
+- This lands BEFORE the final app deploy so WI#latest accumulates the 11 categories over cycles; T7 /workload then shows them.
