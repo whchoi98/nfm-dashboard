@@ -51,14 +51,96 @@ it('dispatches status and error events', async () => {
   expect(onError).toHaveBeenCalledWith({ message: 'boom' });
 });
 
-it('reports non-2xx responses through onError', async () => {
+it('reports non-2xx responses through onError as `HTTP <status>`', async () => {
   vi.stubGlobal('fetch', vi.fn(async () =>
-    ({ ok: false, status: 401, body: null }) as unknown as Response,
+    ({ ok: false, status: 500, body: null }) as unknown as Response,
   ));
   const onError = vi.fn();
   await sendSse('/api/ai', {}, { onError }).done;
   expect(onError).toHaveBeenCalledTimes(1);
-  expect(onError.mock.calls[0][0].message).toContain('401');
+  expect(onError).toHaveBeenCalledWith({ message: 'HTTP 500' });
+});
+
+it('maps 401 to a stable "unauthorized" message without reading the body as a stream', async () => {
+  // middleware returns a JSON body on 401 — the client must NOT try to
+  // read it as an SSE stream.
+  const getReader = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    ({ ok: false, status: 401, body: { getReader } }) as unknown as Response,
+  ));
+  const onError = vi.fn();
+  const onChunk = vi.fn();
+  await sendSse('/api/ai', {}, { onError, onChunk }).done;
+  expect(onError).toHaveBeenCalledTimes(1);
+  expect(onError).toHaveBeenCalledWith({ message: 'unauthorized' });
+  expect(getReader).not.toHaveBeenCalled();
+  expect(onChunk).not.toHaveBeenCalled();
+});
+
+it('parses a followups frame and calls onFollowups, in stream order', async () => {
+  const stream =
+    'event: status\ndata: {"stage":"thinking"}\n\n' +
+    'event: chunk\ndata: {"delta":"a"}\n\n' +
+    'event: chunk\ndata: {"delta":"b"}\n\n' +
+    'event: followups\ndata: {"questions":["a","b","c"]}\n\n' +
+    'event: done\ndata: {"content":"ab","elapsedMs":5,"model":"m"}\n\n';
+  // Split mid-way through the followups frame: it must survive buffering
+  // across reads like every other frame type.
+  const cut = stream.indexOf('"questions"') + 14;
+  vi.stubGlobal('fetch', vi.fn(async () => sseResponse([stream.slice(0, cut), stream.slice(cut)])));
+
+  const order: string[] = [];
+  const onStatus = vi.fn(() => order.push('status'));
+  const onChunk = vi.fn(() => order.push('chunk'));
+  const onFollowups = vi.fn(() => order.push('followups'));
+  const onDone = vi.fn(() => order.push('done'));
+  const onError = vi.fn();
+  await sendSse('/api/ai', {}, { onStatus, onChunk, onFollowups, onDone, onError }).done;
+
+  expect(order).toEqual(['status', 'chunk', 'chunk', 'followups', 'done']);
+  expect(onFollowups).toHaveBeenCalledTimes(1);
+  expect(onFollowups).toHaveBeenCalledWith(['a', 'b', 'c']);
+  expect(onError).not.toHaveBeenCalled();
+});
+
+it('skips followups frames with missing or non-array questions and keeps streaming', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    sseResponse([
+      'event: followups\ndata: {"nope":true}\n\n',
+      'event: followups\ndata: {"questions":"not-an-array"}\n\n',
+      'event: done\ndata: {"content":"x","elapsedMs":1,"model":"m"}\n\n',
+    ]),
+  ));
+  const onFollowups = vi.fn();
+  const onDone = vi.fn();
+  const onError = vi.fn();
+  await sendSse('/api/ai', {}, { onFollowups, onDone, onError }).done;
+  expect(onFollowups).not.toHaveBeenCalled();
+  expect(onDone).toHaveBeenCalledTimes(1);
+  expect(onError).not.toHaveBeenCalled();
+});
+
+it('abort() mid-stream stops dispatch of frames already buffered', async () => {
+  // All frames arrive in a SINGLE read; the first handler call aborts.
+  // The remaining frames sitting in the buffer must NOT be dispatched.
+  vi.stubGlobal('fetch', vi.fn(async () =>
+    sseResponse([
+      'event: chunk\ndata: {"delta":"a"}\n\n' +
+      'event: chunk\ndata: {"delta":"b"}\n\n' +
+      'event: followups\ndata: {"questions":["q"]}\n\n' +
+      'event: done\ndata: {"content":"ab","elapsedMs":5,"model":"m"}\n\n',
+    ]),
+  ));
+  const onChunk = vi.fn(() => req.abort());
+  const onFollowups = vi.fn();
+  const onDone = vi.fn();
+  const onError = vi.fn();
+  const req = sendSse('/api/ai', {}, { onChunk, onFollowups, onDone, onError });
+  await req.done;
+  expect(onChunk).toHaveBeenCalledTimes(1); // second buffered chunk suppressed
+  expect(onFollowups).not.toHaveBeenCalled();
+  expect(onDone).not.toHaveBeenCalled();
+  expect(onError).not.toHaveBeenCalled();
 });
 
 it('releases the reader when a handler throws', async () => {

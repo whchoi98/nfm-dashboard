@@ -5,7 +5,7 @@ import { Loader2, Play, RefreshCw } from 'lucide-react';
 import Markdown from '@/components/Markdown';
 import { Card } from '@/components/ui/Controls';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { sendSse, type SseDone, type SseRequest } from '@/lib/use-sse';
+import { sendSse, sseErrorKey, type SseDone, type SseRequest } from '@/lib/use-sse';
 
 // AI network diagnosis: streams /api/diagnose (topology + anomaly context →
 // sonnet) as markdown; Regenerate re-runs with a different analytical angle.
@@ -33,7 +33,9 @@ export default function DiagnosePage() {
         setRunning(false);
       },
       onError: (e) => {
-        setError(e.message);
+        // sendSse surfaces stable tokens ('unauthorized', 'HTTP <n>') —
+        // localize them here, same mapping as ChatPanel.
+        setError(t(sseErrorKey(e.message)));
         setRunning(false);
       },
     });
@@ -81,7 +83,7 @@ export default function DiagnosePage() {
 
       {error && (
         <Card className="text-sm text-red-600 dark:text-red-400">
-          {t('common.error')}: {error}
+          {error}
         </Card>
       )}
 

@@ -8,3 +8,251 @@
 body {
   font-family: var(--font-sans);
 }
+
+/* ---------------------------------------------------------------------------
+ * .chat-markdown — shared renderer styles for AI answers
+ * (components/Markdown.tsx: ChatPanel bubbles + /diagnose output).
+ *
+ * Colors are local CSS variables derived from the SnowUI token set
+ * (tailwind.config.ts / lib/chart-tokens.ts: ink #1C1C1C, surface #F7F9FB,
+ * chartViolet #95A4FC, chartBlue #A8C5DA, chartSky #B1E3FF, accentMint
+ * #BAEDBD, chartAmber #FFE5B4, chartRose #FFD6E0, chartTeal #A1E3CB).
+ * Dark mode follows the app's class strategy (`dark` on <html>, toggled in
+ * Topbar): light values sit on .chat-markdown, overrides on .dark ….
+ * Light-mode hljs colors are darkened same-hue variants of the pastel chart
+ * tokens (the pastels themselves lack contrast on white); dark mode uses the
+ * tokens as-is. No external highlight.js stylesheet (CSP) — the token theme
+ * below is the whole theme.
+ * ------------------------------------------------------------------------- */
+.chat-markdown {
+  /* text + chrome */
+  --md-fg: #1c1c1c; /* ink */
+  --md-muted: rgb(28 28 28 / 0.62); /* ink/60 */
+  --md-border: rgb(28 28 28 / 0.1); /* ink/10 */
+  --md-border-soft: rgb(28 28 28 / 0.05); /* ink/5 */
+  --md-code-bg: rgb(28 28 28 / 0.06); /* inline code chip */
+  --md-pre-bg: rgb(28 28 28 / 0.04); /* code block card */
+  --md-th-bg: #f7f9fb; /* surface */
+  --md-link: hsl(232 65% 55%); /* chartViolet, darkened for white bg */
+  --md-quote: hsl(232 65% 55%); /* blockquote bar, same family */
+  /* hljs token theme (light): darkened same-hue variants of chart tokens */
+  --md-hl-fg: #1c1c1c; /* ink */
+  --md-hl-keyword: hsl(232 60% 48%); /* chartViolet family */
+  --md-hl-string: hsl(124 40% 32%); /* accentMint family */
+  --md-hl-comment: rgb(28 28 28 / 0.48); /* ink, muted */
+  --md-hl-number: hsl(33 75% 34%); /* chartAmber family */
+  --md-hl-title: hsl(205 60% 36%); /* chartBlue family */
+  --md-hl-attr: hsl(202 70% 34%); /* chartSky family */
+  --md-hl-builtin: hsl(158 50% 28%); /* chartTeal family */
+  --md-hl-symbol: hsl(345 55% 42%); /* chartRose family */
+
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+.dark .chat-markdown {
+  --md-fg: rgb(255 255 255 / 0.92);
+  --md-muted: rgb(255 255 255 / 0.62);
+  --md-border: rgb(255 255 255 / 0.15);
+  --md-border-soft: rgb(255 255 255 / 0.1);
+  --md-code-bg: rgb(255 255 255 / 0.12);
+  --md-pre-bg: rgb(255 255 255 / 0.06);
+  --md-th-bg: rgb(255 255 255 / 0.06);
+  --md-link: #95a4fc; /* chartViolet */
+  --md-quote: #95a4fc;
+  /* hljs token theme (dark): chart tokens as-is (pastels read on dark) */
+  --md-hl-fg: rgb(255 255 255 / 0.88);
+  --md-hl-keyword: #95a4fc; /* chartViolet */
+  --md-hl-string: #baedbd; /* accentMint */
+  --md-hl-comment: rgb(255 255 255 / 0.45);
+  --md-hl-number: #ffe5b4; /* chartAmber */
+  --md-hl-title: #b1e3ff; /* chartSky */
+  --md-hl-attr: #a8c5da; /* chartBlue */
+  --md-hl-builtin: #a1e3cb; /* chartTeal */
+  --md-hl-symbol: #ffd6e0; /* chartRose */
+}
+
+/* Block rhythm: flow spacing on direct children, zeroed element margins. */
+.chat-markdown > * + * {
+  margin-top: 0.55rem;
+}
+.chat-markdown p {
+  margin: 0;
+}
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 0.9rem;
+  margin-bottom: 0.3rem;
+  color: var(--md-fg);
+}
+.chat-markdown > :first-child {
+  margin-top: 0;
+}
+.chat-markdown h1 {
+  font-size: 1.05rem;
+}
+.chat-markdown h2 {
+  font-size: 1rem;
+}
+.chat-markdown h3 {
+  font-size: 0.95rem;
+}
+.chat-markdown strong {
+  font-weight: 600;
+  color: var(--md-fg);
+}
+.chat-markdown em {
+  font-style: italic;
+}
+.chat-markdown ul,
+.chat-markdown ol {
+  padding-left: 1.25rem;
+  margin: 0.4rem 0;
+}
+.chat-markdown ul {
+  list-style: disc;
+}
+.chat-markdown ol {
+  list-style: decimal;
+}
+.chat-markdown li {
+  margin: 0.15rem 0;
+}
+.chat-markdown li > p {
+  margin: 0;
+}
+.chat-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.825em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  background-color: var(--md-code-bg);
+}
+.chat-markdown pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background-color: var(--md-pre-bg);
+  border: 1px solid var(--md-border-soft);
+  overflow-x: auto;
+  white-space: pre;
+}
+.chat-markdown pre code {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.chat-markdown blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--md-quote);
+  color: var(--md-muted);
+}
+.chat-markdown a {
+  color: var(--md-link);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* Wide GFM tables scroll inside the bubble instead of stretching it. */
+.chat-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  margin: 0.5rem 0;
+}
+.chat-markdown th,
+.chat-markdown td {
+  border: 1px solid var(--md-border);
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+.chat-markdown th {
+  background-color: var(--md-th-bg);
+  font-weight: 600;
+  color: var(--md-muted);
+}
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid var(--md-border-soft);
+  margin: 0.75rem 0;
+}
+
+/* highlight.js token theme (rehype-highlight output), both modes via vars. */
+.chat-markdown .hljs {
+  color: var(--md-hl-fg);
+  background: transparent;
+}
+.chat-markdown .hljs-keyword,
+.chat-markdown .hljs-selector-tag,
+.chat-markdown .hljs-template-tag,
+.chat-markdown .hljs-doctag,
+.chat-markdown .hljs-name,
+.chat-markdown .hljs-type {
+  color: var(--md-hl-keyword);
+}
+.chat-markdown .hljs-string,
+.chat-markdown .hljs-regexp,
+.chat-markdown .hljs-addition,
+.chat-markdown .hljs-meta .hljs-string {
+  color: var(--md-hl-string);
+}
+.chat-markdown .hljs-comment,
+.chat-markdown .hljs-quote {
+  color: var(--md-hl-comment);
+  font-style: italic;
+}
+.chat-markdown .hljs-number,
+.chat-markdown .hljs-literal {
+  color: var(--md-hl-number);
+}
+.chat-markdown .hljs-title,
+.chat-markdown .hljs-title.class_,
+.chat-markdown .hljs-title.function_,
+.chat-markdown .hljs-section,
+.chat-markdown .hljs-selector-id,
+.chat-markdown .hljs-selector-class {
+  color: var(--md-hl-title);
+}
+.chat-markdown .hljs-attr,
+.chat-markdown .hljs-attribute,
+.chat-markdown .hljs-variable,
+.chat-markdown .hljs-template-variable,
+.chat-markdown .hljs-property,
+.chat-markdown .hljs-params {
+  color: var(--md-hl-attr);
+}
+.chat-markdown .hljs-built_in,
+.chat-markdown .hljs-builtin-name,
+.chat-markdown .hljs-meta,
+.chat-markdown .hljs-link {
+  color: var(--md-hl-builtin);
+}
+.chat-markdown .hljs-symbol,
+.chat-markdown .hljs-bullet,
+.chat-markdown .hljs-deletion,
+.chat-markdown .hljs-subst {
+  color: var(--md-hl-symbol);
+}
+.chat-markdown .hljs-emphasis {
+  font-style: italic;
+}
+.chat-markdown .hljs-strong {
+  font-weight: 600;
+}

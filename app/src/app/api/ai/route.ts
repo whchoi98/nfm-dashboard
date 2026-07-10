@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import type { ContentBlock, Message, Tool, ToolUseBlock } from '@aws-sdk/client-bedrock-runtime';
 import { sendConverseStream, MODEL_ID } from '@/lib/bedrock';
 import { listTools, callTool, toBedrockTools } from '@/lib/mcp-client';
+import { generateFollowups } from '@/lib/followups';
 import { sseEvent } from '@/lib/sse';
 import { getParam } from '@/lib/ssm'; // /nfm-dashboard/gateway-url cached lookup
 
@@ -17,10 +18,14 @@ export async function POST(req: NextRequest) {
   } catch {
     return Response.json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const { messages, lang = 'ko' } = body;
+  const { messages } = body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return Response.json({ error: 'messages[] required' }, { status: 400 });
   }
+  // lang: explicit body field, else Accept-Language, else 'ko'.
+  const lang: 'ko' | 'en' = body.lang === 'en' || body.lang === 'ko'
+    ? body.lang
+    : (req.headers.get('accept-language') ?? '').toLowerCase().startsWith('en') ? 'en' : 'ko';
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -126,7 +131,19 @@ export async function POST(req: NextRequest) {
           convo.push({ role: 'assistant', content: assistantContent });
           convo.push({ role: 'user', content: results });
         }
-        send('done', { content: full, usedTools, elapsedMs: Date.now() - t0, model: modelUsed });
+        // Follow-up suggestions: only for a non-empty answer, emitted BEFORE
+        // done. generateFollowups never throws (any failure → []); the
+        // keepalive stays running through this call.
+        if (full.trim()) {
+          const lastUserMessage =
+            [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+          const fu = await generateFollowups(full, lastUserMessage, lang);
+          if (fu.length) send('followups', { questions: fu });
+        }
+        // usedTools answers "WHICH tools were used" — a tool called twice must
+        // appear once (duplicates also broke React list keys client-side).
+        send('done', { content: full, usedTools: [...new Set(usedTools)],
+          elapsedMs: Date.now() - t0, model: modelUsed });
       } catch (e) {
         console.error('[api/ai]', e);
         send('error', { message: (e as Error).message });
