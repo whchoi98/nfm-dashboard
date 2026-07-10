@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { sendConverseStream, MODEL_ID } from '@/lib/bedrock';
 import { getTopology, getCollectionStatus } from '@/lib/ddb';
 import { buildDiagnoseContext, topAnomalies } from '@/lib/diagnose-context';
+import { generateFollowups } from '@/lib/followups';
 import { sseEvent } from '@/lib/sse';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,10 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'invalid JSON body' }, { status: 400 });
   }
   const { focus, regenerate = false } = body;
-  const lang = body.lang === 'en' ? 'en' : 'ko';
+  // lang: explicit body field, else Accept-Language, else 'ko'.
+  const lang: 'ko' | 'en' = body.lang === 'en' || body.lang === 'ko'
+    ? body.lang
+    : (req.headers.get('accept-language') ?? '').toLowerCase().startsWith('en') ? 'en' : 'ko';
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -67,6 +71,15 @@ export async function POST(req: NextRequest) {
             full += ev.contentBlockDelta.delta.text;
             send('chunk', { delta: ev.contentBlockDelta.delta.text });
           }
+        }
+        // Follow-up suggestions: only for a non-empty diagnosis, emitted BEFORE
+        // done. generateFollowups never throws (any failure → []); the
+        // keepalive stays running through this call.
+        if (full.trim()) {
+          const lastUser = focus
+            || (lang === 'ko' ? '네트워크 상태를 진단해 주세요' : 'Diagnose the network health');
+          const fu = await generateFollowups(full, lastUser, lang);
+          if (fu.length) send('followups', { questions: fu });
         }
         send('done', { content: full, elapsedMs: Date.now() - t0, model: modelUsed, regenerate });
       } catch (e) {

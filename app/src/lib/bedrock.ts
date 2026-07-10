@@ -1,6 +1,9 @@
 import {
   BedrockRuntimeClient,
+  ConverseCommand,
   ConverseStreamCommand,
+  type ConverseCommandInput,
+  type ConverseCommandOutput,
   type ConverseStreamCommandInput,
   type ConverseStreamCommandOutput,
 } from '@aws-sdk/client-bedrock-runtime';
@@ -40,6 +43,29 @@ export async function sendConverseStream(
       console.warn(`[bedrock] model ${primary} unavailable (${(e as Error).message}) — falling back to ${FALLBACK_MODEL_ID}`);
       const response = await bedrock.send(
         new ConverseStreamCommand({ ...params, modelId: FALLBACK_MODEL_ID }),
+      );
+      return { response, modelId: FALLBACK_MODEL_ID };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Non-streaming Converse with the same primary→fallback model behavior as
+ * sendConverseStream. For short auxiliary generations (e.g. follow-up questions).
+ */
+export async function converseOnce(
+  params: Omit<ConverseCommandInput, 'modelId'> & { modelId?: string },
+): Promise<{ response: ConverseCommandOutput; modelId: string }> {
+  const primary = params.modelId ?? MODEL_ID;
+  try {
+    const response = await bedrock.send(new ConverseCommand({ ...params, modelId: primary }));
+    return { response, modelId: primary };
+  } catch (e) {
+    if (primary !== FALLBACK_MODEL_ID && isModelUnavailable(e)) {
+      console.warn(`[bedrock] model ${primary} unavailable (${(e as Error).message}) — falling back to ${FALLBACK_MODEL_ID}`);
+      const response = await bedrock.send(
+        new ConverseCommand({ ...params, modelId: FALLBACK_MODEL_ID }),
       );
       return { response, modelId: FALLBACK_MODEL_ID };
     }
