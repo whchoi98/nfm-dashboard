@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -30,15 +31,23 @@ const timeLabel = (iso: string) =>
 /**
  * Multi-series line chart on a shared time axis. Colors come from the fixed
  * token order; a legend is rendered for >= 2 series (dataviz rule).
+ * The HoverSync props are additive and optional: `onActiveTimeChange` fires
+ * the hovered point's timestamp key (null on leave) so sibling widgets can
+ * sync, and `activeT` draws a crosshair when it matches one of this chart's
+ * timestamps. Callers that pass neither (overview page) are unchanged.
  */
 export default function TimeSeries({
   series,
   valueFormatter = (n: number) => String(n),
   height = 260,
+  activeT = null,
+  onActiveTimeChange,
 }: {
   series: TimeSeriesInput[];
   valueFormatter?: (n: number) => string;
   height?: number;
+  activeT?: string | null;
+  onActiveTimeChange?: (t: string | null) => void;
 }) {
   const { t } = useLanguage();
 
@@ -87,7 +96,17 @@ export default function TimeSeries({
         </div>
       ) : null}
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <LineChart
+          data={rows}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          onMouseMove={
+            onActiveTimeChange
+              ? (state) =>
+                  onActiveTimeChange(state.activeLabel != null ? String(state.activeLabel) : null)
+              : undefined
+          }
+          onMouseLeave={onActiveTimeChange ? () => onActiveTimeChange(null) : undefined}
+        >
           <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={0.08} />
           <XAxis
             dataKey="t"
@@ -119,6 +138,15 @@ export default function TimeSeries({
               ) : null
             }
           />
+          {/* Synced crosshair — only when the shared activeT exists on THIS chart's axis. */}
+          {activeT && rows.some((r) => r.t === activeT) ? (
+            <ReferenceLine
+              x={activeT}
+              stroke="currentColor"
+              strokeOpacity={0.35}
+              strokeDasharray="4 4"
+            />
+          ) : null}
           {keys.map((k, i) => (
             <Line
               key={k}

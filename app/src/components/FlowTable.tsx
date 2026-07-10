@@ -141,12 +141,21 @@ export function FlowDrawer({ flow, onClose }: { flow: FlowEdge; onClose: () => v
 
 type SortKey = 'value' | 'category' | 'metric' | 'port';
 
-/** Sortable flow table (desktop) with a card-list fallback on mobile. */
-export default function FlowTable({ flows }: { flows: FlowEdge[] }) {
+/** Sortable flow table (desktop) with a card-list fallback on mobile.
+ *  Row click opens the built-in FlowDrawer unless `onSelect` is given, in
+ *  which case the caller owns the selection UI (e.g. a HopPath panel). */
+export default function FlowTable({
+  flows,
+  onSelect,
+}: {
+  flows: FlowEdge[];
+  onSelect?: (f: FlowEdge) => void;
+}) {
   const { t } = useLanguage();
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [desc, setDesc] = useState(true);
   const [selected, setSelected] = useState<FlowEdge | null>(null);
+  const select = (f: FlowEdge) => (onSelect ? onSelect(f) : setSelected(f));
 
   const sorted = useMemo(() => {
     const cmp: Record<SortKey, (a: FlowEdge, b: FlowEdge) => number> = {
@@ -212,7 +221,7 @@ export default function FlowTable({ flows }: { flows: FlowEdge[] }) {
             {sorted.map((f, i) => (
               <tr
                 key={rowKey(f, i)}
-                onClick={() => setSelected(f)}
+                onClick={() => select(f)}
                 className="cursor-pointer border-b border-black/5 hover:bg-surface dark:border-white/5 dark:hover:bg-white/5"
               >
                 <td className="max-w-56 truncate py-2.5 pr-3 font-medium">{endpointLabel(f.a)}</td>
@@ -234,7 +243,7 @@ export default function FlowTable({ flows }: { flows: FlowEdge[] }) {
           <li key={rowKey(f, i)}>
             <button
               type="button"
-              onClick={() => setSelected(f)}
+              onClick={() => select(f)}
               className="w-full rounded-card bg-surface p-3 text-left dark:bg-white/5"
             >
               <div className="flex items-center gap-1.5 text-sm font-medium">

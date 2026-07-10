@@ -17,12 +17,83 @@ export interface PathNode { name: string; value: number; children: PathNode[]; }
 export interface ParetoRow { key: string; label: string; value: number; cumulativePct: number; }
 export interface DependenciesLensResult {
   sankey: SankeyData;
+  /** True when the sankey was capped to SANKEY_MAX_LINKS (UI shows a top-N caption). */
+  sankeyTruncated: boolean;
   ports: PortRow[];
   namespaces: NamespaceRow[];
   categories: CategoryRow[];
   hops: HopCount[];
   pathTree: PathNode;
+  /** True when pathTree breadth was capped to PATH_TREE_MAX_CHILDREN. */
+  pathTreeTruncated: boolean;
   pareto: ParetoRow[];
+}
+
+// Legibility caps (§16 polish). Live windows produce hundreds of sankey links
+// (observed ~268 nodes / 461 links) whose node rects render sub-pixel — an
+// unreadable hairball. Only the top flows survive; the UI shows a caption when
+// a cap actually dropped anything. Raise with care: legibility degrades fast
+// past ~50 links at widget width.
+export const SANKEY_MAX_LINKS = 40;
+export const PATH_TREE_MAX_CHILDREN = 12;
+
+/**
+ * Cap a SankeyData to the top `maxLinks` links by value, keeping ONLY nodes
+ * referenced by a kept link and remapping link indices to the compacted node
+ * array. Graphs already within the cap pass through by reference (unchanged).
+ * Also used client-side for the collector-built DNS resolution sankey, so
+ * out-of-range link indices are dropped defensively before remapping.
+ */
+export function capSankeyLinks(
+  data: SankeyData,
+  maxLinks: number = SANKEY_MAX_LINKS,
+): { data: SankeyData; truncated: boolean } {
+  if (data.links.length <= maxLinks) return { data, truncated: false };
+  const inRange = (i: number) => Number.isInteger(i) && i >= 0 && i < data.nodes.length;
+  const kept = data.links
+    .filter((l) => inRange(l.source) && inRange(l.target))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, maxLinks);
+  const remap = new Map<number, number>(); // old node index -> compacted index
+  for (const l of kept) {
+    for (const i of [l.source, l.target]) if (!remap.has(i)) remap.set(i, remap.size);
+  }
+  return {
+    data: {
+      nodes: [...remap.keys()].map((i) => data.nodes[i]),
+      links: kept.map((l) => ({
+        source: remap.get(l.source)!,
+        target: remap.get(l.target)!,
+        value: l.value,
+      })),
+    },
+    truncated: true,
+  };
+}
+
+/**
+ * Cap a PathNode tree's breadth: at every level keep only the top
+ * `maxChildren` children by value (first-insertion order preserved among
+ * survivors) and drop the rest — dropped weight simply narrows the icicle row
+ * (layout divides by the children sum, so no over-100% widths). Trees already
+ * within the cap pass through by reference; the input is never mutated.
+ */
+export function capPathTreeBreadth(
+  root: PathNode,
+  maxChildren: number = PATH_TREE_MAX_CHILDREN,
+): { tree: PathNode; truncated: boolean } {
+  let truncated = false;
+  const walk = (n: PathNode): PathNode => {
+    let children = n.children;
+    if (children.length > maxChildren) {
+      truncated = true;
+      const keep = new Set([...children].sort((a, b) => b.value - a.value).slice(0, maxChildren));
+      children = children.filter((c) => keep.has(c));
+    }
+    return { ...n, children: children.map(walk) };
+  };
+  const tree = walk(root);
+  return truncated ? { tree, truncated: true } : { tree: root, truncated: false };
 }
 
 /** Unknown/absent componentType bucket for hop views. */
@@ -180,16 +251,20 @@ export function paretoTalkers(
   });
 }
 
-/** Spec §6.4 response for /api/analytics/dependencies. */
+/** Spec §6.4 response for /api/analytics/dependencies (sankey/pathTree capped for legibility). */
 export function dependenciesLens(flows: FlowEdge[]): DependenciesLensResult {
   const { ports, namespaces, categories } = composition(flows);
+  const sankey = capSankeyLinks(serviceGraph(flows));
+  const pathTree = capPathTreeBreadth(pathFrequencyTree(flows));
   return {
-    sankey: serviceGraph(flows),
+    sankey: sankey.data,
+    sankeyTruncated: sankey.truncated,
     ports,
     namespaces,
     categories,
     hops: hopUsage(flows),
-    pathTree: pathFrequencyTree(flows),
+    pathTree: pathTree.tree,
+    pathTreeTruncated: pathTree.truncated,
     pareto: paretoTalkers(flows),
   };
 }

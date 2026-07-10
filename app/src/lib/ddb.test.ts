@@ -100,6 +100,62 @@ describe('getFlowsWindow', () => {
   });
 });
 
+describe('getFlowsWindow in-flight cache', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  // The cache is module-level state: each test pins a distinct fake system time far
+  // (>> TTL) beyond any earlier test's so entries from previous tests are always expired.
+  const flowItem = (pk: string) =>
+    ({ edgeHash: `e-${pk}`, bucket: pk.split('#')[1], monitor: 'nfm-eks-demo' });
+
+  it('issues the underlying bucket queries once for concurrent identical calls within the TTL', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T13:00:00.000Z'));
+    ddbMock.on(QueryCommand).callsFake((input) =>
+      ({ Items: [flowItem((input.ExpressionAttributeValues ?? {})[':pk'] as string)] }));
+
+    const [a, b] = await Promise.all([getFlowsWindow(12), getFlowsWindow(12)]);
+
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // 12 buckets x 1 monitor, ONCE
+    expect(a).toHaveLength(12);
+    expect(b).toEqual(a);
+
+    await getFlowsWindow(12); // still within TTL → served from cache, no new queries
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+  });
+
+  it('re-queries after the TTL has elapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T14:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    vi.setSystemTime(new Date('2026-07-08T14:00:10.001Z')); // TTL (10s) just passed
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24);
+  });
+
+  it('does not cache a rejected fetch (next call within TTL re-queries)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T15:00:00.000Z'));
+    ddbMock.on(QueryCommand).rejectsOnce(new Error('boom')).resolves({ Items: [] });
+
+    await expect(getFlowsWindow(12)).rejects.toThrow('boom');
+
+    // Same instant (within TTL) — the rejected promise must have been evicted.
+    const flows = await getFlowsWindow(12);
+    expect(flows).toEqual([]);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24);
+  });
+});
+
 describe('getDns', () => {
   it('returns the dns attribute of DNS#latest/all when present', async () => {
     const dns = { enabled: true, topDomains: [{ name: 'a.svc.cluster.local', count: 3, internal: true }],

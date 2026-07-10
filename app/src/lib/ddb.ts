@@ -59,10 +59,27 @@ export async function getDns(): Promise<DnsAggregate | null> {
   return (res.Item?.dns as DnsAggregate | undefined) ?? null;
 }
 
-/** All flows across the n most-recent 5-min buckets (all monitors), concatenated. */
-export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
+async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
   const results = await Promise.all(recentBuckets(n).map(b => queryFlowsByBucket(b)));
   return results.flat();
+}
+
+// In-flight de-dup + short TTL keyed by window size: the analytics routes fire
+// concurrently with identical windows, so they share one underlying query set.
+// Rejected fetches are evicted immediately — a failure is never cached.
+const FLOWS_WINDOW_TTL_MS = 10_000;
+const flowsWindowCache = new Map<number, { p: Promise<FlowEdge[]>; at: number }>();
+
+/** All flows across the n most-recent 5-min buckets (all monitors), concatenated. */
+export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
+  const hit = flowsWindowCache.get(n);
+  if (hit && Date.now() - hit.at < FLOWS_WINDOW_TTL_MS) return hit.p;
+  const p = fetchFlowsWindow(n);
+  flowsWindowCache.set(n, { p, at: Date.now() });
+  p.catch(() => {
+    if (flowsWindowCache.get(n)?.p === p) flowsWindowCache.delete(n);
+  });
+  return p;
 }
 
 async function queryAll(input: ConstructorParameters<typeof QueryCommand>[0]): Promise<FlowEdge[]> {
