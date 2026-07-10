@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-10
+
+### Fixed
+- Fix a React hydration mismatch (#418) on `/flows`: the bucket list was seeded from `Date.now()` + `toLocaleTimeString` in a `useState` initializer, differing between the server render and client hydration. It now starts empty and fills client-side on mount.
+
 ## [1.0.0] - 2026-07-10
 
 First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dashboard with an Amazon Bedrock AgentCore chatbot, plus the Phase 6 analytics enrichment.
@@ -44,7 +49,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
 
 ---
@@ -60,6 +66,11 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.0.1] - 2026-07-10
+
+### Fixed
+- `/flows`의 React hydration mismatch(#418) 수정: 버킷 목록을 `useState` 초기화에서 `Date.now()` + `toLocaleTimeString`으로 생성해 서버 렌더와 클라이언트 하이드레이션이 달랐음. 이제 빈 상태로 시작해 마운트 시 클라이언트에서 채움.
 
 ## [1.0.0] - 2026-07-10
 
@@ -88,5 +99,6 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
