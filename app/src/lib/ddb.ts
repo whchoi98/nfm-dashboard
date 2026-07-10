@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { listMonitorNames } from './cw-metrics';
-import type { CollectionStatus, Coverage, DnsAggregate, FlowEdge, TopologySnapshot,
+import type { CollectionStatus, Coverage, CycleStats, DnsAggregate, FlowEdge, TopologySnapshot,
   WiResult } from './types';
 
 const REGION = process.env.AWS_REGION ?? 'ap-northeast-2';
@@ -36,6 +36,27 @@ export async function getCollectionStatus(): Promise<CollectionStatus | null> {
     Key: { pk: 'STATUS#collect', sk: 'latest' } }));
   if (!res.Item) return null;
   return { cycleTs: res.Item.cycleTs, stats: res.Item.stats } as CollectionStatus;
+}
+
+/**
+ * Last n collection cycles from the STATUS#collect history rows the collector
+ * writes per cycle (sk = cycleTs, 7-day TTL). The partition also holds the
+ * 'latest' pointer row, which sorts after every ISO timestamp ('l' > '2') and
+ * therefore arrives first in the descending query — hence Limit n+1 and the
+ * filter. Returned oldest→newest for left-to-right time sparklines.
+ */
+export async function getCollectionHistory(n = 24): Promise<CollectionStatus[]> {
+  const res = await ddb().send(new QueryCommand({
+    TableName: TABLE_META,
+    KeyConditionExpression: 'pk = :pk',
+    ExpressionAttributeValues: { ':pk': 'STATUS#collect' },
+    ScanIndexForward: false,
+    Limit: n + 1 }));
+  return ((res.Items ?? []) as { sk: string; stats: CycleStats }[])
+    .filter((item) => item.sk !== 'latest')
+    .slice(0, n)
+    .map((item) => ({ cycleTs: item.sk, stats: item.stats }))
+    .reverse();
 }
 
 export async function getCoverage(): Promise<Coverage | null> {

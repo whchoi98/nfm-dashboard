@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getDns } from './ddb';
+import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getDns,
+  getCollectionHistory } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -172,6 +173,50 @@ describe('getDns', () => {
   it('returns null when the item is missing', async () => {
     ddbMock.on(GetCommand).resolves({});
     await expect(getDns()).resolves.toBeNull();
+  });
+});
+
+describe('getCollectionHistory', () => {
+  const stats = (rows: number) =>
+    ({ started: 4, succeeded: 4, failed: 0, throttled: 0, rows });
+  // DDB returns the STATUS#collect partition descending by sk: the 'latest'
+  // pointer row ('l' > '2') sorts after every ISO cycleTs, so it arrives FIRST.
+  const historyItems = [
+    { pk: 'STATUS#collect', sk: 'latest', cycleTs: '2026-07-10T03:10:00Z', stats: stats(120) },
+    { pk: 'STATUS#collect', sk: '2026-07-10T03:10:00Z', stats: stats(120) },
+    { pk: 'STATUS#collect', sk: '2026-07-10T03:05:00Z', stats: stats(90) },
+    { pk: 'STATUS#collect', sk: '2026-07-10T03:00:00Z', stats: stats(150) },
+  ];
+
+  it('queries STATUS#collect descending, excludes the latest pointer, returns oldest→newest', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: historyItems });
+
+    const history = await getCollectionHistory(24);
+
+    const input = ddbMock.commandCalls(QueryCommand)[0].args[0].input;
+    expect(Object.values(input.ExpressionAttributeValues ?? {})).toContain('STATUS#collect');
+    expect(input.ScanIndexForward).toBe(false);
+    expect(input.Limit).toBe(25); // n + 1 to absorb the 'latest' pointer row
+    expect(history).toHaveLength(3); // 'latest' excluded
+    expect(history.map((h) => h.cycleTs)).toEqual([
+      '2026-07-10T03:00:00Z', '2026-07-10T03:05:00Z', '2026-07-10T03:10:00Z',
+    ]); // oldest→newest for left-to-right sparklines
+    expect(history.map((h) => h.stats.rows)).toEqual([150, 90, 120]);
+    expect(history[2]).toEqual({ cycleTs: '2026-07-10T03:10:00Z', stats: stats(120) });
+  });
+
+  it('caps the result at n newest cycles', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: historyItems });
+    const history = await getCollectionHistory(2);
+    expect(ddbMock.commandCalls(QueryCommand)[0].args[0].input.Limit).toBe(3);
+    expect(history.map((h) => h.cycleTs)).toEqual([
+      '2026-07-10T03:05:00Z', '2026-07-10T03:10:00Z',
+    ]); // 2 newest, still oldest→newest
+  });
+
+  it('returns [] when the partition has no items', async () => {
+    ddbMock.on(QueryCommand).resolves({});
+    await expect(getCollectionHistory()).resolves.toEqual([]);
   });
 });
 
