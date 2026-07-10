@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowLeftRight,
   Bot,
   LayoutDashboard,
@@ -21,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/flows', key: 'nav.flows', icon: ArrowLeftRight },
   { href: '/paths', key: 'nav.paths', icon: Route },
   { href: '/insights', key: 'nav.insights', icon: Lightbulb },
+  { href: '/monitors', key: 'nav.monitors', icon: Activity },
   { href: '/diagnose', key: 'nav.diagnose', icon: Stethoscope },
   { href: '/agents', key: 'nav.agents', icon: Bot },
 ];
