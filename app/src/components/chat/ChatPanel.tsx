@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, Loader2, RotateCcw, Send, Square } from 'lucide-react';
 import ChatMessages, { type ChatMessage } from './ChatMessages';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { sendSse, type SseRequest } from '@/lib/use-sse';
+import { sendSse, sseErrorKey, type SseRequest } from '@/lib/use-sse';
 
 // History shared across the inline panel, the /chat-popup iframe (same-tab
 // sessionStorage) and the window.open popup (gets a copy on open).
@@ -123,8 +123,7 @@ export default function ChatPanel({ compact = false }: { compact?: boolean }) {
 
   const seenStages = () => (stagesRef.current.length ? [...stagesRef.current] : undefined);
 
-  const localizeError = (message: string) =>
-    message === 'unauthorized' ? t('chat.errAuth') : t('chat.errGeneric');
+  const localizeError = (message: string) => t(sseErrorKey(message));
 
   const send = (raw: string) => {
     const text = raw.trim();
@@ -291,6 +290,7 @@ export default function ChatPanel({ compact = false }: { compact?: boolean }) {
 
           {showFollowups ? (
             <div
+              role="group"
               data-testid="chat-followups"
               aria-label={t('chat.followups')}
               className="flex flex-wrap gap-1.5"

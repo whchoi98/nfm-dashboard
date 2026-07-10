@@ -32,6 +32,15 @@ export interface SseRequest {
   abort: () => void;
 }
 
+/**
+ * Map the stable error tokens sendSse emits ('unauthorized', 'HTTP <n>' or a
+ * raw fetch/server message) to a translation key. Every SSE surface (chat,
+ * diagnose) localizes through this so the tokens never leak into the UI.
+ */
+export function sseErrorKey(message: string): 'chat.errAuth' | 'chat.errGeneric' {
+  return message === 'unauthorized' ? 'chat.errAuth' : 'chat.errGeneric';
+}
+
 /** Parse one `event:`/`data:` frame and dispatch it to the matching handler. */
 function dispatchFrame(frame: string, handlers: SseHandlers): void {
   let event = 'message';

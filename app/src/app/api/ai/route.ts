@@ -140,7 +140,10 @@ export async function POST(req: NextRequest) {
           const fu = await generateFollowups(full, lastUserMessage, lang);
           if (fu.length) send('followups', { questions: fu });
         }
-        send('done', { content: full, usedTools, elapsedMs: Date.now() - t0, model: modelUsed });
+        // usedTools answers "WHICH tools were used" — a tool called twice must
+        // appear once (duplicates also broke React list keys client-side).
+        send('done', { content: full, usedTools: [...new Set(usedTools)],
+          elapsedMs: Date.now() - t0, model: modelUsed });
       } catch (e) {
         console.error('[api/ai]', e);
         send('error', { message: (e as Error).message });

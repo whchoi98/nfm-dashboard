@@ -56,8 +56,13 @@ const Bubble = memo(function Bubble({ m }: { m: ChatMessage }) {
             </summary>
             {m.usedTools?.length ? (
               <div className="mt-1.5 flex flex-wrap items-center gap-1 font-mono text-[10px] text-ink/60 dark:text-white/60">
-                {m.usedTools.map((tool) => (
-                  <span key={tool} className="rounded-full bg-black/5 px-2 py-0.5 dark:bg-white/10">
+                {/* The server dedupes, but history persisted before that (or
+                    any non-unique input) must never produce duplicate keys. */}
+                {m.usedTools.map((tool, i) => (
+                  <span
+                    key={`${tool}-${i}`}
+                    className="rounded-full bg-black/5 px-2 py-0.5 dark:bg-white/10"
+                  >
                     {tool}
                   </span>
                 ))}

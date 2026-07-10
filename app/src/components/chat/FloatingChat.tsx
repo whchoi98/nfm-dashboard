@@ -21,6 +21,11 @@ const FOCUSABLE_SELECTOR = [
   'textarea:not([disabled])',
   'input:not([disabled])',
   'select:not([disabled])',
+  // The iframe modal's chat lives inside an <iframe>; without this entry the
+  // trap's only stop is the close button and keyboard users can never reach
+  // the chat (WCAG 2.1.2 keyboard trap). Once focus moves into the iframe's
+  // document, parent keydown no longer fires, so the trap naturally yields.
+  'iframe',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 

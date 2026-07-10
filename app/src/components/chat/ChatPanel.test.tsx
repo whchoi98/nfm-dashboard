@@ -9,7 +9,12 @@ import ko from '@/lib/i18n/translations/ko.json';
 import type { SseHandlers, SseRequest } from '@/lib/use-sse';
 import ChatPanel from './ChatPanel';
 
-vi.mock('@/lib/use-sse', () => ({ sendSse: vi.fn() }));
+// Partial mock: stub the network (sendSse) but keep the real sseErrorKey so
+// the error-localization path under test uses the production mapping.
+vi.mock('@/lib/use-sse', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/use-sse')>()),
+  sendSse: vi.fn(),
+}));
 import { sendSse } from '@/lib/use-sse';
 
 const sendSseMock = vi.mocked(sendSse);
