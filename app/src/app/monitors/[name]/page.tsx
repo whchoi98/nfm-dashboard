@@ -11,6 +11,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ExternalLink, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
+import { cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
 import type { FlowEdge, MetricName } from '@/lib/types';
 import type { MonitorDetail } from '@/lib/monitors';
 import { formatBytes, formatCount, formatMetricValue, formatMicros } from '@/lib/format';
@@ -39,19 +40,6 @@ function safeDecode(s: string): string {
   } catch {
     return s;
   }
-}
-
-/** Best-effort CloudWatch metrics-console deep link for this monitor. The
- *  console hash uses its own '*'-escaped percent-encoding; if the query part
- *  ever drifts, the console still opens on the metrics home for the region. */
-function cloudWatchUrl(monitorArn?: string): string {
-  const region = monitorArn?.split(':')[3] || process.env.AWS_REGION || 'ap-northeast-2';
-  const base = `https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#metricsV2`;
-  const query = monitorArn
-    ? `{AWS/NetworkFlowMonitor,MonitorId} MonitorId="${monitorArn}"`
-    : 'AWS/NetworkFlowMonitor';
-  const escaped = encodeURIComponent(query).replace(/%/g, '*').replace(/'/g, '*27');
-  return `${base}:graph=~();query=~'${escaped}'`;
 }
 
 function Overview({ d }: { d: MonitorDetail }) {
@@ -103,7 +91,7 @@ function Overview({ d }: { d: MonitorDetail }) {
         title={t('metric.DATA_TRANSFERRED')}
         action={
           <a
-            href={cloudWatchUrl(d.monitorArn)}
+            href={cloudWatchMetricsUrl({ monitorArn: d.monitorArn })}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs font-medium text-ink/60 hover:text-ink dark:text-white/60 dark:hover:text-white"
