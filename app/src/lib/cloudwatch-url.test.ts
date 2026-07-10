@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { cloudWatchMetricsUrl } from './cloudwatch-url';
+import { cloudWatchCreateAlarmUrl, cloudWatchMetricsUrl } from './cloudwatch-url';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -28,6 +28,33 @@ describe('cloudWatchMetricsUrl', () => {
 
   it('lets an explicit region override the ARN region', () => {
     expect(cloudWatchMetricsUrl({ region: 'eu-west-1', monitorArn: ARN })).toContain(
+      'https://eu-west-1.console.aws.amazon.com',
+    );
+  });
+});
+
+describe('cloudWatchCreateAlarmUrl', () => {
+  it('opens the alarm-create wizard in the ARN region with metric + monitor in the query', () => {
+    const url = cloudWatchCreateAlarmUrl({ monitorArn: ARN, metricName: 'DataTransferred' });
+    expect(url).toContain(
+      'https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2#alarmsV2:create',
+    );
+    expect(url).toContain('DataTransferred');
+    // console-hash escaping: % → *, so the ARN's ':' arrives as *3A
+    expect(url).toContain('MonitorId*3D*22arn*3Aaws*3Anetworkflowmonitor');
+    expect(url).not.toContain('%');
+  });
+
+  it('falls back to the namespace-only query and AWS_REGION without an ARN', () => {
+    vi.stubEnv('AWS_REGION', 'ap-southeast-1');
+    const url = cloudWatchCreateAlarmUrl();
+    expect(url).toContain('ap-southeast-1.console.aws.amazon.com');
+    expect(url).toContain('#alarmsV2:create');
+    expect(url).toContain("query=~'AWS*2FNetworkFlowMonitor");
+  });
+
+  it('lets an explicit region override the ARN region', () => {
+    expect(cloudWatchCreateAlarmUrl({ region: 'eu-west-1', monitorArn: ARN })).toContain(
       'https://eu-west-1.console.aws.amazon.com',
     );
   });
