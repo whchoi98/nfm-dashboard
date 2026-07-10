@@ -24,7 +24,14 @@ it('start→status→results happy path yields WiResult per metric×category', a
 
   const results = await collectWorkloadInsights(new NetworkFlowMonitorClient({}), window, opts);
 
-  expect(results).toHaveLength(9);
+  // 3 metrics × all 11 NFM destination categories
+  expect(results).toHaveLength(33);
+  const categories = new Set(results.map(r => r.category));
+  expect([...categories].sort()).toEqual(['AMAZON_DYNAMODB', 'AMAZON_S3', 'AWS_SERVICE',
+    'INTERNET', 'INTER_AZ', 'INTER_REGION', 'INTER_VPC', 'INTRA_AZ', 'LOCAL_ZONE',
+    'TRANSIT_GATEWAY', 'UNCLASSIFIED'].sort());
+  // Every (metric, category) pair started exactly one query.
+  expect(nfm.commandCalls(StartQueryWorkloadInsightsTopContributorsCommand)).toHaveLength(33);
   const dtIntraAz = results.find(r => r.metric === 'DATA_TRANSFERRED' && r.category === 'INTRA_AZ');
   expect(dtIntraAz).toBeDefined();
   expect(dtIntraAz!.rows).toEqual([
@@ -40,7 +47,7 @@ it('FAILED query is skipped without aborting the other metric×category pairs', 
 
   const results = await collectWorkloadInsights(new NetworkFlowMonitorClient({}), window, opts);
 
-  expect(results).toHaveLength(9);
+  expect(results).toHaveLength(33);
   for (const r of results) expect(r.rows).toEqual([]);
 });
 

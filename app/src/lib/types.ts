@@ -2,8 +2,12 @@
 // Kept as a small local module instead of a cross-workspace import so the Next.js build stays
 // self-contained. Field names MUST stay identical to the collector output.
 export type MetricName = 'DATA_TRANSFERRED' | 'RETRANSMISSIONS' | 'TIMEOUTS' | 'ROUND_TRIP_TIME';
+// All 11 destination categories accepted by the live NFM API (verified 2026-07 via
+// StartQueryWorkloadInsightsTopContributors). INTERNET/AWS_SERVICE/TRANSIT_GATEWAY/LOCAL_ZONE
+// are only produced by the Workload Insights collector, never by the flows collector.
 export type DestCategory = 'INTRA_AZ' | 'INTER_AZ' | 'INTER_VPC'
-  | 'UNCLASSIFIED' | 'AMAZON_S3' | 'AMAZON_DYNAMODB' | 'INTER_REGION';
+  | 'UNCLASSIFIED' | 'AMAZON_S3' | 'AMAZON_DYNAMODB' | 'INTER_REGION'
+  | 'INTERNET' | 'AWS_SERVICE' | 'TRANSIT_GATEWAY' | 'LOCAL_ZONE';
 
 export interface EndpointInfo { ip?: string; instanceId?: string; subnetId?: string; az?: string;
   vpcId?: string; region?: string; podName?: string; podNamespace?: string; serviceName?: string; }

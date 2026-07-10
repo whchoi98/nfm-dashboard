@@ -20,6 +20,13 @@ export const TOKENS = {
   chartRose: '#FFD6E0',
   chartTeal: '#A1E3CB',
   chartGrey: '#C9D0DA',
+  // WI-only "unmonitored" categories (INTERNET/TRANSIT_GATEWAY/LOCAL_ZONE/AWS_SERVICE) —
+  // same pastel register, hues picked away from the original 7 (coral vs amber/rose,
+  // lilac vs violet/grey, sand vs amber, aqua vs mint/sky). Dual-encoding still applies.
+  chartCoral: '#FFBFA0',
+  chartLilac: '#D9C2F0',
+  chartSand: '#E3CE8F',
+  chartAqua: '#7AD1CD',
 } as const;
 
 /** Fixed categorical series order for multi-series charts. */
@@ -43,6 +50,10 @@ export const CATEGORY_COLORS: Record<DestCategory, string> = {
   AMAZON_S3: TOKENS.chartAmber,
   AMAZON_DYNAMODB: TOKENS.chartSky,
   INTER_REGION: TOKENS.chartRose,
+  INTERNET: TOKENS.chartCoral,
+  TRANSIT_GATEWAY: TOKENS.chartLilac,
+  LOCAL_ZONE: TOKENS.chartSand,
+  AWS_SERVICE: TOKENS.chartAqua,
 };
 
 export const CATEGORY_ORDER: DestCategory[] = [
@@ -53,6 +64,11 @@ export const CATEGORY_ORDER: DestCategory[] = [
   'AMAZON_S3',
   'AMAZON_DYNAMODB',
   'INTER_REGION',
+  // WI-only categories, in the console's grouping order.
+  'INTERNET',
+  'TRANSIT_GATEWAY',
+  'LOCAL_ZONE',
+  'AWS_SERVICE',
 ];
 
 /** Status colors (pastel) — always dual-encoded with an icon or text label, never color alone. */

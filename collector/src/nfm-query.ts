@@ -1,6 +1,7 @@
 import { NetworkFlowMonitorClient, StartQueryMonitorTopContributorsCommand,
   GetQueryStatusMonitorTopContributorsCommand, GetQueryResultsMonitorTopContributorsCommand,
-  StopQueryMonitorTopContributorsCommand } from '@aws-sdk/client-networkflowmonitor';
+  StopQueryMonitorTopContributorsCommand,
+  type DestinationCategory } from '@aws-sdk/client-networkflowmonitor';
 import type { DestCategory, FlowEdge, MetricName } from './types.js';
 import { normalizeRow, dedupeEdges, type RawRow } from './normalize.js';
 
@@ -32,7 +33,9 @@ async function runOne(client: NetworkFlowMonitorClient, monitor: string, metric:
   stats.started++;
   try {
     const { queryId } = await withRetry(() => client.send(new StartQueryMonitorTopContributorsCommand({
-      monitorName: monitor, metricName: metric, destinationCategory: category,
+      // Cast: DestCategory now carries all 11 live-API values while the bundled SDK enum is
+      // stale (7). The flows matrix still only receives CORE/EXTENDED categories (categories.ts).
+      monitorName: monitor, metricName: metric, destinationCategory: category as DestinationCategory,
       startTime: spec.startTime, endTime: spec.endTime, limit: 100 })), stats, base);
     const pollMax = spec.statusPollMax ?? 30;
     for (let i = 0; i < pollMax; i++) {
