@@ -32,7 +32,10 @@ const LIMITS = ['50', '100', '200', '500'];
 export default function FlowsPage() {
   const { t } = useLanguage();
   // The 12 most-recent 5-min buckets, refreshed so the list tracks the current grid.
-  const [buckets, setBuckets] = useState(() => recentBuckets(12));
+  // Start empty so SSR and the first client render agree (recentBuckets() reads
+  // Date.now() + toLocaleTimeString, which differ between server and client and
+  // would trip a hydration mismatch); populated client-side on mount below.
+  const [buckets, setBuckets] = useState<string[]>([]);
   // '' = follow the latest complete bucket (the newest one is usually still being written);
   // a concrete value = explicit user pick, which is kept as-is.
   const [bucket, setBucket] = useState('');
@@ -43,6 +46,7 @@ export default function FlowsPage() {
   const [limit, setLimit] = useState('200');
 
   useEffect(() => {
+    setBuckets(recentBuckets(12)); // client-only initial fill (avoids SSR hydration mismatch)
     const id = setInterval(() => {
       setBuckets((prev) => {
         const next = recentBuckets(12);
