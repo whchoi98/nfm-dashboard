@@ -25,6 +25,10 @@ function Markdown({ children }: { children: string }) {
           pre: ({ node: _node, className, children: preChildren }) => (
             <CodeBlock className={className}>{preChildren}</CodeBlock>
           ),
+          // Links open in a new tab so clicking one from the chat drawer /
+          // popup doesn't navigate away and lose the conversation. Styling
+          // stays in globals.css `.chat-markdown a`.
+          a: ({ node: _node, ...props }) => <a target="_blank" rel="noreferrer" {...props} />,
         }}
       >
         {children}
