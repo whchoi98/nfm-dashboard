@@ -228,6 +228,8 @@
   "chat.thinking": "Thinking…",
   "chat.tool": "Running tool: {name}",
   "chat.empty": "Ask anything about your network",
+  "chat.copy": "Copy",
+  "chat.copied": "Copied",
   "diagnose.title": "AI Network Diagnosis",
   "diagnose.hint": "AI analyzes the current topology, collection status and anomalies.",
   "diagnose.run": "Run diagnosis",

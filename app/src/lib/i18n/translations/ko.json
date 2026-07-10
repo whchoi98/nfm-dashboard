@@ -228,6 +228,8 @@
   "chat.thinking": "생각 중…",
   "chat.tool": "도구 실행 중: {name}",
   "chat.empty": "네트워크에 대해 무엇이든 물어보세요",
+  "chat.copy": "복사",
+  "chat.copied": "복사됨",
   "diagnose.title": "AI 네트워크 진단",
   "diagnose.hint": "현재 토폴로지·수집 상태·이상 징후를 AI가 분석합니다.",
   "diagnose.run": "진단 실행",
