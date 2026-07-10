@@ -75,7 +75,7 @@ export default function DnsTab() {
   // the real widget grid, so `widget-dns-disabled` renders ONLY once the
   // aggregate is loaded and enabled===false — never as a flash while loading.
   // A first-load error falls through to the guidance card (LensState shows it).
-  if (data === undefined && !error) {
+  if (!data && !error) {
     return (
       <div
         data-testid="dns-skeleton"
