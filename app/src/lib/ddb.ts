@@ -103,6 +103,25 @@ export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
   return p;
 }
 
+/**
+ * Current + prior flow windows of n buckets each for window-over-window lenses
+ * (movers): the 2n most-recent buckets from ONE clock read, split in half —
+ * two separate recentBuckets() calls could overlap/skip a bucket if a 5-min
+ * boundary rolled between them. Uncached (getFlowsWindow's cache is untouched).
+ */
+export async function getFlowsWindowPair(
+  n: number,
+): Promise<{ current: FlowEdge[]; prior: FlowEdge[] }> {
+  const buckets = recentBuckets(2 * n);
+  const fetchAll = (bs: string[]) =>
+    Promise.all(bs.map(b => queryFlowsByBucket(b))).then(r => r.flat());
+  const [current, prior] = await Promise.all([
+    fetchAll(buckets.slice(0, n)),
+    fetchAll(buckets.slice(n)),
+  ]);
+  return { current, prior };
+}
+
 async function queryAll(input: ConstructorParameters<typeof QueryCommand>[0]): Promise<FlowEdge[]> {
   const items: FlowEdge[] = [];
   let key: Record<string, unknown> | undefined;

@@ -19,6 +19,7 @@ import DependenciesTab from './tabs/DependenciesTab';
 import DnsTab from './tabs/DnsTab';
 import EfficiencyTab from './tabs/EfficiencyTab';
 import ScorecardTab from './tabs/ScorecardTab';
+import MoversTab from './tabs/MoversTab';
 import type { TabProps } from './tabs/shared';
 
 interface TabDef {
@@ -37,6 +38,7 @@ const TABS: TabDef[] = [
   { key: 'dns', labelKey: 'insights.tab.dns', Comp: DnsTab },
   { key: 'efficiency', labelKey: 'insights.tab.efficiency', Comp: EfficiencyTab },
   { key: 'scorecard', labelKey: 'insights.tab.scorecard', Comp: ScorecardTab },
+  { key: 'movers', labelKey: 'insights.tab.movers', Comp: MoversTab },
 ];
 
 export default function InsightsPage() {
