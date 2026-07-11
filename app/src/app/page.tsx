@@ -17,6 +17,7 @@ import {
   TIMEOUT_WARN,
   type ErrorRatePoint,
   type OverviewKpis,
+  type OverviewSummary,
 } from '@/lib/overview-metrics';
 import { STATUS } from '@/lib/chart-tokens';
 import { cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
@@ -39,11 +40,17 @@ interface OverviewData extends OverviewKpis {
   series: Record<string, NfmSeries>;
   status: CollectionStatus | null;
   coverage: Coverage | null;
+  /** At-a-glance headline block (Phase 12) — optional so stale APIs degrade to '—'. */
+  summary?: OverviewSummary;
 }
 
 // Lab-scale status threshold for the breach teaser (RETRANS/TIMEOUT thresholds
 // moved to overview-metrics.ts, shared with the /monitors card chips).
 const BREACH_DANGER = 5;
+
+// Fleet DNS failure-fraction thresholds for the summary card (0..1 scale).
+const DNS_FAIL_WARN = 0.01;
+const DNS_FAIL_DANGER = 0.05;
 
 function statusFor(
   v: number | null | undefined,
@@ -100,6 +107,58 @@ function SyncedErrorRateChart({ series }: { series: TimeSeriesInput[] }) {
   );
 }
 
+/**
+ * Whole-card deep link for the at-a-glance summary strip (Phase 12):
+ * label + big value + optional sub line. Status is dual-encoded like
+ * StatDelta (STATUS dot + sr-only word next to the number) — never
+ * color-only. Chrome mirrors Card/StatDelta (ui-hairline + bg-surface).
+ */
+function SummaryCard({
+  testId,
+  href,
+  label,
+  value,
+  sub,
+  status,
+}: {
+  testId: string;
+  href: string;
+  label: string;
+  value: string;
+  sub?: string;
+  status?: StatStatus;
+}) {
+  return (
+    <Link
+      href={href}
+      data-testid={testId}
+      className="group ui-hairline block rounded-card bg-surface p-4 text-ink dark:bg-white/5 dark:text-white"
+    >
+      <p className="flex items-center gap-1.5 text-xs font-medium text-ink/60 dark:text-white/60">
+        {status ? (
+          <span
+            className="inline-block h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: STATUS[status] }}
+            aria-hidden
+          />
+        ) : null}
+        <span className="min-w-0 truncate">{label}</span>
+        {status ? <span className="sr-only">({status})</span> : null}
+        <span
+          className="ml-auto shrink-0 text-ink/40 group-hover:text-ink dark:text-white/40 dark:group-hover:text-white"
+          aria-hidden
+        >
+          →
+        </span>
+      </p>
+      <p className="mt-2 truncate text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+      {sub ? (
+        <p className="mt-1 truncate text-xs text-ink/50 dark:text-white/50">{sub}</p>
+      ) : null}
+    </Link>
+  );
+}
+
 export default function OverviewPage() {
   const { t } = useLanguage();
   const { data, loading, error } = usePolling<OverviewData>('/api/overview');
@@ -132,6 +191,20 @@ export default function OverviewPage() {
     .map((r) => ({ label: r.label, value: r.usd, sub: formatBytes(r.bytes) }));
 
   const breachCount = data?.breachCount ?? 0;
+
+  // At-a-glance summary strip. `…` while first loading, `—` when a loaded
+  // payload lacks the block or a value is null (stale API / no samples).
+  const summary = data?.summary;
+  const summaryValue = (fmt: (s: OverviewSummary) => string) =>
+    firstLoad ? '…' : summary ? fmt(summary) : '—';
+  const monitorsStatus: StatStatus | undefined =
+    !summary || summary.monitorsTotal === 0
+      ? undefined
+      : summary.monitorsDegraded === 0
+        ? 'ok'
+        : summary.monitorsDegraded >= summary.monitorsTotal
+          ? 'danger'
+          : 'warn';
   const rttUnit =
     data && data.rttP50 != null && data.rttP95 != null
       ? t('overview.rttPercentiles', {
@@ -181,6 +254,71 @@ export default function OverviewPage() {
           </div>
         </Card>
       ) : null}
+
+      {/* At-a-glance summary strip (Phase 12) — additive; KPI tiles below unchanged. */}
+      <div data-testid="overview-summary" className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <SummaryCard
+          testId="summary-card-reliability"
+          href="/insights?tab=scorecard"
+          label={t('overview.summary.reliability')}
+          value={summaryValue((s) => `${Math.round(s.reliabilityScore)}/100`)}
+          sub={
+            summary
+              ? summary.availabilityPct != null
+                ? t('overview.summary.availability', { p: summary.availabilityPct.toFixed(1) })
+                : '—'
+              : undefined
+          }
+          status={summary?.reliabilityStatus}
+        />
+        <SummaryCard
+          testId="summary-card-cost"
+          href="/cost"
+          label={t('overview.summary.monthlyCost')}
+          value={summaryValue((s) => formatUsd(s.monthlyUsdRunRate))}
+        />
+        <SummaryCard
+          testId="summary-card-billed"
+          href="/insights?tab=efficiency"
+          label={t('overview.summary.billedRatio')}
+          value={summaryValue((s) => `${(s.billedRatio * 100).toFixed(0)}%`)}
+        />
+        <SummaryCard
+          testId="summary-card-dns"
+          href="/insights?tab=dns"
+          label={t('overview.summary.dns')}
+          value={summaryValue((s) =>
+            !s.dnsEnabled
+              ? t('overview.summary.dnsOff')
+              : s.dnsFailRate != null
+                ? `${(s.dnsFailRate * 100).toFixed(1)}%`
+                : '—',
+          )}
+          sub={
+            summary?.dnsEnabled && summary.dnsResolverP95 != null
+              ? t('overview.summary.resolverP95', { ms: Math.round(summary.dnsResolverP95) })
+              : undefined
+          }
+          status={
+            summary?.dnsEnabled
+              ? statusFor(summary.dnsFailRate, DNS_FAIL_WARN, DNS_FAIL_DANGER)
+              : undefined
+          }
+        />
+        <SummaryCard
+          testId="summary-card-concentration"
+          href="/insights?tab=dependencies"
+          label={t('overview.summary.concentration')}
+          value={summaryValue((s) => `${(s.concentrationTopShare * 100).toFixed(0)}%`)}
+        />
+        <SummaryCard
+          testId="summary-card-monitors"
+          href="/monitors"
+          label={t('overview.summary.monitors')}
+          value={summaryValue((s) => `${s.monitorsTotal - s.monitorsDegraded}/${s.monitorsTotal}`)}
+          status={monitorsStatus}
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatDelta
