@@ -28,6 +28,7 @@ export interface ReliabilityLensResult {
   nhi: Series;
   nhiSwimlanes: NhiSwimlane[];
   scatter: ScatterPoint[];
+  correlation: { r: number | null; n: number };
 }
 
 /**
@@ -129,14 +130,35 @@ export function rttVsRetrans(flows: FlowEdge[], sampleCap = 500): ScatterPoint[]
   return points;
 }
 
+/**
+ * Pearson correlation of rtt vs retransmissions over scatter points.
+ * <2 points or zero variance on either axis → r null (never NaN); n is always the point count.
+ */
+export function correlation(points: ScatterPoint[]): { r: number | null; n: number } {
+  const n = points.length;
+  if (n < 2) return { r: null, n };
+  let sx = 0, sy = 0;
+  for (const p of points) { sx += p.rtt; sy += p.retransmissions; }
+  const mx = sx / n, my = sy / n;
+  let cov = 0, vx = 0, vy = 0;
+  for (const p of points) {
+    const dx = p.rtt - mx, dy = p.retransmissions - my;
+    cov += dx * dy; vx += dx * dx; vy += dy * dy;
+  }
+  if (vx === 0 || vy === 0) return { r: null, n };
+  return { r: cov / Math.sqrt(vx * vy), n };
+}
+
 /** Spec §6.2 response for /api/analytics/reliability. `cw` supplies optional HealthIndicator series. */
 export function reliabilityLens(flows: FlowEdge[], cw?: ReliabilityCw): ReliabilityLensResult {
   const hotspots = ratePer(flows);
+  const scatter = rttVsRetrans(flows);
   return {
     hotspots,
     breaches: thresholdBreaches(hotspots),
     nhi: nhiTimeline(cw?.healthIndicator),
     nhiSwimlanes: nhiSwimlanes(cw?.byMonitor),
-    scatter: rttVsRetrans(flows),
+    scatter,
+    correlation: correlation(scatter),
   };
 }
