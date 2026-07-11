@@ -187,7 +187,8 @@ export class AppStack extends cdk.Stack {
       actions: ['lambda:InvokeFunction'],
       resources: [`arn:aws:lambda:${region}:${this.account}:function:nfm-dashboard-collector`] }));
     task.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['cloudwatch:GetMetricData', 'cloudwatch:ListMetrics'], resources: ['*'] }));
+      actions: ['cloudwatch:GetMetricData', 'cloudwatch:ListMetrics', 'cloudwatch:DescribeAlarms'],
+      resources: ['*'] }));
     task.addToPrincipalPolicy(new iam.PolicyStatement({
       actions: ['ssm:GetParameter'],
       resources: [`arn:aws:ssm:${region}:${this.account}:parameter/nfm-dashboard/*`] }));
