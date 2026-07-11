@@ -84,6 +84,8 @@
   "network.dest": "대상 범위",
   "network.tableTitle": "소스 → 대상",
   "network.pairs": "페어 {n}개",
+  "network.retransTotal": "재전송 {n}건",
+  "network.retransRate": "{r}/GB",
   "network.col.source": "소스",
   "network.col.dest": "대상",
   "network.col.retrans": "재전송/GB",

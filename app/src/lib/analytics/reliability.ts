@@ -1,7 +1,7 @@
 // Reliability analytics lens (spec §6.2). Pure functions, no I/O.
 // Consumed by /api/analytics/reliability — the route exposes these shapes as JSON verbatim.
 import type { FlowEdge } from '../types';
-import { entityKey, type EntityKind, type Series } from './aggregate';
+import { entityKey, ratePerGb, type EntityKind, type Series } from './aggregate';
 
 // Default breach thresholds in events per GB (spec §6.2) — revisit after observing real data.
 export const DEFAULT_RETRANS_RATE = 10;
@@ -28,11 +28,6 @@ export interface ReliabilityLensResult {
   nhi: Series;
   nhiSwimlanes: NhiSwimlane[];
   scatter: ScatterPoint[];
-}
-
-/** Events per GB with 0-division guard: bytes=0 → 0 (no traffic ≠ infinitely bad). */
-function ratePerGb(events: number, bytes: number): number {
-  return bytes === 0 ? 0 : events / Math.max(bytes / 1e9, 1e-9);
 }
 
 /**

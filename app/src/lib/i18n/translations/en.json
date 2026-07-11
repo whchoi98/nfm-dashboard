@@ -84,6 +84,8 @@
   "network.dest": "Destination scope",
   "network.tableTitle": "Source → Destination",
   "network.pairs": "{n} pairs",
+  "network.retransTotal": "{n} retransmissions",
+  "network.retransRate": "{r}/GB",
   "network.col.source": "Source",
   "network.col.dest": "Destination",
   "network.col.retrans": "Retrans/GB",
