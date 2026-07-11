@@ -15,8 +15,10 @@ import {
   RETRANS_WARN,
   TIMEOUT_DANGER,
   TIMEOUT_WARN,
+  type ErrorRatePoint,
   type OverviewKpis,
 } from '@/lib/overview-metrics';
+import { STATUS } from '@/lib/chart-tokens';
 import { cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
 import { formatUsd } from '@/app/insights/tabs/shared';
@@ -33,6 +35,7 @@ import { Card } from '@/components/ui/Controls';
 interface OverviewData extends OverviewKpis {
   topTalkers: { label: string; usd: number; bytes: number }[];
   breachCount: number;
+  errorRates: ErrorRatePoint[];
   series: Record<string, NfmSeries>;
   status: CollectionStatus | null;
   coverage: Coverage | null;
@@ -73,6 +76,30 @@ function SyncedTrafficChart({ series }: { series: TimeSeriesInput[] }) {
   );
 }
 
+/** Golden-signal strip input: fleet retrans/timeout rate (events per GB) per bucket. */
+function errorRateChartSeries(
+  errorRates: ErrorRatePoint[],
+  labels: { retrans: string; timeout: string },
+): TimeSeriesInput[] {
+  return [
+    { name: labels.retrans, color: STATUS.warn, points: errorRates.map((p) => ({ t: p.t, v: p.retransRate })) },
+    { name: labels.timeout, color: STATUS.danger, points: errorRates.map((p) => ({ t: p.t, v: p.timeoutRate })) },
+  ];
+}
+
+/** Error-rate chart on the same shared hover context as the traffic chart. */
+function SyncedErrorRateChart({ series }: { series: TimeSeriesInput[] }) {
+  const { activeT, setActiveT } = useHoverSync();
+  return (
+    <TimeSeries
+      series={series}
+      valueFormatter={(n) => n.toFixed(1)}
+      activeT={activeT}
+      onActiveTimeChange={setActiveT}
+    />
+  );
+}
+
 export default function OverviewPage() {
   const { t } = useLanguage();
   const { data, loading, error } = usePolling<OverviewData>('/api/overview');
@@ -83,6 +110,11 @@ export default function OverviewPage() {
 
   const kpis = data?.kpis;
   const traffic = data ? trafficSeries(data.series) : [];
+  // `?? []` keeps the strip empty-safe if a stale API responds without the field.
+  const errorSeries = errorRateChartSeries(data?.errorRates ?? [], {
+    retrans: t('overview.retransRate'),
+    timeout: t('overview.timeoutRate'),
+  });
   const isEmpty =
     !!data &&
     !data.status &&
@@ -204,6 +236,11 @@ export default function OverviewPage() {
             }
           >
             {firstLoad ? bodyNotice(t('common.loading')) : <SyncedTrafficChart series={traffic} />}
+          </Widget>
+
+          {/* Golden-signal strip: fleet retrans/timeout rate per GB per 5-min bucket. */}
+          <Widget title={t('overview.goldenSignals')} testId="widget-overview-golden">
+            {firstLoad ? bodyNotice(t('common.loading')) : <SyncedErrorRateChart series={errorSeries} />}
           </Widget>
 
           <Widget

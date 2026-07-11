@@ -3,7 +3,13 @@
 // deltaPct, RTT percentiles and worst-latest NHI.
 import { describe, it, expect } from 'vitest';
 import type { NfmSeries } from './cw-metrics';
-import { buildOverviewKpis, combineAcrossMonitors, halfWindowDeltaPct } from './overview-metrics';
+import type { FlowEdge } from './types';
+import {
+  buildOverviewKpis,
+  combineAcrossMonitors,
+  errorRateSeries,
+  halfWindowDeltaPct,
+} from './overview-metrics';
 
 const T = ['2026-07-10T00:00:00.000Z', '2026-07-10T00:05:00.000Z', '2026-07-10T00:10:00.000Z',
   '2026-07-10T00:15:00.000Z'];
@@ -96,5 +102,39 @@ describe('buildOverviewKpis', () => {
     expect(r.rttP50).toBeNull();
     expect(r.rttP95).toBeNull();
     expect(r.nhi).toBeNull();
+  });
+});
+
+describe('errorRateSeries', () => {
+  it('errorRateSeries computes per-bucket retrans%/timeout% per GB, sorted by bucket', () => {
+    const f = (bucket: string, metric: any, value: number): FlowEdge => ({ edgeHash: 'e', monitor: 'm',
+      metric, category: 'INTRA_AZ', bucket, value, unit: 'x', a: {}, b: {}, traversedConstructs: [] });
+    const flows = [
+      f('2026-07-11T00:05:00Z', 'DATA_TRANSFERRED', 2e9), f('2026-07-11T00:05:00Z', 'RETRANSMISSIONS', 20),
+      f('2026-07-11T00:00:00Z', 'DATA_TRANSFERRED', 1e9), f('2026-07-11T00:00:00Z', 'TIMEOUTS', 5),
+    ];
+    const s = errorRateSeries(flows);
+    expect(s.map((p) => p.t)).toEqual(['2026-07-11T00:00:00Z', '2026-07-11T00:05:00Z']); // ascending
+    expect(s[1].retransRate).toBeCloseTo(10, 6);   // 20 / 2GB
+    expect(s[0].timeoutRate).toBeCloseTo(5, 6);    // 5 / 1GB
+  });
+
+  it('fills missing counters with 0 and guards zero-byte buckets (ratePerGb → 0)', () => {
+    const f = (bucket: string, metric: FlowEdge['metric'], value: number): FlowEdge => ({
+      edgeHash: 'e', monitor: 'm', metric, category: 'INTRA_AZ', bucket, value, unit: 'x',
+      a: {}, b: {}, traversedConstructs: [] });
+    // Bucket with bytes but no events → both rates 0; bucket with events but no bytes → guard to 0.
+    const s = errorRateSeries([
+      f('2026-07-11T00:00:00Z', 'DATA_TRANSFERRED', 1e9),
+      f('2026-07-11T00:05:00Z', 'RETRANSMISSIONS', 8),
+    ]);
+    expect(s).toEqual([
+      { t: '2026-07-11T00:00:00Z', retransRate: 0, timeoutRate: 0 },
+      { t: '2026-07-11T00:05:00Z', retransRate: 0, timeoutRate: 0 },
+    ]);
+  });
+
+  it('returns [] for no flows', () => {
+    expect(errorRateSeries([])).toEqual([]);
   });
 });
