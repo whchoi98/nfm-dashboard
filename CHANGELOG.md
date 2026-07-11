@@ -17,6 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-11
+
+### Added
+- **Alerts / Events** menu: live CloudWatch alarm states plus a derived event feed (NHI degradation, reliability breaches, collection gaps, retransmission/timeout spikes).
+- **Search** menu: unified entity search across topology nodes, recent flows, and DNS names, with deep links to the relevant page.
+- **Settings** menu: user-tunable thresholds (retransmission/timeout/cost/anomaly σ), default time range, monitor filter (persisted in localStorage), and an alarm-subscribe helper.
+- **Cost Explorer** menu: billed cost grouped by cluster / namespace / category / monitor, monthly run-rate, savings recommendations, and a trend.
+- **Anomalies** menu: baseline-deviation detection (threshold + window-over-window spike) with an overview anomaly badge.
+- **Reports / Export** menu: Markdown / CSV / print export of the current network state, plus a CSV export button on the flows table.
+
+### Changed
+- Grant the app task role `cloudwatch:DescribeAlarms` (for the Alerts menu).
+
 ## [1.1.0] - 2026-07-11
 
 ### Added
@@ -57,7 +70,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
@@ -75,6 +89,19 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.2.0] - 2026-07-11
+
+### Added
+- **알림 / 이벤트** 메뉴: CloudWatch 알람 상태 + 파생 이벤트 피드(NHI 저하, 신뢰성 breach, 수집 공백, 재전송/타임아웃 급증) 추가.
+- **검색** 메뉴: 토폴로지 노드·최근 플로우·DNS 이름 통합 검색 + 관련 페이지 딥링크 추가.
+- **설정** 메뉴: 사용자 조정 임계값(재전송/타임아웃/비용/이상 σ), 기본 기간, 모니터 필터(localStorage 유지), 알람 구독 도우미 추가.
+- **비용 탐색** 메뉴: 클러스터/네임스페이스/범주/모니터별 과금 비용, 월간 run-rate, 절감 후보, 추세 추가.
+- **이상 징후** 메뉴: baseline 편차 탐지(임계값 + 창 대비 급증) + 개요 이상 배지 추가.
+- **리포트 / 내보내기** 메뉴: 현재 네트워크 상태 Markdown/CSV/인쇄 내보내기 + 플로우 테이블 CSV 버튼 추가.
+
+### Changed
+- 앱 태스크 역할에 `cloudwatch:DescribeAlarms` 권한 부여(알림 메뉴용).
 
 ## [1.1.0] - 2026-07-11
 
@@ -116,7 +143,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0

@@ -16,6 +16,7 @@ import { formatBytes, formatCount, formatMicros } from '@/lib/format';
 import { formatUsd } from '@/app/insights/tabs/shared';
 import StatDelta, { type StatStatus } from '@/components/charts/StatDelta';
 import StatusBadge from '@/components/cards/StatusBadge';
+import AnomalyBadge from '@/components/AnomalyBadge';
 import CollectionStatusCard from '@/components/cards/CollectionStatusCard';
 import TimeSeries, { type TimeSeriesInput } from '@/components/charts/TimeSeries';
 import Widget from '@/components/analytics/Widget';
@@ -73,6 +74,9 @@ function SyncedTrafficChart({ series }: { series: TimeSeriesInput[] }) {
 export default function OverviewPage() {
   const { t } = useLanguage();
   const { data, loading, error } = usePolling<OverviewData>('/api/overview');
+  // Lightweight anomaly-count poll for the badge (default window/thresholds).
+  const anomaliesPoll = usePolling<{ anomalies: unknown[] }>('/api/anomalies');
+  const anomalyCount = anomaliesPoll.data?.anomalies?.length ?? 0;
   const firstLoad = loading && !data;
 
   const kpis = data?.kpis;
@@ -223,6 +227,18 @@ export default function OverviewPage() {
               value={firstLoad ? '…' : formatCount(breachCount)}
               status={data ? statusFor(breachCount, 1, BREACH_DANGER) : undefined}
             />
+            {/* Additive anomaly teaser — row only exists when count > 0. */}
+            {anomalyCount > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <AnomalyBadge count={anomalyCount} />
+                <Link
+                  href="/anomalies"
+                  className="text-xs font-medium text-ink/60 hover:text-ink hover:underline dark:text-white/60 dark:hover:text-white"
+                >
+                  {t('nav.anomalies')} →
+                </Link>
+              </div>
+            ) : null}
           </Widget>
 
           <CollectionStatusCard status={data?.status ?? null} />

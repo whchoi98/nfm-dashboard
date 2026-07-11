@@ -1,13 +1,19 @@
 import {
   Activity,
   ArrowLeftRight,
+  Bell,
   Bot,
+  FileText,
   Layers,
   LayoutDashboard,
   Lightbulb,
   Network,
   Route,
+  Search,
+  Settings,
   Stethoscope,
+  TriangleAlert,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -25,8 +31,14 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/insights', key: 'nav.insights', icon: Lightbulb },
   { href: '/workload', key: 'nav.workload', icon: Layers },
   { href: '/monitors', key: 'nav.monitors', icon: Activity },
+  { href: '/alerts', key: 'nav.alerts', icon: Bell },
+  { href: '/anomalies', key: 'nav.anomalies', icon: TriangleAlert },
+  { href: '/cost', key: 'nav.cost', icon: Wallet },
+  { href: '/reports', key: 'nav.reports', icon: FileText },
   { href: '/diagnose', key: 'nav.diagnose', icon: Stethoscope },
   { href: '/agents', key: 'nav.agents', icon: Bot },
+  { href: '/search', key: 'nav.search', icon: Search },
+  { href: '/settings', key: 'nav.settings', icon: Settings },
 ];
 
 export function isActive(pathname: string, href: string): boolean {
