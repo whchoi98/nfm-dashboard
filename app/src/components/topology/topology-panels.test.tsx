@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
 import ko from '@/lib/i18n/translations/ko.json';
-import type { TopologySnapshot } from '@/lib/types';
+import type { FlowEdge, TopologySnapshot } from '@/lib/types';
 import AdjacencyMatrix from './AdjacencyMatrix';
 import TopEdgesPanel from './TopEdgesPanel';
 
@@ -35,6 +35,16 @@ const topo: TopologySnapshot = {
 
 const EMPTY_TOPO: TopologySnapshot = { generatedAt: '', nodes: [], edges: [] };
 
+// Task 8 — edge-health matrix fixtures: raw FlowEdge[], not a TopologySnapshot.
+const hf = (src: string, dst: string, metric: FlowEdge['metric'], value: number): FlowEdge => ({
+  edgeHash: `${src}-${dst}`, monitor: 'm', metric, category: 'INTER_AZ', bucket: 'b', value, unit: 'x',
+  a: { serviceName: src }, b: { serviceName: dst }, traversedConstructs: [],
+});
+const healthFlows: FlowEdge[] = [
+  hf('svcA', 'svcB', 'DATA_TRANSFERRED', 1e9), hf('svcA', 'svcB', 'RETRANSMISSIONS', 100), // → danger
+  hf('svcC', 'svcD', 'DATA_TRANSFERRED', 1e9), hf('svcC', 'svcD', 'RETRANSMISSIONS', 0),   // → ok
+];
+
 describe('AdjacencyMatrix', () => {
   it('renders the reused Heatmap from buildMatrix at namespace level', () => {
     wrap(<AdjacencyMatrix topology={topo} metric="DATA_TRANSFERRED" level="namespace" />);
@@ -63,6 +73,35 @@ describe('AdjacencyMatrix', () => {
   it('shows the empty state for an empty topology, keeping the testid', () => {
     wrap(<AdjacencyMatrix topology={EMPTY_TOPO} metric="DATA_TRANSFERRED" level="namespace" />);
     const root = screen.getByTestId('adjacency-matrix');
+    expect(within(root).getByText(ko['topology.empty'])).toBeTruthy();
+  });
+
+  // Task 8 — health mode: RED/AMBER/GREEN by connection health, not raw magnitude.
+  it('health mode: colors cells by connection health (STATUS) via buildHealthMatrix, dual-encoded', () => {
+    wrap(
+      <AdjacencyMatrix
+        topology={topo}
+        metric="DATA_TRANSFERRED"
+        level="namespace"
+        mode="health"
+        flows={healthFlows}
+        healthLevel="service"
+      />,
+    );
+    const root = screen.getByTestId('adjacency-matrix-health');
+    // Dual-encoded: the per-GB rate is printed on the cell, never color alone.
+    expect(within(root).getByText('100/GB')).toBeTruthy();
+    expect(within(root).getByText('0/GB')).toBeTruthy();
+    expect(within(root).getAllByText('svcA').length).toBeGreaterThanOrEqual(1);
+    // Metric-mode's own testid/heatmap must not appear in health mode.
+    expect(screen.queryByTestId('adjacency-matrix')).toBeNull();
+  });
+
+  it('health mode: empty flows shows the empty state, keeping the health testid', () => {
+    wrap(
+      <AdjacencyMatrix topology={topo} metric="DATA_TRANSFERRED" level="namespace" mode="health" flows={[]} />,
+    );
+    const root = screen.getByTestId('adjacency-matrix-health');
     expect(within(root).getByText(ko['topology.empty'])).toBeTruthy();
   });
 });
