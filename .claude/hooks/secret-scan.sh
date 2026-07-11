@@ -1,7 +1,9 @@
 #!/bin/bash
 # Scan staged files for secrets before commit.
 # Triggered by PreToolUse event (matcher: Bash).
-# Exit 1 to block the commit if secrets are found.
+# Exit 2 to BLOCK the tool call if secrets are found (Claude Code blocks a
+# PreToolUse call on exit code 2; exit 1 is treated as a hook error and does
+# NOT block). Block reasons are written to stderr so they surface to the model.
 
 SECRETS_FOUND=0
 
@@ -44,16 +46,16 @@ for file in $STAGED_FILES; do
 
     for regex in "${PATTERNS[@]}"; do
         if grep -qP "$regex" "$file" 2>/dev/null; then
-            echo "[secret-scan] Potential secret found in $file (pattern: ${regex:0:30}...)"
+            echo "[secret-scan] Potential secret found in $file (pattern: ${regex:0:30}...)" >&2
             SECRETS_FOUND=1
         fi
     done
 done
 
 if [ "$SECRETS_FOUND" -eq 1 ]; then
-    echo ""
-    echo "[secret-scan] BLOCKED: Potential secrets detected in staged files."
-    echo "[secret-scan] Review the files above and remove secrets before committing."
-    echo "[secret-scan] Use .env files for secrets and .env.example for templates."
-    exit 1
+    echo "" >&2
+    echo "[secret-scan] BLOCKED: Potential secrets detected in staged files." >&2
+    echo "[secret-scan] Review the files above and remove secrets before committing." >&2
+    echo "[secret-scan] Use .env files for secrets and .env.example for templates." >&2
+    exit 2
 fi
