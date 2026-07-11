@@ -18,6 +18,7 @@ import LatencyTab from './tabs/LatencyTab';
 import DependenciesTab from './tabs/DependenciesTab';
 import DnsTab from './tabs/DnsTab';
 import EfficiencyTab from './tabs/EfficiencyTab';
+import ScorecardTab from './tabs/ScorecardTab';
 import type { TabProps } from './tabs/shared';
 
 interface TabDef {
@@ -35,6 +36,7 @@ const TABS: TabDef[] = [
   { key: 'dependencies', labelKey: 'insights.tab.dependencies', Comp: DependenciesTab },
   { key: 'dns', labelKey: 'insights.tab.dns', Comp: DnsTab },
   { key: 'efficiency', labelKey: 'insights.tab.efficiency', Comp: EfficiencyTab },
+  { key: 'scorecard', labelKey: 'insights.tab.scorecard', Comp: ScorecardTab },
 ];
 
 export default function InsightsPage() {
