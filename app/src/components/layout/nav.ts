@@ -14,6 +14,7 @@ import {
   Stethoscope,
   TriangleAlert,
   Wallet,
+  Waypoints,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: '/', key: 'nav.overview', icon: LayoutDashboard },
   { href: '/topology', key: 'nav.topology', icon: Network },
+  { href: '/network', key: 'nav.network', icon: Waypoints },
   { href: '/flows', key: 'nav.flows', icon: ArrowLeftRight },
   { href: '/paths', key: 'nav.paths', icon: Route },
   { href: '/insights', key: 'nav.insights', icon: Lightbulb },
