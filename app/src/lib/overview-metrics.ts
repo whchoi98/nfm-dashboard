@@ -7,7 +7,7 @@
 import type { NfmSeries } from './cw-metrics';
 import type { DnsAggregate, FlowEdge } from './types';
 import { percentile, ratePerGb, type Series } from './analytics/aggregate';
-import { scorecardLens } from './analytics/scorecard';
+import { scorecardLens, scoreStatus } from './analytics/scorecard';
 import { efficiencyLens } from './analytics/efficiency';
 import { concentration } from './analytics/dependencies';
 
@@ -142,11 +142,6 @@ export interface OverviewSummary {
   concentrationTopShare: number;            // 0..1 largest-pair share
   monitorsTotal: number;
   monitorsDegraded: number;                 // scorecard monitors with status !== 'ok'
-}
-
-/** Scorecard score → status band (same bands as the scorecard lens: ok≥90, warn≥70). */
-function scoreStatus(score: number): 'ok' | 'warn' | 'danger' {
-  return score >= 90 ? 'ok' : score >= 70 ? 'warn' : 'danger';
 }
 
 /** Fleet DNS failure fraction (nxdomain+servfail over total); null when DNS is off or no queries. */
