@@ -11,6 +11,7 @@ import {
   Search,
   Settings,
   Stethoscope,
+  TriangleAlert,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/workload', key: 'nav.workload', icon: Layers },
   { href: '/monitors', key: 'nav.monitors', icon: Activity },
   { href: '/alerts', key: 'nav.alerts', icon: Bell },
+  { href: '/anomalies', key: 'nav.anomalies', icon: TriangleAlert },
   { href: '/cost', key: 'nav.cost', icon: Wallet },
   { href: '/diagnose', key: 'nav.diagnose', icon: Stethoscope },
   { href: '/agents', key: 'nav.agents', icon: Bot },
