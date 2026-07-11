@@ -118,9 +118,31 @@ describe('moversLens', () => {
     expect(r.dataTransferred.find((m) => m.key === 'ns/down')?.deltaPct).toBeCloseTo(-50);
   });
 
+  it('wentSilent flags prior>0 & current=0 and NOT new appearances', () => {
+    const cur: FlowEdge[] = []; // service "x" absent now
+    const prior: FlowEdge[] = [{ edgeHash: 'e', monitor: 'm', metric: 'DATA_TRANSFERRED', category: 'INTRA_AZ',
+      bucket: 'b', value: 500, unit: 'B', a: { serviceName: 'x' }, b: { serviceName: 'y' }, traversedConstructs: [] }];
+    const res = moversLens(cur, prior);
+    expect(res.silent.some((m) => m.label.includes('x') && m.wentSilent)).toBe(true);
+    // a brand-new entity (prior 0, current >0) must NOT be in silent
+    const res2 = moversLens(prior, cur);
+    expect(res2.silent.length).toBe(0);
+  });
+
+  it('silent dedupes by key across metrics, keeping the largest prior', () => {
+    const prior = [
+      flow({ metric: 'DATA_TRANSFERRED', value: 900, a: svc('gone'), b: svc('gone') }),
+      flow({ metric: 'TIMEOUTS', value: 3, a: svc('gone'), b: svc('gone') }),
+    ];
+    const res = moversLens([], prior);
+    const entries = res.silent.filter((m) => m.key === 'ns/gone');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].prior).toBe(900);
+  });
+
   it('empty inputs → empty result lists', () => {
     expect(moversLens([], [])).toEqual({
-      dataTransferred: [], retransmissions: [], timeouts: [],
+      dataTransferred: [], retransmissions: [], timeouts: [], silent: [],
     });
   });
 });

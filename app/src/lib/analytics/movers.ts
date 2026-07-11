@@ -19,12 +19,18 @@ export interface Mover {
   /** (current − prior) / prior × 100; null when prior is 0 (a "new" mover — no baseline). */
   deltaPct: number | null;
   direction: MoverDirection;
+  /** True iff the entity was seen in the prior window but is at 0 now — a
+   *  crashed / scaled-to-zero incident signal, distinct from a mere decline. */
+  wentSilent: boolean;
 }
 
 export interface MoversResult {
   dataTransferred: Mover[];
   retransmissions: Mover[];
   timeouts: Mover[];
+  /** Went-silent entities (prior > 0 → current 0) across all three metric
+   *  lists, deduped by key keeping the mover with the largest prior. */
+  silent: Mover[];
 }
 
 /**
@@ -71,6 +77,7 @@ function moversFor(
       prior: p,
       deltaPct: p === 0 ? null : ((c - p) / p) * 100,
       direction: c > p ? 'up' : c < p ? 'down' : 'flat',
+      wentSilent: p > 0 && c === 0,
     });
   }
   movers.sort(
@@ -80,6 +87,25 @@ function moversFor(
       x.key.localeCompare(y.key),
   );
   return movers.slice(0, topN);
+}
+
+/**
+ * Went-silent movers across the metric lists, deduped by key — when the same
+ * entity went silent on several metrics, keep the one with the largest prior.
+ * Ordered by prior desc (biggest lost baseline first), key asc as tiebreak.
+ */
+function silentMovers(lists: Mover[][]): Mover[] {
+  const byKey = new Map<string, Mover>();
+  for (const list of lists) {
+    for (const m of list) {
+      if (!m.wentSilent) continue;
+      const kept = byKey.get(m.key);
+      if (!kept || m.prior > kept.prior) byKey.set(m.key, m);
+    }
+  }
+  return [...byKey.values()].sort(
+    (x, y) => y.prior - x.prior || x.key.localeCompare(y.key),
+  );
 }
 
 /** Window-over-window movers per metric (DATA_TRANSFERRED / RETRANSMISSIONS / TIMEOUTS). */
@@ -92,9 +118,13 @@ export function moversLens(
     opts?.topN && Number.isFinite(opts.topN) && opts.topN > 0
       ? Math.floor(opts.topN)
       : DEFAULT_TOP_N;
+  const dataTransferred = moversFor(current, prior, 'DATA_TRANSFERRED', topN);
+  const retransmissions = moversFor(current, prior, 'RETRANSMISSIONS', topN);
+  const timeouts = moversFor(current, prior, 'TIMEOUTS', topN);
   return {
-    dataTransferred: moversFor(current, prior, 'DATA_TRANSFERRED', topN),
-    retransmissions: moversFor(current, prior, 'RETRANSMISSIONS', topN),
-    timeouts: moversFor(current, prior, 'TIMEOUTS', topN),
+    dataTransferred,
+    retransmissions,
+    timeouts,
+    silent: silentMovers([dataTransferred, retransmissions, timeouts]),
   };
 }

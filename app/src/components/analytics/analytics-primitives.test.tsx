@@ -67,6 +67,21 @@ describe('Toplist', () => {
     expect(screen.getByText('200')).toBeTruthy();
   });
 
+  it('a per-row display string overrides valueFormatter for that row only', () => {
+    wrap(
+      <Toplist
+        rows={[
+          { label: 'bytes-row', value: 500, display: '500 B' },
+          { label: 'count-row', value: 3 },
+        ]}
+        valueFormatter={(v) => `${v}x`}
+      />,
+    );
+    expect(screen.getByText('500 B')).toBeTruthy(); // display wins
+    expect(screen.queryByText('500x')).toBeNull();
+    expect(screen.getByText('3x')).toBeTruthy(); // others still use valueFormatter
+  });
+
   it('dual-encodes status with an accessible text label', () => {
     wrap(<Toplist rows={rows} />);
     expect(screen.getByText(ko['toplist.status.danger'])).toBeTruthy();
