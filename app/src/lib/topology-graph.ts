@@ -1,9 +1,9 @@
 // app/src/lib/topology-graph.ts — pure view-model builder for the WhaTap-style
 // force-directed NetworkGraph (Task 6). Turns a TopologySnapshot into circle
 // nodes sized by the selected metric (sqrt scale), directional links dashed by
-// DATA_TRANSFERRED throughput (independent of the selected metric), self-loop
-// totals, and status per node. No I/O, no layout — d3-force positioning
-// happens in the component.
+// DATA_TRANSFERRED throughput (independent of the selected metric) and colored
+// by retransmission-rate health (CNM style), self-loop totals, and status per
+// node. No I/O, no layout — d3-force positioning happens in the component.
 import type { DestCategory, MetricName, TopoNode, TopologySnapshot } from './types';
 
 export interface GraphNode {
@@ -27,6 +27,12 @@ export interface GraphLink {
   rate: number;
   /** rate > rateThreshold → dashed (throughput encoding, WhaTap "bps" reference). */
   dashed: boolean;
+  /**
+   * Connection health from the retransmission rate (RETRANSMISSIONS per GB of
+   * DATA_TRANSFERRED, CNM-style): danger ≥ healthThreshold, warn ≥ half, else
+   * ok. Edges without retrans data (or without bytes) are ok.
+   */
+  health: 'ok' | 'warn' | 'danger';
   category: DestCategory;
 }
 
@@ -45,6 +51,8 @@ export interface BuildGraphOpts {
   windowSeconds?: number;
   /** Links whose DATA_TRANSFERRED bytes/s rate exceeds this are drawn dashed. */
   rateThreshold?: number;
+  /** Danger threshold for link health, in retransmissions per GB (warn at half). */
+  healthThreshold?: number;
   /** Tag filter: non-empty set keeps only those nodes (+ links with both ends kept). */
   selectedIds?: Set<string> | null;
   /** Node ids in reliability breach → status danger. */
@@ -58,11 +66,19 @@ export interface BuildGraphOpts {
 export const DEFAULT_RATE_THRESHOLD = 128;
 export const DEFAULT_WINDOW_SECONDS = 300;
 export const DEFAULT_RADIUS_RANGE: [number, number] = [18, 56];
+/** Danger threshold in retransmissions per GB — matches network-analytics DEFAULT_RETRANS_THRESHOLD. */
+export const DEFAULT_HEALTH_THRESHOLD = 10;
+
+/** Events per GB with 0-division guard: bytes=0 → 0 (no traffic ≠ infinitely bad) — same formula as analytics ratePerGb. */
+function ratePerGb(events: number, bytes: number): number {
+  return bytes === 0 ? 0 : events / Math.max(bytes / 1e9, 1e-9);
+}
 
 export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {}): GraphModel {
   const metric = opts.metric ?? 'DATA_TRANSFERRED';
   const windowSeconds = opts.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
   const threshold = opts.rateThreshold ?? DEFAULT_RATE_THRESHOLD;
+  const healthThreshold = opts.healthThreshold ?? DEFAULT_HEALTH_THRESHOLD;
   const [rMin, rMax] = opts.radiusRange ?? DEFAULT_RADIUS_RANGE;
 
   // Tag selection: an empty/absent set means "all nodes".
@@ -86,6 +102,9 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
     // threshold would be meaningless.
     const bytes = e.metrics.DATA_TRANSFERRED ?? 0;
     const rate = bytes / windowSeconds;
+    // Health always encodes retransmissions per GB of DATA_TRANSFERRED,
+    // independent of the selected sizing/label metric (Datadog-CNM style).
+    const retransRate = ratePerGb(e.metrics.RETRANSMISSIONS ?? 0, bytes);
     links.push({
       id: e.id,
       source: e.source,
@@ -93,6 +112,8 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
       value,
       rate,
       dashed: rate > threshold,
+      health:
+        retransRate >= healthThreshold ? 'danger' : retransRate >= healthThreshold / 2 ? 'warn' : 'ok',
       category: e.category,
     });
     traffic.set(e.source, (traffic.get(e.source) ?? 0) + value);

@@ -34,7 +34,12 @@ export default function CategoryDonut({
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row">
+    // flex-wrap (not a viewport sm: switch): the legend list sits beside the
+    // donut only when it has ≥14rem — in narrower CARDS (e.g. the /flows
+    // category-mix widget) it wraps below instead of overflowing the card and
+    // painting its value column over the neighboring widget (dark-mode
+    // "0 B ticks overlap the legend" report).
+    <div className="flex flex-wrap items-center justify-center gap-4">
       <div className="h-48 w-48 shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -70,7 +75,7 @@ export default function CategoryDonut({
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="flex w-full flex-col gap-2">
+      <ul className="flex min-w-[14rem] flex-1 flex-col gap-2">
         {data.map((d) => (
           <li key={d.cat} className="flex items-center gap-2 text-xs">
             <span
@@ -78,11 +83,12 @@ export default function CategoryDonut({
               style={{ backgroundColor: CATEGORY_COLORS[d.cat] }}
               aria-hidden
             />
-            <span className="text-ink/70 dark:text-white/70">{d.name}</span>
-            <span className="ml-auto font-semibold tabular-nums text-ink dark:text-white">
+            {/* min-w-0 lets long names wrap instead of pushing the numbers out of the card */}
+            <span className="min-w-0 text-ink/70 dark:text-white/70">{d.name}</span>
+            <span className="ml-auto shrink-0 font-semibold tabular-nums text-ink dark:text-white">
               {total > 0 ? `${((d.value / total) * 100).toFixed(1)}%` : '—'}
             </span>
-            <span className="w-16 text-right tabular-nums text-ink/50 dark:text-white/50">
+            <span className="w-16 shrink-0 text-right tabular-nums text-ink/50 dark:text-white/50">
               {valueFormatter(d.value)}
             </span>
           </li>

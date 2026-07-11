@@ -15,11 +15,13 @@ export function Card({
   className?: string;
   testId?: string;
 }) {
+  // Unified card chrome (Phase 9 polish): 1px token hairline + tightened
+  // padding + .ui-section-title header — every Card/Widget consumer inherits.
   return (
-    <section data-testid={testId} className={`rounded-card bg-surface p-5 dark:bg-white/5 ${className}`}>
+    <section data-testid={testId} className={`ui-hairline rounded-card bg-surface p-4 dark:bg-white/5 ${className}`}>
       {title || action ? (
-        <div className="mb-4 flex items-center justify-between gap-2">
-          {title ? <h2 className="text-sm font-semibold">{title}</h2> : <span />}
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {title ? <h2 className="ui-section-title min-w-0 truncate">{title}</h2> : <span />}
           {action}
         </div>
       ) : null}

@@ -77,3 +77,26 @@ export const STATUS = {
   warn: TOKENS.chartAmber,
   danger: '#FFB4B4', // no matching TOKENS hue — status-only pastel red, defined here
 } as const;
+
+/**
+ * UI chrome (hairline borders, hover/zebra washes, focus ring) — mirrors the
+ * `--ui-*` CSS variables in app/globals.css (keep in sync). For TSX/SVG
+ * consumers that cannot read CSS variables (inline SVG strokes, reactflow
+ * edge styles); DOM components should prefer the globals.css utilities
+ * (.ui-hairline / .ui-table-dense / .ui-empty / .ui-skeleton).
+ */
+export const CHROME = {
+  light: {
+    border: 'rgba(28, 28, 28, 0.08)',
+    borderSoft: 'rgba(28, 28, 28, 0.05)',
+    zebra: 'rgba(28, 28, 28, 0.02)',
+    hover: 'rgba(28, 28, 28, 0.045)',
+  },
+  dark: {
+    border: 'rgba(255, 255, 255, 0.1)',
+    borderSoft: 'rgba(255, 255, 255, 0.06)',
+    zebra: 'rgba(255, 255, 255, 0.02)',
+    hover: 'rgba(255, 255, 255, 0.06)',
+  },
+  focus: TOKENS.chartViolet,
+} as const;

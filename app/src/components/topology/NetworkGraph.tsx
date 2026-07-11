@@ -1,9 +1,12 @@
 'use client';
 
-// NetworkGraph (Task 6) — WhaTap-style force-directed node-link topology.
-// buildGraphModel(topology) → circle nodes sized by traffic (sqrt scale) with
-// status colors + self-loop arcs, and curved directional edges labeled with
-// the selected metric (dashed when DATA_TRANSFERRED throughput > threshold).
+// NetworkGraph (Task 6, health coloring Task 4/Phase 9) — WhaTap-style
+// force-directed node-link topology. buildGraphModel(topology) → circle nodes
+// sized by traffic (sqrt scale) with status colors + self-loop arcs, and
+// curved directional edges labeled with the selected metric. Edge encoding
+// (CNM style): STROKE COLOR = retransmission-rate health (STATUS ok/warn/
+// danger), WIDTH = selected-metric value (sqrt scale), DASH = DATA_TRANSFERRED
+// throughput > threshold.
 // Layout: d3-force simulation run for ~300 ticks up-front in a memo keyed by
 // the structural node/link id set. Node positions then live in local state
 // (useNodesState): manual drags persist across value-only polls and focus
@@ -28,8 +31,8 @@ import 'reactflow/dist/style.css';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
-import { buildGraphModel, type GraphModel, type GraphNode } from '@/lib/topology-graph';
-import { CATEGORY_COLORS, STATUS, TOKENS } from '@/lib/chart-tokens';
+import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode } from '@/lib/topology-graph';
+import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
@@ -101,11 +104,17 @@ function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
 }
 
 // ── custom curved edge ──────────────────────────────────────────────────────
+// Edge stroke width range (px) for the selected-metric sqrt scale.
+const EDGE_WIDTH_RANGE: [number, number] = [1.25, 4];
+
 interface CurvedEdgeData {
   value: number;
   metric: MetricName;
   dashed: boolean;
-  category: keyof typeof CATEGORY_COLORS;
+  /** Retransmission-rate health — drives the stroke color (STATUS, dual-encoded by the legend). */
+  health: GraphLink['health'];
+  /** Stroke width in px — selected-metric value on the sqrt EDGE_WIDTH_RANGE scale. */
+  width: number;
   muted: boolean;
   sourceRadius: number;
   targetRadius: number;
@@ -131,7 +140,7 @@ function CurvedEdgeView({ id, sourceX, sourceY, targetX, targetY, data, markerEn
   // Quadratic bezier point at t=0.5 → label anchor.
   const labelX = 0.25 * sx + 0.5 * cx + 0.25 * tx;
   const labelY = 0.25 * sy + 0.5 * cy + 0.25 * ty;
-  const color = CATEGORY_COLORS[data.category] ?? TOKENS.chartBlue;
+  const color = STATUS[data.health];
   return (
     <>
       <BaseEdge
@@ -140,7 +149,7 @@ function CurvedEdgeView({ id, sourceX, sourceY, targetX, targetY, data, markerEn
         markerEnd={markerEnd}
         style={{
           stroke: color,
-          strokeWidth: 1.5,
+          strokeWidth: data.width,
           strokeDasharray: data.dashed ? '6 4' : undefined,
           opacity: data.muted ? 0.2 : 1,
         }}
@@ -236,6 +245,11 @@ function NetworkGraphInner({
 
   const { layoutNodes, rfEdges } = useMemo(() => {
     const radii = new Map(model.nodes.map((n) => [n.id, n.radius]));
+    // Selected-metric value → stroke width (sqrt scale, like node radii).
+    const [wMin, wMax] = EDGE_WIDTH_RANGE;
+    const maxValue = Math.max(0, ...model.links.map((l) => l.value));
+    const widthOf = (v: number) =>
+      maxValue <= 0 ? wMin : wMin + (wMax - wMin) * Math.sqrt(v / maxValue);
     const layoutNodes: RFNode<CircleNodeData>[] = model.nodes.map((n) => {
       const p = positions.get(n.id) ?? { x: 0, y: 0 };
       return {
@@ -256,12 +270,14 @@ function NetworkGraphInner({
         value: l.value,
         metric,
         dashed: l.dashed,
-        category: l.category,
+        health: l.health,
+        width: widthOf(l.value),
         muted: activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId,
         sourceRadius: radii.get(l.source) ?? 0,
         targetRadius: radii.get(l.target) ?? 0,
       },
-      markerEnd: { type: MarkerType.ArrowClosed, color: CATEGORY_COLORS[l.category], width: 14, height: 14 },
+      // Arrowhead matches the health stroke so the edge reads as one mark.
+      markerEnd: { type: MarkerType.ArrowClosed, color: STATUS[l.health], width: 14, height: 14 },
       // Thin curves stay clickable via a wide invisible hit area.
       interactionWidth: 16,
     }));

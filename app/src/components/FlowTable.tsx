@@ -176,11 +176,14 @@ export default function FlowTable({
     }
   };
 
+  // Dense header typography (Phase 9 polish) shared by sortable + plain <th>s.
+  const headCls = 'text-[11px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50';
+
   const SortHeader = ({ k, label }: { k: SortKey; label: string }) => (
     <button
       type="button"
       onClick={() => onSort(k)}
-      className="flex items-center gap-1 text-xs font-medium text-ink/60 hover:text-ink dark:text-white/60 dark:hover:text-white"
+      className={`flex items-center gap-1 ${headCls} hover:text-ink dark:hover:text-white`}
     >
       {label}
       {sortKey === k ? (
@@ -195,7 +198,7 @@ export default function FlowTable({
 
   if (flows.length === 0) {
     return (
-      <div data-testid="flow-table" className="flex h-40 items-center justify-center text-sm text-ink/40 dark:text-white/40">
+      <div data-testid="flow-table" className="ui-empty flex h-40 items-center justify-center text-sm text-ink/45 dark:text-white/45">
         {t('table.empty')}
       </div>
     );
@@ -232,34 +235,30 @@ export default function FlowTable({
           {t('reports.exportCsv')}
         </button>
       </div>
-      {/* Desktop table */}
+      {/* Desktop table — density via .ui-table-dense (hairlines, zebra, hover) */}
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full border-collapse text-sm">
+        <table className="ui-table-dense w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-black/5 text-left dark:border-white/10">
-              <th className="py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60">{t('flow.colA')}</th>
-              <th className="py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60">{t('flow.colB')}</th>
-              <th className="py-2 pr-3"><SortHeader k="category" label={t('flow.colCategory')} /></th>
-              <th className="py-2 pr-3"><SortHeader k="metric" label={t('flow.colMetric')} /></th>
-              <th className="py-2 pr-3"><SortHeader k="port" label={t('flow.colPort')} /></th>
-              <th className="py-2"><SortHeader k="value" label={t('flow.colValue')} /></th>
+            <tr className="text-left">
+              <th className={`py-1.5 pr-3 ${headCls}`}>{t('flow.colA')}</th>
+              <th className={`py-1.5 pr-3 ${headCls}`}>{t('flow.colB')}</th>
+              <th className="py-1.5 pr-3"><SortHeader k="category" label={t('flow.colCategory')} /></th>
+              <th className="py-1.5 pr-3"><SortHeader k="metric" label={t('flow.colMetric')} /></th>
+              <th className="py-1.5 pr-3"><SortHeader k="port" label={t('flow.colPort')} /></th>
+              <th className="py-1.5"><SortHeader k="value" label={t('flow.colValue')} /></th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((f, i) => (
-              <tr
-                key={rowKey(f, i)}
-                onClick={() => select(f)}
-                className="cursor-pointer border-b border-black/5 hover:bg-surface dark:border-white/5 dark:hover:bg-white/5"
-              >
-                <td className="max-w-56 truncate py-2.5 pr-3 font-medium">{endpointLabel(f.a)}</td>
-                <td className="max-w-56 truncate py-2.5 pr-3 font-medium">{endpointLabel(f.b)}</td>
-                <td className="py-2.5 pr-3"><CategoryChip category={f.category} /></td>
-                <td className="py-2.5 pr-3 text-xs text-ink/70 dark:text-white/70">{t(`metric.${f.metric}`)}</td>
-                <td className="py-2.5 pr-3 tabular-nums text-ink/70 dark:text-white/70">
+              <tr key={rowKey(f, i)} onClick={() => select(f)} className="cursor-pointer">
+                <td className="max-w-56 truncate py-2 pr-3 font-medium">{endpointLabel(f.a)}</td>
+                <td className="max-w-56 truncate py-2 pr-3 font-medium">{endpointLabel(f.b)}</td>
+                <td className="py-2 pr-3"><CategoryChip category={f.category} /></td>
+                <td className="py-2 pr-3 text-xs text-ink/70 dark:text-white/70">{t(`metric.${f.metric}`)}</td>
+                <td className="py-2 pr-3 tabular-nums text-ink/70 dark:text-white/70">
                   {f.targetPort ?? '—'}
                 </td>
-                <td className="py-2.5 font-semibold tabular-nums">{formatMetricValue(f.metric, f.value)}</td>
+                <td className="py-2 font-semibold tabular-nums">{formatMetricValue(f.metric, f.value)}</td>
               </tr>
             ))}
           </tbody>
@@ -272,7 +271,7 @@ export default function FlowTable({
             <button
               type="button"
               onClick={() => select(f)}
-              className="w-full rounded-card bg-surface p-3 text-left dark:bg-white/5"
+              className="ui-hairline w-full rounded-card bg-surface p-3 text-left dark:bg-white/5"
             >
               <div className="flex items-center gap-1.5 text-sm font-medium">
                 <span className="truncate">{endpointLabel(f.a)}</span>

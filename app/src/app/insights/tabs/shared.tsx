@@ -10,9 +10,10 @@ export interface TabProps {
 }
 
 /**
- * Widget body wrapper: error → common.error, first load → common.loading,
- * empty → chart.empty, otherwise the chart itself. Charts with built-in empty
- * states can skip `empty`.
+ * Widget body wrapper: error → common.error, first load → a shimmer skeleton
+ * (announced as common.loading), empty → chart.empty in a dashed hairline box,
+ * otherwise the chart itself. Charts with built-in empty states can skip
+ * `empty`. Skeleton/empty chrome comes from the .ui-* utilities (globals.css).
  */
 export function LensState({
   loading,
@@ -28,14 +29,30 @@ export function LensState({
   children: React.ReactNode;
 }) {
   const { t } = useLanguage();
-  const notice = (text: string) => (
-    <p className="flex h-32 items-center justify-center text-sm text-ink/40 dark:text-white/40">
-      {text}
-    </p>
-  );
-  if (error) return notice(t('common.error'));
-  if (loading) return notice(t('common.loading'));
-  if (empty) return notice(emptyLabel ?? t('chart.empty'));
+  if (error) {
+    return (
+      <p className="flex h-32 items-center justify-center text-sm text-ink/45 dark:text-white/45">
+        {t('common.error')}
+      </p>
+    );
+  }
+  if (loading) {
+    return (
+      <div role="status" className="flex h-32 flex-col justify-center gap-2.5">
+        <div className="ui-skeleton h-3 w-2/5" aria-hidden />
+        <div className="ui-skeleton h-3 w-full" aria-hidden />
+        <div className="ui-skeleton h-3 w-4/5" aria-hidden />
+        <span className="sr-only">{t('common.loading')}</span>
+      </div>
+    );
+  }
+  if (empty) {
+    return (
+      <p className="ui-empty flex h-32 items-center justify-center text-sm text-ink/45 dark:text-white/45">
+        {emptyLabel ?? t('chart.empty')}
+      </p>
+    );
+  }
   return <>{children}</>;
 }
 

@@ -9,7 +9,11 @@
 // SPIKE deviation rule (deterministic, documented): the prior window yields a
 // SINGLE aggregate per entity × metric (5-min buckets can be sparse or missing,
 // so a per-bucket stddev is not robust at lab scale). We therefore use the
-// relative-jump form: spike ⇔ prior > 0 AND current > sigma × prior.
+// relative-jump form: spike ⇔ prior > 0 AND current > sigma × prior
+// AND current − prior ≥ SPIKE_MIN_DELTA[metric] (min-absolute floor —
+// tiny baselines pass ×sigma trivially, e.g. 2→8 retransmissions, and were
+// flooding the lens with noise; the floor also subsumes the tiny-prior/
+// tiny-current case since two small values can never differ by the floor).
 // prior = 0 means growth is not measurable (a "new" entity — mirrors movers'
 // deltaPct=null handling) and is never flagged. ROUND_TRIP_TIME is excluded
 // (window sums of RTT samples are meaningless).
@@ -24,6 +28,19 @@ import { ratePer } from './reliability';
 
 /** Default spike sensitivity (σ) — mirrors DEFAULT_SETTINGS.anomalySigma. */
 export const DEFAULT_SIGMA = 3;
+
+/**
+ * Minimum ABSOLUTE window-over-window increase (current − prior, inclusive ≥)
+ * required for a SPIKE, per metric. Cuts small-baseline noise while keeping
+ * large real spikes: bytes must grow by ≥ 50 MB, event counts by ≥ 10 events.
+ * Metrics without an entry (none today) have no floor. THRESHOLD anomalies
+ * (retrans/timeout rate) are unaffected.
+ */
+export const SPIKE_MIN_DELTA: Partial<Record<MetricName, number>> = {
+  DATA_TRANSFERRED: 50e6, // bytes — 50 MB
+  RETRANSMISSIONS: 10, // events
+  TIMEOUTS: 10, // events
+};
 
 export type AnomalyKind = 'retrans' | 'timeout' | 'spike';
 export type AnomalySeverity = 'critical' | 'warn';
@@ -108,12 +125,14 @@ export function detectAnomalies(
     }
   }
 
-  // (b) SPIKE — relative jump vs the prior window (rule in the module header).
+  // (b) SPIKE — relative jump AND min-absolute floor (rule in the module header).
   for (const metric of SPIKE_METRICS) {
     const pri = sumsByEntity(prior, metric);
+    const minDelta = SPIKE_MIN_DELTA[metric] ?? 0;
     for (const [key, value] of sumsByEntity(current, metric)) {
       const baseline = pri.get(key) ?? 0;
       if (baseline <= 0 || value <= opts.sigma * baseline) continue;
+      if (value - baseline < minDelta) continue; // absolute floor — see SPIKE_MIN_DELTA
       anomalies.push({
         key, label: key, kind: 'spike', metric,
         value, baseline,
