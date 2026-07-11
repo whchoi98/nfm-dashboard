@@ -180,4 +180,64 @@ describe('buildGraphModel', () => {
     expect(m.total).toBe(0);
     expect(m.selected).toBe(0);
   });
+
+  // ── edge health (Phase 9 Task 4): retransmissions per GB of DATA_TRANSFERRED ──
+  describe('link health', () => {
+    const GB = 1e9;
+
+    it('classifies danger ≥ threshold, warn ≥ half, ok below (10/GB default, inclusive bounds)', () => {
+      const t = topo([
+        // 10 retrans over 1 GB → rate exactly 10 → danger (inclusive).
+        { id: 'danger', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 10 }, category: 'INTRA_AZ' },
+        // 5 retrans over 1 GB → rate exactly 5 (= half) → warn (inclusive).
+        { id: 'warn', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 5 }, category: 'INTRA_AZ' },
+        // 4.99…/GB → ok (just under half).
+        { id: 'ok', source: 'c', target: 'd', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 4 }, category: 'INTRA_AZ' },
+      ]);
+      const byId = new Map(buildGraphModel(t).links.map((l) => [l.id, l]));
+      expect(byId.get('danger')!.health).toBe('danger');
+      expect(byId.get('warn')!.health).toBe('warn');
+      expect(byId.get('ok')!.health).toBe('ok');
+    });
+
+    it('respects a custom healthThreshold', () => {
+      const t = topo([
+        { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 10 }, category: 'INTRA_AZ' },
+      ]);
+      // threshold 40 → rate 10 < half(20) → ok; threshold 15 → 10 ≥ 7.5 → warn.
+      expect(buildGraphModel(t, { healthThreshold: 40 }).links[0].health).toBe('ok');
+      expect(buildGraphModel(t, { healthThreshold: 15 }).links[0].health).toBe('warn');
+    });
+
+    it('treats edges without retransmission data as ok', () => {
+      const t = topo([
+        { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: GB }, category: 'INTRA_AZ' },
+      ]);
+      expect(buildGraphModel(t).links[0].health).toBe('ok');
+    });
+
+    it('guards zero/missing bytes: no NaN/Infinity, health ok (no traffic ≠ infinitely bad)', () => {
+      const t = topo([
+        // retrans present but zero bytes → rate must be 0, not Infinity.
+        { id: 'zero', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 0, RETRANSMISSIONS: 99 }, category: 'INTRA_AZ' },
+        // retrans present, bytes missing entirely.
+        { id: 'missing', source: 'b', target: 'c', metrics: { RETRANSMISSIONS: 99 }, category: 'INTRA_AZ' },
+      ]);
+      const m = buildGraphModel(t, { metric: 'RETRANSMISSIONS' });
+      for (const l of m.links) {
+        expect(l.health).toBe('ok');
+        expect(Number.isFinite(l.value)).toBe(true);
+        expect(Number.isFinite(l.rate)).toBe(true);
+      }
+    });
+
+    it('derives health from retrans/bytes, independent of the selected metric', () => {
+      const t = topo([
+        { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 100, ROUND_TRIP_TIME: 1 }, category: 'INTRA_AZ' },
+      ]);
+      for (const metric of ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS', 'ROUND_TRIP_TIME'] as const) {
+        expect(buildGraphModel(t, { metric }).links[0].health).toBe('danger');
+      }
+    });
+  });
 });

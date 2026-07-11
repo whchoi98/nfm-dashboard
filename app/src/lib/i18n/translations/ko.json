@@ -134,6 +134,8 @@
   "graph.searchTag": "태그 검색",
   "graph.legendSolid": "실선 · 전송률 {threshold} B/s 이하",
   "graph.legendDashed": "점선 · 전송률 {threshold} B/s 초과",
+  "graph.legendHealth": "엣지 상태",
+  "graph.legendHealthTitle": "엣지 색 = GB당 재전송 (경고 ≥ {warn}, 위험 ≥ {danger})",
   "graph.selfLoop": "셀프 루프",
   "graph.status.ok": "정상",
   "graph.status.warn": "경고",

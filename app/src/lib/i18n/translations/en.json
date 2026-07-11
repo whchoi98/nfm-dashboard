@@ -134,6 +134,8 @@
   "graph.searchTag": "Search tags",
   "graph.legendSolid": "Solid · rate ≤ {threshold} B/s",
   "graph.legendDashed": "Dashed · rate > {threshold} B/s",
+  "graph.legendHealth": "Edge health",
+  "graph.legendHealthTitle": "Edge color = retransmissions per GB (warn ≥ {warn}, danger ≥ {danger})",
   "graph.selfLoop": "Self loop",
   "graph.status.ok": "OK",
   "graph.status.warn": "Warning",

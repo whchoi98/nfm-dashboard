@@ -2,11 +2,14 @@
 
 // GraphLegend (Task 6) — LIVE indicator (snapshot timestamp + pause/resume
 // toggle that stops the topology poll) plus the solid/dashed edge legend for
-// the NetworkGraph rate threshold.
+// the NetworkGraph rate threshold and the edge-health (retrans/GB) color
+// legend (STATUS colors, dual-encoded with text labels).
 import { Pause, Play } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
-import { DEFAULT_RATE_THRESHOLD } from '@/lib/topology-graph';
+import { DEFAULT_HEALTH_THRESHOLD, DEFAULT_RATE_THRESHOLD } from '@/lib/topology-graph';
+
+const HEALTH_LEVELS = ['ok', 'warn', 'danger'] as const;
 
 /** generatedAt ISO string → local HH:MM:SS. */
 function hhmmss(iso: string): string {
@@ -61,6 +64,25 @@ export default function GraphLegend({
           <line x1="0" y1="3" x2="24" y2="3" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
         </svg>
         {t('graph.legendDashed', { threshold })}
+      </span>
+      {/* edge-health color legend — STATUS colors dual-encoded with text labels */}
+      <span
+        data-testid="graph-health-legend"
+        className="flex items-center gap-x-2.5 text-ink/60 dark:text-white/60"
+        title={t('graph.legendHealthTitle', {
+          warn: DEFAULT_HEALTH_THRESHOLD / 2,
+          danger: DEFAULT_HEALTH_THRESHOLD,
+        })}
+      >
+        <span className="font-medium">{t('graph.legendHealth')}</span>
+        {HEALTH_LEVELS.map((h) => (
+          <span key={h} className="flex items-center gap-1.5">
+            <svg width="16" height="6" aria-hidden>
+              <line x1="0" y1="3" x2="16" y2="3" stroke={STATUS[h]} strokeWidth="2.5" />
+            </svg>
+            {t(`graph.status.${h}`)}
+          </span>
+        ))}
       </span>
     </div>
   );
