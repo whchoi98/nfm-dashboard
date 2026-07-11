@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-11
+
+### Added
+- Insights hub **Efficiency & Cost-optimization** tab: billed vs free (inter-AZ/VPC/Region) traffic ratio, estimated monthly cost run-rate, top cross-AZ talkers, and a billed-cost trend.
+- Insights hub **Reliability Scorecard / SLO** tab: per-monitor NHI availability %, retransmission/timeout rates, a composite 0-100 reliability score with status, an overall availability gauge, a breach timeline, and worst services.
+- Insights hub **Top Movers** tab: entities whose data-transferred / retransmissions / timeouts changed most versus the prior window (window-over-window deltas with direction).
+- **DNS tab deep-dive**: internal vs external query ratio, top NXDOMAIN sources, resolver-latency band, failure breakdown by rcode, and top query sources.
+
 ## [1.0.1] - 2026-07-10
 
 ### Fixed
@@ -49,7 +57,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
 
@@ -66,6 +75,14 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-07-11
+
+### Added
+- 인사이트 허브 **효율성 & 비용 최적화** 탭: 과금 vs 무료(inter-AZ/VPC/Region) 트래픽 비율, 월간 비용 run-rate 추정, 상위 cross-AZ talker, 과금 비용 추세 추가.
+- 인사이트 허브 **신뢰성 스코어카드 / SLO** 탭: 모니터별 NHI 가용성 %, 재전송/타임아웃률, 0-100 복합 신뢰성 점수 + 상태, 전체 가용성 게이지, breach 타임라인, 상위 불안정 서비스 추가.
+- 인사이트 허브 **Top Movers** 탭: 직전 창 대비 데이터 전송량/재전송/타임아웃이 가장 크게 변한 엔티티(창 대비 델타 + 방향) 추가.
+- **DNS 탭 심화**: 내부 vs 외부 쿼리 비율, 상위 NXDOMAIN 소스, 리졸버 지연 대역, rcode별 실패 분해, 상위 질의 소스 추가.
 
 ## [1.0.1] - 2026-07-10
 
@@ -99,6 +116,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0

@@ -7,11 +7,18 @@ import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { capSankeyLinks, SANKEY_MAX_LINKS } from '@/lib/analytics/dependencies';
+import {
+  internalExternalSplit,
+  rcodeBreakdown,
+  topNxdomainSources,
+  topResolvers,
+} from '@/lib/analytics/dns-insights';
 import type { DnsAggregate } from '@/lib/types';
 import { formatCount } from '@/lib/format';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import StatDelta from '@/components/charts/StatDelta';
+import Gauge from '@/components/charts/Gauge';
 import Sankey from '@/components/charts/Sankey';
 import { LensState } from './shared';
 
@@ -71,6 +78,37 @@ export default function DnsTab() {
     [data],
   );
 
+  // Deep-dive derivations (Task 4): all pure snapshot lenses over the aggregate.
+  const intExt = useMemo(() => internalExternalSplit(data?.topDomains), [data]);
+
+  const nxdomainRows: ToplistRow[] = useMemo(
+    () =>
+      topNxdomainSources(data?.failures).map((r) => ({
+        label: r.label,
+        value: r.nxdomain,
+        // failRate is 0–1; show the source's overall fail % + its total queries.
+        sub: `${formatPct(r.failRate)} · ${formatCount(r.total)}`,
+        status: 'warn' as const,
+      })),
+    [data],
+  );
+
+  const rcode = useMemo(() => rcodeBreakdown(data?.failures), [data]);
+  const rcodeRows: ToplistRow[] = useMemo(
+    () =>
+      [
+        // rcode names are DNS protocol constants — not translated on purpose.
+        { label: 'NXDOMAIN', value: rcode.nxdomain, status: 'warn' as const },
+        { label: 'SERVFAIL', value: rcode.servfail, status: 'danger' as const },
+      ].sort((a, b) => b.value - a.value),
+    [rcode],
+  );
+
+  const resolverRows: ToplistRow[] = useMemo(
+    () => topResolvers(data?.resolution).map((r) => ({ label: r.label, value: r.value })),
+    [data],
+  );
+
   // First load (aggregate not fetched yet): a pulsing skeleton approximating
   // the real widget grid, so `widget-dns-disabled` renders ONLY once the
   // aggregate is loaded and enabled===false — never as a flash while loading.
@@ -122,6 +160,12 @@ export default function DnsTab() {
             <StatDelta label={t('insights.latency.p90')} value={formatMs(lat.p90)} testId="stat-dns-p90" />
             <StatDelta label={t('insights.latency.p95')} value={formatMs(lat.p95)} testId="stat-dns-p95" />
           </div>
+          <p className="mt-2 text-[11px] text-ink/50 dark:text-white/50" data-testid="dns-latency-max">
+            {t('insights.dns.latencyMax', {
+              max: formatMs(lat.max),
+              count: formatCount(lat.count),
+            })}
+          </p>
         </LensState>
       </Widget>
 
@@ -140,6 +184,57 @@ export default function DnsTab() {
       <Widget title={t('insights.dns.failures')} testId="widget-dns-failures">
         <LensState loading={firstLoad} error={error}>
           <Toplist rows={failureRows} valueFormatter={formatPct} testId="toplist-dns-failures" />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.dns.internalExternal')} testId="widget-dns-intext">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={intExt.internalCount + intExt.externalCount === 0}
+        >
+          <Gauge
+            value={intExt.internalPct}
+            max={100}
+            label={t('insights.dns.internalShare')}
+            valueFormatter={(v) => `${v.toFixed(1)}%`}
+          />
+          <div className="mt-2 flex justify-center gap-6 text-xs text-ink/60 dark:text-white/60">
+            <span>
+              {t('dns.internal')}{' '}
+              <span className="font-semibold text-ink tabular-nums dark:text-white">
+                {formatCount(intExt.internalCount)}
+              </span>
+            </span>
+            <span>
+              {t('dns.external')}{' '}
+              <span className="font-semibold text-ink tabular-nums dark:text-white">
+                {formatCount(intExt.externalCount)}
+              </span>
+            </span>
+          </div>
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.dns.nxdomainSources')} testId="widget-dns-nxdomain">
+        <LensState loading={firstLoad} error={error}>
+          <Toplist rows={nxdomainRows} valueFormatter={formatCount} testId="toplist-dns-nxdomain" />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.dns.rcodeBreakdown')} testId="widget-dns-rcode">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={rcode.nxdomain + rcode.servfail === 0}
+        >
+          <Toplist rows={rcodeRows} valueFormatter={formatCount} testId="toplist-dns-rcode" />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.dns.resolvers')} testId="widget-dns-resolvers">
+        <LensState loading={firstLoad} error={error}>
+          <Toplist rows={resolverRows} valueFormatter={formatCount} testId="toplist-dns-resolvers" />
         </LensState>
       </Widget>
 
