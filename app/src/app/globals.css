@@ -10,6 +10,111 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+ * UI chrome polish (Phase 9) — Datadog-dense refinement shared app-wide.
+ * Hairline borders, table density, section titles, skeletons and the focus
+ * ring all read the --ui-* variables below: light values on :root, dark
+ * overrides on .dark (class strategy, toggled in Topbar). Values derive from
+ * the SnowUI token set (ink #1C1C1C, chartViolet #95A4FC) and are mirrored
+ * for TSX/SVG consumers by CHROME in lib/chart-tokens.ts — keep in sync.
+ * ------------------------------------------------------------------------- */
+:root {
+  --ui-border: rgb(28 28 28 / 0.08); /* 1px card/panel hairline */
+  --ui-border-soft: rgb(28 28 28 / 0.05); /* table row separators */
+  --ui-zebra: rgb(28 28 28 / 0.02); /* even-row tint */
+  --ui-hover: rgb(28 28 28 / 0.045); /* row hover wash */
+  --ui-skeleton-a: rgb(28 28 28 / 0.05); /* shimmer base */
+  --ui-skeleton-b: rgb(28 28 28 / 0.1); /* shimmer highlight */
+  --ui-scrollbar: rgb(28 28 28 / 0.25);
+  --ui-focus: #95a4fc; /* chartViolet */
+}
+.dark {
+  --ui-border: rgb(255 255 255 / 0.1);
+  --ui-border-soft: rgb(255 255 255 / 0.06);
+  --ui-zebra: rgb(255 255 255 / 0.02);
+  --ui-hover: rgb(255 255 255 / 0.06);
+  --ui-skeleton-a: rgb(255 255 255 / 0.07);
+  --ui-skeleton-b: rgb(255 255 255 / 0.13);
+  --ui-scrollbar: rgb(255 255 255 / 0.25);
+}
+
+/* Refined keyboard focus ring (token violet) replacing the UA default.
+ * :where() keeps selector specificity at the pseudo-class alone so any
+ * component-level focus treatment still wins. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 1px;
+}
+
+/* Thin token-colored scrollbars for dense scroll containers (tables, maps). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-scrollbar) transparent;
+}
+
+/* Subtle 1px token hairline for cards/panels/tables (light+dark via vars). */
+.ui-hairline {
+  border: 1px solid var(--ui-border);
+}
+
+/* Consistent section-header typography (Card/Widget title bars, panels). */
+.ui-section-title {
+  font-size: 0.8125rem; /* 13px — dense but legible */
+  font-weight: 600;
+  line-height: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+/* Dense data-table structure: hairline separators, zebra, hover wash.
+ * Typography and cell padding stay with the consumer's utility classes.
+ * (zebra before hover: equal specificity, hover must win in the cascade). */
+.ui-table-dense thead tr {
+  border-bottom: 1px solid var(--ui-border);
+}
+.ui-table-dense tbody tr {
+  border-bottom: 1px solid var(--ui-border-soft);
+  transition: background-color 120ms ease;
+}
+.ui-table-dense tbody tr:nth-child(even) {
+  background-color: var(--ui-zebra);
+}
+.ui-table-dense tbody tr:hover {
+  background-color: var(--ui-hover);
+}
+
+/* Empty-state container: dashed hairline, quiet center. */
+.ui-empty {
+  border: 1px dashed var(--ui-border);
+  border-radius: 12px;
+}
+
+/* Loading skeleton bar (LensState and tab skeletons). */
+.ui-skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--ui-skeleton-a) 25%,
+    var(--ui-skeleton-b) 50%,
+    var(--ui-skeleton-a) 75%
+  );
+  background-size: 200% 100%;
+  animation: ui-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes ui-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton {
+    animation: none;
+    background: var(--ui-skeleton-a);
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * .chat-markdown — shared renderer styles for AI answers
  * (components/Markdown.tsx: ChatPanel bubbles + /diagnose output).
  *

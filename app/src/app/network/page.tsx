@@ -196,7 +196,9 @@ export default function NetworkPage() {
             empty={pairs.length === 0}
             emptyLabel={t('network.empty')}
           >
-            <div className="overflow-x-auto">
+            {/* relative: contain the absolutely-positioned sr-only health labels
+                so they clip with the scroller instead of widening the page. */}
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[560px] text-xs">
                 <thead>
                   <tr className="text-left text-ink/50 dark:text-white/50">
