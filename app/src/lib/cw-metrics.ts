@@ -1,5 +1,6 @@
 import { CloudWatchClient, ListMetricsCommand, GetMetricDataCommand,
   type Metric, type Dimension } from '@aws-sdk/client-cloudwatch';
+import type { Series } from './analytics/aggregate';
 
 const REGION = process.env.AWS_REGION ?? 'ap-northeast-2';
 const NAMESPACE = 'AWS/NetworkFlowMonitor';
@@ -11,6 +12,26 @@ function cw(): CloudWatchClient {
 
 export interface NfmSeries { metric: string; monitor: string; monitorArn?: string;
   timestamps: string[]; values: number[]; }
+
+/**
+ * CW HealthIndicator series (keys "HealthIndicator:<monitor>") → per-monitor
+ * Series lanes (0 = healthy / > 0 = degraded, stat Maximum). Same mapping as the
+ * reliability route's buildReliabilityCw, minus the worst-case aggregate the
+ * scorecard lens derives itself (breachTimeline). Shared by the scorecard and
+ * overview routes.
+ */
+export function healthByMonitor(cwSeries: Record<string, NfmSeries>): Record<string, Series> {
+  const byMonitor: Record<string, Series> = {};
+  for (const [key, s] of Object.entries(cwSeries)) {
+    if (!key.startsWith('HealthIndicator:')) continue;
+    const monitor = s.monitor || key.slice('HealthIndicator:'.length);
+    byMonitor[monitor] = {
+      label: monitor,
+      points: s.timestamps.map((t, i) => ({ t, v: s.values[i] ?? 0 })),
+    };
+  }
+  return byMonitor;
+}
 
 // NFM publishes metrics with dimension MonitorId whose value is the monitor ARN
 // (arn:...:monitor/<name>) — NOT MonitorName. Dimensions are therefore discovered via

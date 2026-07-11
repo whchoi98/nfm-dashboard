@@ -9,6 +9,7 @@ import {
   combineAcrossMonitors,
   errorRateSeries,
   halfWindowDeltaPct,
+  overviewSummary,
 } from './overview-metrics';
 
 const T = ['2026-07-10T00:00:00.000Z', '2026-07-10T00:05:00.000Z', '2026-07-10T00:10:00.000Z',
@@ -136,5 +137,39 @@ describe('errorRateSeries', () => {
 
   it('returns [] for no flows', () => {
     expect(errorRateSeries([])).toEqual([]);
+  });
+});
+
+describe('overviewSummary', () => {
+  const f = (monitor: string, metric: any, value: number): FlowEdge => ({ edgeHash: `${monitor}-${metric}`,
+    monitor, metric, category: 'INTER_AZ', bucket: 'b', value, unit: 'x',
+    a: { serviceName: 'a' }, b: { serviceName: 'b' }, traversedConstructs: [] });
+
+  it('overviewSummary composes scorecard/efficiency/concentration/dns headline scalars', () => {
+    const flows = [f('m1', 'DATA_TRANSFERRED', 2e9), f('m1', 'RETRANSMISSIONS', 4)];
+    const dns = { enabled: true, topDomains: [], queryTypes: [], resolution: { nodes: [], links: [] }, nameFlow: [],
+      latency: { p50: 1, p90: 2, p95: 5, max: 9, count: 10 },
+      failures: [{ key: 'k', label: 'k', nxdomain: 3, servfail: 1, total: 100, failRate: 0.04 }] } as any;
+    const s = overviewSummary(flows, { byMonitor: {}, dns, windowSeconds: 3600 });
+    expect(s.reliabilityScore).toBeGreaterThanOrEqual(0);
+    expect(s.reliabilityScore).toBeLessThanOrEqual(100);
+    expect(['ok', 'warn', 'danger']).toContain(s.reliabilityStatus);
+    expect(s.billedRatio).toBeCloseTo(1, 6);           // INTER_AZ is billed
+    expect(s.monthlyUsdRunRate).toBeGreaterThan(0);
+    expect(s.dnsEnabled).toBe(true);
+    expect(s.dnsFailRate).toBeCloseTo(0.04, 6);        // (3+1)/100
+    expect(s.dnsResolverP95).toBe(5);
+    expect(s.concentrationTopShare).toBeCloseTo(1, 6); // single pair
+    expect(s.monitorsTotal).toBe(1);
+  });
+
+  it('overviewSummary empty/dns-off safe (no NaN)', () => {
+    const s = overviewSummary([], { byMonitor: {}, dns: null, windowSeconds: 3600 });
+    expect(s.dnsEnabled).toBe(false);
+    expect(s.dnsFailRate).toBeNull();
+    expect(s.dnsResolverP95).toBeNull();
+    expect(s.concentrationTopShare).toBe(0);
+    expect(s.monitorsTotal).toBe(0);
+    expect(Number.isNaN(s.monthlyUsdRunRate)).toBe(false);
   });
 });

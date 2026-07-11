@@ -5,8 +5,11 @@
 // combined across monitors into one per-bucket array (the StatDelta sparkline),
 // then reduced to the KPI value; deltaPct compares the window's halves.
 import type { NfmSeries } from './cw-metrics';
-import type { FlowEdge } from './types';
-import { percentile, ratePerGb } from './analytics/aggregate';
+import type { DnsAggregate, FlowEdge } from './types';
+import { percentile, ratePerGb, type Series } from './analytics/aggregate';
+import { scorecardLens, scoreStatus } from './analytics/scorecard';
+import { efficiencyLens } from './analytics/efficiency';
+import { concentration } from './analytics/dependencies';
 
 export type OverviewKpiKey = 'dataTransferred' | 'retransmissions' | 'timeouts' | 'rtt';
 export interface OverviewKpi {
@@ -118,5 +121,57 @@ export function buildOverviewKpis(metrics: Record<string, NfmSeries>): OverviewK
     rttP50: rttPool.length ? percentile(rttPool, 50) : null,
     rttP95: rttPool.length ? percentile(rttPool, 95) : null,
     nhi: nhiLatest.length ? Math.max(...nhiLatest) : null,
+  };
+}
+
+/**
+ * At-a-glance headline scalars for the overview summary cards, composed from
+ * the already-shipped pure lenses (scorecard/efficiency/concentration) plus
+ * DNS fleet fail-rate and resolver p95 derived from the DnsAggregate.
+ * Additive to the /api/overview payload (`summary` field).
+ */
+export interface OverviewSummary {
+  reliabilityScore: number;                 // 0..100 (scorecard overall.score)
+  reliabilityStatus: 'ok' | 'warn' | 'danger';
+  availabilityPct: number | null;
+  monthlyUsdRunRate: number;
+  billedRatio: number;                      // 0..1
+  dnsEnabled: boolean;
+  dnsFailRate: number | null;               // 0..1 fleet fraction (null if no queries)
+  dnsResolverP95: number | null;            // ms (null if no samples)
+  concentrationTopShare: number;            // 0..1 largest-pair share
+  monitorsTotal: number;
+  monitorsDegraded: number;                 // scorecard monitors with status !== 'ok'
+}
+
+/** Fleet DNS failure fraction (nxdomain+servfail over total); null when DNS is off or no queries. */
+function dnsFleetFailRate(dns: DnsAggregate | null): number | null {
+  if (!dns || !dns.enabled) return null;
+  const total = dns.failures.reduce((s, x) => s + x.total, 0);
+  if (total === 0) return null;
+  const fails = dns.failures.reduce((s, x) => s + x.nxdomain + x.servfail, 0);
+  return fails / total;
+}
+
+export function overviewSummary(
+  flows: FlowEdge[],
+  opts: { byMonitor: Record<string, Series>; dns: DnsAggregate | null; windowSeconds: number },
+): OverviewSummary {
+  const sc = scorecardLens(flows, { byMonitor: opts.byMonitor });
+  const eff = efficiencyLens(flows, { windowSeconds: opts.windowSeconds });
+  const conc = concentration(flows);
+  const dns = opts.dns;
+  return {
+    reliabilityScore: sc.overall.score,
+    reliabilityStatus: scoreStatus(sc.overall.score),
+    availabilityPct: sc.overall.availabilityPct,
+    monthlyUsdRunRate: eff.monthlyUsdRunRate,
+    billedRatio: eff.billedRatio,
+    dnsEnabled: !!dns?.enabled,
+    dnsFailRate: dnsFleetFailRate(dns),
+    dnsResolverP95: dns?.enabled && dns.latency.count > 0 ? dns.latency.p95 : null,
+    concentrationTopShare: conc.topShare,
+    monitorsTotal: sc.monitors.length,
+    monitorsDegraded: sc.monitors.filter((m) => m.status !== 'ok').length,
   };
 }

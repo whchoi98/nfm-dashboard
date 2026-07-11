@@ -1,29 +1,10 @@
 import { getFlowsWindow } from '@/lib/ddb';
 import { applyFlowFilters, parseLensParams } from '@/lib/analytics/filters';
 import { scorecardLens } from '@/lib/analytics/scorecard';
-import { getNfmMetrics, type NfmSeries } from '@/lib/cw-metrics';
+import { getNfmMetrics, healthByMonitor } from '@/lib/cw-metrics';
 import type { Series } from '@/lib/analytics/aggregate';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * CW HealthIndicator series (keys "HealthIndicator:<monitor>") → per-monitor
- * Series lanes (0 = healthy / > 0 = degraded, stat Maximum). Same mapping as the
- * reliability route's buildReliabilityCw, minus the worst-case aggregate the
- * scorecard lens derives itself (breachTimeline).
- */
-function healthByMonitor(cwSeries: Record<string, NfmSeries>): Record<string, Series> {
-  const byMonitor: Record<string, Series> = {};
-  for (const [key, s] of Object.entries(cwSeries)) {
-    if (!key.startsWith('HealthIndicator:')) continue;
-    const monitor = s.monitor || key.slice('HealthIndicator:'.length);
-    byMonitor[monitor] = {
-      label: monitor,
-      points: s.timestamps.map((t, i) => ({ t, v: s.values[i] ?? 0 })),
-    };
-  }
-  return byMonitor;
-}
 
 export async function GET(req: Request) {
   try {
