@@ -9,6 +9,7 @@ import {
   Network,
   Route,
   Search,
+  Settings,
   Stethoscope,
   type LucideIcon,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/diagnose', key: 'nav.diagnose', icon: Stethoscope },
   { href: '/agents', key: 'nav.agents', icon: Bot },
   { href: '/search', key: 'nav.search', icon: Search },
+  { href: '/settings', key: 'nav.settings', icon: Settings },
 ];
 
 export function isActive(pathname: string, href: string): boolean {
