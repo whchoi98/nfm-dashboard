@@ -60,7 +60,7 @@ export default function EfficiencyTab({ filters }: TabProps) {
 
   return (
     <div
-      data-testid="insights-tab-efficiency"
+      data-testid="insights-efficiency-panel"
       className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
     >
       <Widget title={t('insights.efficiency.billedRatio')} testId="widget-efficiency-ratio">

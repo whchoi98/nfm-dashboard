@@ -74,7 +74,7 @@ export default function ScorecardTab({ filters }: TabProps) {
 
   return (
     <div
-      data-testid="insights-tab-scorecard"
+      data-testid="insights-scorecard-panel"
       className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
     >
       <Widget title={t('insights.scorecard.overall')} testId="widget-scorecard-overall">

@@ -63,7 +63,7 @@ export default function MoversTab({ filters }: TabProps) {
 
   return (
     <div
-      data-testid="insights-tab-movers"
+      data-testid="insights-movers-panel"
       className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
     >
       {SECTIONS.map(({ metric, format, testId }, i) => (
