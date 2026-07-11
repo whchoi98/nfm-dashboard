@@ -72,7 +72,7 @@ export default function TopNav() {
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accentLav text-xs font-semibold text-ink">
             N
           </span>
-          <span className="text-sm font-semibold text-ink dark:text-white">NFM Dashboard</span>
+          <span className="hidden text-sm font-semibold text-ink sm:inline dark:text-white">NFM Dashboard</span>
         </Link>
         {/* Version label — synced to CHANGELOG.md via APP_VERSION (lib/version.ts). */}
         <span data-testid="app-version" className="shrink-0 text-[11px] text-ink/40 dark:text-white/40">
