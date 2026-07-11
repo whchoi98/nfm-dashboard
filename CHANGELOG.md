@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-11
+
+### Added
+- **Fleet retransmission total + rate** on the Network Analytics header (events and events/GB across all pairs).
+- **Latency tail metrics**: p99 alongside p50/p90/p95/min/max, plus a per-path p95 & jitter (p95−p50) ranking on the Latency tab.
+- **Monitor reliability chips**: retransmission/timeout rate (events/GB) health chips on the monitor list cards.
+- **Overview golden-signal strip**: a per-bucket fleet retransmission-rate / timeout-rate trend.
+- **RTT↔retransmission correlation** (Pearson r) badge on the Reliability tab. The originally-planned per-category Workload-Insights RTT was dropped (the NFM WorkloadInsights API does not expose `ROUND_TRIP_TIME`) and replaced by this correlation.
+- **Traffic concentration** scalars (normalized Shannon entropy, Gini, top-pair share) on the Dependencies tab.
+- **Went-silent detection**: entities present in the prior window but zero in the current window, listed on the Movers tab.
+- **Edge-health adjacency matrix** (green/amber/red by retransmission/timeout rate) with a metric/health toggle and legend on the Topology page.
+
+### Changed
+- Extract a shared `ratePerGb` helper and consolidate retransmission/timeout rate health thresholds (warn 5 / danger 10 events per GB), applied consistently across the monitor chips, topology health matrix, and network table.
+
 ## [1.4.0] - 2026-07-11
 
 ### Changed
@@ -93,7 +108,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
@@ -114,6 +130,21 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.5.0] - 2026-07-11
+
+### Added
+- 네트워크 분석 헤더에 **fleet 재전송 총량 + rate/GB**(전체 페어 합계) 추가.
+- **지연 tail 지표**: p50/p90/p95/min/max에 p99 추가 + Latency 탭에 per-path p95·지터(p95−p50) 랭킹 추가.
+- **모니터 신뢰성 칩**: 모니터 목록 카드에 재전송/타임아웃 rate(events/GB) 건강도 칩 추가.
+- **개요 골든시그널 스트립**: 버킷별 fleet 재전송률/타임아웃률 추세 추가.
+- Reliability 탭에 **RTT↔재전송 상관계수(Pearson r)** 배지 추가. 당초 계획한 Workload Insights 카테고리별 RTT는 NFM WorkloadInsights API가 `ROUND_TRIP_TIME`을 제공하지 않아 제외하고 이 상관계수로 대체.
+- Dependencies 탭에 **트래픽 집중도** 스칼라(정규화 Shannon 엔트로피·Gini·최상위 페어 점유율) 추가.
+- **무음 전환 탐지**: 직전 창에는 있었으나 현재 창에서 0이 된 엔티티를 Movers 탭에 목록화.
+- Topology 페이지에 **엣지 헬스 인접 매트릭스**(재전송/타임아웃 rate 기준 green/amber/red) + metric/health 토글 + 범례 추가.
+
+### Changed
+- 공유 `ratePerGb` 헬퍼 추출 및 재전송/타임아웃 rate 건강도 임계값(warn 5 / danger 10 events per GB) 통합 — 모니터 칩·토폴로지 헬스 매트릭스·네트워크 표에서 일관 적용.
 
 ## [1.4.0] - 2026-07-11
 
@@ -191,7 +222,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
