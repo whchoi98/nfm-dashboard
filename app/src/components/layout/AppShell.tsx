@@ -2,7 +2,8 @@
 
 import { usePathname } from 'next/navigation';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
-import TopNav from './TopNav';
+import Sidebar from './Sidebar';
+import Topbar from './Topbar';
 import MobileTabs from './MobileTabs';
 import FloatingChat from '@/components/chat/FloatingChat';
 
@@ -17,13 +18,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <LanguageProvider>
-      <div className="flex min-h-screen flex-col">
-        <TopNav />
-        <main className="mx-auto w-full max-w-[1536px] flex-1 p-4 pb-20 lg:pb-4">{children}</main>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar />
+          <main className="w-full flex-1 p-4 pb-20 lg:pb-4">{children}</main>
+        </div>
+        <MobileTabs />
+        {/* /login is unauthenticated — /api/ai calls would just 401 there. */}
+        {pathname !== '/login' && <FloatingChat />}
       </div>
-      <MobileTabs />
-      {/* /login is unauthenticated — /api/ai calls would just 401 there. */}
-      {pathname !== '/login' && <FloatingChat />}
     </LanguageProvider>
   );
 }
