@@ -7,13 +7,13 @@ import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { MonitorListItem } from '@/lib/monitors';
-import { ratePerGb } from '@/lib/analytics/aggregate';
 import {
-  RETRANS_DANGER,
-  RETRANS_WARN,
-  TIMEOUT_DANGER,
-  TIMEOUT_WARN,
-} from '@/lib/overview-metrics';
+  ratePerGb,
+  RETRANS_RATE_DANGER,
+  RETRANS_RATE_WARN,
+  TIMEOUT_RATE_DANGER,
+  TIMEOUT_RATE_WARN,
+} from '@/lib/analytics/aggregate';
 import { formatBytes } from '@/lib/format';
 import { SERIES_COLORS, STATUS } from '@/lib/chart-tokens';
 import StatusBadge from '@/components/cards/StatusBadge';
@@ -112,12 +112,12 @@ export default function MonitorsPage() {
                   <HealthChip
                     testId="monitor-chip-retrans"
                     label={t('monitors.retransChip', { r: retransRate.toFixed(1) })}
-                    status={statusFor(retransRate, RETRANS_WARN, RETRANS_DANGER)}
+                    status={statusFor(retransRate, RETRANS_RATE_WARN, RETRANS_RATE_DANGER)}
                   />
                   <HealthChip
                     testId="monitor-chip-timeouts"
                     label={t('monitors.timeoutChip', { r: timeoutRate.toFixed(1) })}
-                    status={statusFor(timeoutRate, TIMEOUT_WARN, TIMEOUT_DANGER)}
+                    status={statusFor(timeoutRate, TIMEOUT_RATE_WARN, TIMEOUT_RATE_DANGER)}
                   />
                 </div>
                 <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
