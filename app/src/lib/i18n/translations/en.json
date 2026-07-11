@@ -9,6 +9,7 @@
   "nav.diagnose": "Diagnose",
   "nav.agents": "Agents",
   "nav.alerts": "Alerts",
+  "nav.search": "Search",
   "nav.more": "More",
   "common.updatedAgo": "Updated {min} min ago",
   "common.loading": "Loading…",
@@ -353,5 +354,16 @@
   "alerts.justNow": "just now",
   "alerts.minAgo": "{min} min ago",
   "alerts.hourAgo": "{h} hr ago",
-  "alerts.dayAgo": "{d} d ago"
+  "alerts.dayAgo": "{d} d ago",
+  "search.title": "Search",
+  "search.query": "Query",
+  "search.placeholder": "Pod, service, subnet, IP, node, domain…",
+  "search.hint": "Type at least 2 characters to search topology, recent flows, and DNS",
+  "search.noResults": "No matching entities",
+  "search.type.pod": "Pods",
+  "search.type.service": "Services",
+  "search.type.node": "Topology nodes",
+  "search.type.ip": "IP addresses",
+  "search.type.subnet": "Subnets",
+  "search.type.domain": "Domains"
 }

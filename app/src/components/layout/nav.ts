@@ -8,6 +8,7 @@ import {
   Lightbulb,
   Network,
   Route,
+  Search,
   Stethoscope,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/alerts', key: 'nav.alerts', icon: Bell },
   { href: '/diagnose', key: 'nav.diagnose', icon: Stethoscope },
   { href: '/agents', key: 'nav.agents', icon: Bot },
+  { href: '/search', key: 'nav.search', icon: Search },
 ];
 
 export function isActive(pathname: string, href: string): boolean {
