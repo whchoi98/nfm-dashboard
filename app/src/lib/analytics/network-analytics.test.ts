@@ -71,6 +71,15 @@ describe('networkAnalyticsLens — pair aggregation', () => {
     expect(res.destScope).toBe('service');
     expect(res.metric).toBe('volume'); // default
   });
+  it('retransRateOverall = fleet retransmissions per GB', () => {
+    const flows = [
+      flow({ metric: 'DATA_TRANSFERRED', value: 2e9 }),      // 2 GB
+      flow({ metric: 'RETRANSMISSIONS', value: 20 }),
+    ];
+    const r = networkAnalyticsLens(flows, { sourceScope: 'service', destScope: 'service' });
+    expect(r.totalRetrans).toBe(20);
+    expect(r.retransRateOverall).toBeCloseTo(10, 6);         // 20 / 2GB
+  });
   it('supports asymmetric scopes (namespace source, az dest)', () => {
     const res = networkAnalyticsLens(flows, { sourceScope: 'namespace', destScope: 'az' });
     expect(res.pairs).toHaveLength(1);

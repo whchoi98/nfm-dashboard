@@ -1,5 +1,5 @@
-import { it, expect } from 'vitest';
-import { entityKey, percentile, sumByMetric, groupBy } from './aggregate';
+import { describe, it, expect } from 'vitest';
+import { entityKey, percentile, sumByMetric, groupBy, ratePerGb } from './aggregate';
 import type { FlowEdge } from '../types';
 
 it('entityKey by kind', () => {
@@ -23,4 +23,13 @@ it('sumByMetric filters by metric', () => {
 it('groupBy', () => {
   const g = groupBy([{k:'a'},{k:'b'},{k:'a'}], x => x.k);
   expect(g.get('a')).toHaveLength(2);
+});
+
+describe('ratePerGb', () => {
+  it('events per GB with 0-division guard', () => {
+    expect(ratePerGb(0, 0)).toBe(0);
+    expect(ratePerGb(10, 0)).toBe(0);
+    expect(ratePerGb(5, 1e9)).toBeCloseTo(5, 6);   // 5 events over 1 GB
+    expect(ratePerGb(2, 5e8)).toBeCloseTo(4, 6);   // 2 events over 0.5 GB
+  });
 });

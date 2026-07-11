@@ -15,6 +15,7 @@ import { CATEGORY_ORDER, type DestCategory } from '@/lib/chart-tokens';
 import { formatBytes, formatCount } from '@/lib/format';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
+import StatDelta from '@/components/charts/StatDelta';
 import Sankey, { type SankeyInput } from '@/components/charts/Sankey';
 import Treemap, { type TreemapDatum } from '@/components/charts/Treemap';
 import CategoryDonut from '@/components/charts/CategoryDonut';
@@ -109,6 +110,38 @@ export default function DependenciesTab({ filters }: TabProps) {
       <Widget title={t('insights.deps.pareto')} testId="widget-deps-pareto">
         <LensState loading={firstLoad} error={error}>
           <Pareto rows={data?.pareto ?? []} valueFormatter={formatBytes} height={240} />
+        </LensState>
+      </Widget>
+
+      {/* Concentration scalars over the same pair grouping as the pareto —
+          dual-encoded: numeric value + scale/percent spelled out in text. */}
+      <Widget
+        title={t('insights.dependencies.concentration')}
+        testId="widget-dependencies-concentration"
+      >
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={!!data && (data.concentration?.n ?? 0) === 0}
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatDelta
+              label={t('insights.dependencies.entropy')}
+              value={(data?.concentration?.entropy ?? 0).toFixed(2)}
+              testId="stat-dependencies-entropy"
+            />
+            <StatDelta
+              label={t('insights.dependencies.gini')}
+              value={(data?.concentration?.gini ?? 0).toFixed(2)}
+              testId="stat-dependencies-gini"
+            />
+            <StatDelta
+              label={t('insights.dependencies.topShare')}
+              value={((data?.concentration?.topShare ?? 0) * 100).toFixed(1)}
+              unit="%"
+              testId="stat-dependencies-top-share"
+            />
+          </div>
         </LensState>
       </Widget>
 

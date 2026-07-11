@@ -15,7 +15,9 @@ import { usePolling } from '@/lib/use-polling';
 import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
 import { filterTopology, resolveEdge, type TierLevel } from '@/lib/topology';
 import { buildGraphModel } from '@/lib/topology-graph';
-import { CATEGORY_ORDER } from '@/lib/chart-tokens';
+import type { HealthLevel } from '@/lib/analytics/edge-health';
+import { RETRANS_RATE_DANGER, RETRANS_RATE_WARN } from '@/lib/analytics/aggregate';
+import { CATEGORY_ORDER, STATUS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import NetworkGraph from '@/components/topology/NetworkGraph';
 import GraphLegend from '@/components/topology/GraphLegend';
@@ -33,6 +35,24 @@ const LEVELS: { value: TierLevel; labelKey: string }[] = [
   { value: 'service', labelKey: 'topology.levelService' },
   { value: 'pod', labelKey: 'topology.levelPod' },
 ];
+const MATRIX_MODES = ['metric', 'health'] as const;
+const HEALTH_LEVELS: { value: HealthLevel; labelKey: string }[] = [
+  { value: 'service', labelKey: 'topology.levelService' },
+  { value: 'namespace', labelKey: 'topology.levelNamespace' },
+  { value: 'az', labelKey: 'topology.levelAz' },
+  { value: 'vpc', labelKey: 'topology.levelVpc' },
+];
+const HEALTH_STATUSES = ['ok', 'warn', 'danger'] as const;
+
+/** n most-recent 5-minute grid buckets, newest first (mirrors collector formula).
+ *  Duplicated from flows/page.tsx: ddb.ts is server-only (AWS SDK) and can't be
+ *  imported into a client component. */
+function recentBuckets(n: number): string[] {
+  const t = Date.now();
+  return Array.from({ length: n }, (_, i) =>
+    new Date(Math.floor(t / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'),
+  );
+}
 
 // Edge detail dialog: hop path fetched from /api/paths for the selected edge,
 // plus its topology metrics and a link to the full /paths page.
@@ -139,6 +159,35 @@ export default function TopologyPage() {
   // Kept as the edge object (not id) so a poll refresh can't blank the panel.
   const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
 
+  // Task 8 — matrix render mode: 'metric' (default, unchanged) or 'health'
+  // (RED/AMBER/GREEN by connection health). healthLevel is independent of
+  // `level` above: buildHealthMatrix keys directly off raw FlowEdge endpoint
+  // fields (service/namespace/az/vpc) and has no 'cluster'/'pod' notion, while
+  // the tier `level` has no 'az'/'vpc' notion — the two aggregations don't share a type.
+  const [matrixMode, setMatrixMode] = useState<'metric' | 'health'>('metric');
+  const [healthLevel, setHealthLevel] = useState<HealthLevel>('service');
+
+  // Health mode needs raw FlowEdge[] (buildHealthMatrix consumes them
+  // directly); the page otherwise only ever loads a TopologySnapshot. Fetch
+  // guarded to health mode + matrix view: the bucket timer and the poll
+  // itself only run while both are true, so metric mode never fetches flows.
+  const flowsActive = view === 'matrix' && matrixMode === 'health';
+  const [flowBucket, setFlowBucket] = useState('');
+  useEffect(() => {
+    if (!flowsActive) return;
+    // Latest COMPLETE bucket (skip the one still being written), same rule as flows/page.tsx.
+    const compute = () => recentBuckets(2)[1];
+    setFlowBucket(compute());
+    const id = setInterval(() => setFlowBucket(compute()), 30000);
+    return () => clearInterval(id);
+  }, [flowsActive]);
+  const { data: flowsData } = usePolling<{ flows: FlowEdge[] }>(
+    `/api/flows?bucket=${encodeURIComponent(flowBucket)}&limit=1000`,
+    30000,
+    flowsActive && !!flowBucket,
+  );
+  const healthFlows = flowsData?.flows ?? [];
+
   // Cluster/category re-scoping rebuilds the topology with a disjoint node-id
   // set — a stale tag selection would empty the graph (buildGraphModel keeps
   // only selected ids) and a stale focus would mute every edge. Reset both.
@@ -232,6 +281,39 @@ export default function TopologyPage() {
               </button>
             ))}
           </div>
+          {view === 'matrix' ? (
+            <div
+              role="group"
+              aria-label={t('topology.matrixMode')}
+              data-testid="topology-matrix-mode"
+              className="flex h-9 items-center gap-0.5 rounded-lg border border-black/10 bg-white p-0.5 dark:border-white/15 dark:bg-ink"
+            >
+              {MATRIX_MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={matrixMode === m}
+                  onClick={() => setMatrixMode(m)}
+                  data-testid={`topology-matrix-mode-${m}`}
+                  className={`h-full rounded-md px-3 text-xs font-medium ${
+                    matrixMode === m
+                      ? 'bg-ink text-white dark:bg-white dark:text-ink'
+                      : 'text-ink/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10'
+                  }`}
+                >
+                  {m === 'metric' ? t('topology.matrixModeMetric') : t('topology.matrixModeHealth')}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {view === 'matrix' && matrixMode === 'health' ? (
+            <Select
+              label={t('topology.healthLevel')}
+              value={healthLevel}
+              onChange={(v) => setHealthLevel(v as HealthLevel)}
+              options={HEALTH_LEVELS.map((l) => ({ value: l.value, label: t(l.labelKey) }))}
+            />
+          ) : null}
           <Select
             label={t('topology.level')}
             value={level}
@@ -289,7 +371,32 @@ export default function TopologyPage() {
                 />
               </div>
             ) : (
-              <AdjacencyMatrix topology={topology} metric={metric} level={level} onCellSelect={selectPair} />
+              <div className="flex flex-col gap-3">
+                {matrixMode === 'health' ? (
+                  <div
+                    data-testid="matrix-health-legend"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink/60 dark:text-white/60"
+                    title={t('topology.healthLegendTitle', { warn: RETRANS_RATE_WARN, danger: RETRANS_RATE_DANGER })}
+                  >
+                    <span className="font-medium">{t('graph.legendHealth')}</span>
+                    {HEALTH_STATUSES.map((s) => (
+                      <span key={s} className="flex items-center gap-1.5">
+                        <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: STATUS[s] }} />
+                        {t(`graph.status.${s}`)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <AdjacencyMatrix
+                  topology={topology}
+                  metric={metric}
+                  level={level}
+                  onCellSelect={matrixMode === 'metric' ? selectPair : undefined}
+                  mode={matrixMode}
+                  flows={matrixMode === 'health' ? healthFlows : undefined}
+                  healthLevel={healthLevel}
+                />
+              </div>
             )
           ) : (
             <div className="flex h-96 items-center justify-center text-sm text-ink/40 dark:text-white/40">

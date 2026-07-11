@@ -2,9 +2,10 @@
 import { it, expect } from 'vitest';
 import {
   paretoTalkers, hopUsage, pathFrequencyTree, dependenciesLens, serviceGraph,
-  capSankeyLinks, capPathTreeBreadth, SANKEY_MAX_LINKS, PATH_TREE_MAX_CHILDREN,
+  capSankeyLinks, capPathTreeBreadth, concentration, SANKEY_MAX_LINKS, PATH_TREE_MAX_CHILDREN,
   type SankeyData, type PathNode,
 } from './dependencies';
+import type { FlowEdge } from '../types';
 
 it('serviceGraph collapses mutual a→b/b→a into ONE deterministic link (bytes summed)', () => {
   const flow = (src: string, dst: string, value: number) => ({
@@ -49,6 +50,22 @@ it('hopUsage/pathTree count each flow once (DATA_TRANSFERRED only)', () => {
   ] as any;
   expect(hopUsage(flows).find(h=>h.type==='TransitGateway')!.count).toBe(1);
   expect(pathFrequencyTree(flows).value).toBe(1);
+});
+const dt = (a: string, b: string, bytes: number): FlowEdge => ({ edgeHash: `${a}-${b}`, monitor: 'm',
+  metric: 'DATA_TRANSFERRED', category: 'INTRA_AZ', bucket: 'x', value: bytes, unit: 'B',
+  a: { serviceName: a }, b: { serviceName: b }, traversedConstructs: [] });
+it('concentration: uniform → entropy≈1, gini≈0; dominated → entropy→0, topShare→1', () => {
+  const uni = concentration([dt('a','b',100), dt('c','d',100), dt('e','f',100), dt('g','h',100)]);
+  expect(uni.entropy).toBeCloseTo(1, 2);
+  expect(uni.gini).toBeCloseTo(0, 2);
+  expect(uni.topShare).toBeCloseTo(0.25, 2);
+  const dom = concentration([dt('a','b',997), dt('c','d',1), dt('e','f',1), dt('g','h',1)]);
+  expect(dom.entropy).toBeLessThan(0.2);
+  expect(dom.topShare).toBeGreaterThan(0.99);
+});
+it('concentration: empty → zeros, no NaN', () => {
+  const z = concentration([]);
+  expect(z).toEqual({ entropy: 0, gini: 0, topShare: 0, n: 0 });
 });
 it('dependenciesLens shape', () => {
   const l = dependenciesLens([{metric:'DATA_TRANSFERRED',value:1,a:{podNamespace:'n',serviceName:'a'},b:{podNamespace:'n',serviceName:'b'},traversedConstructs:[]}] as any);

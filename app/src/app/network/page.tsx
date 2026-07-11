@@ -186,6 +186,12 @@ export default function NetworkPage() {
             data ? (
               <span className="text-xs tabular-nums text-ink/50 dark:text-white/50">
                 {t('network.pairs', { n: pairs.length })} · {formatBytes(data.totalBytes)}
+                {' · '}
+                <span data-testid="network-total-retrans">
+                  {t('network.retransTotal', { n: data.totalRetrans.toLocaleString() })}
+                </span>
+                {' · '}
+                {t('network.retransRate', { r: data.retransRateOverall.toFixed(1) })}
               </span>
             ) : undefined
           }

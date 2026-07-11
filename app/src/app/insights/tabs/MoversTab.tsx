@@ -3,7 +3,9 @@
 // entity — which entities' traffic / retransmissions / timeouts changed most
 // vs the prior window (incident triage). One Toplist per metric, rows arrive
 // from the lens pre-ranked by absolute change; the delta chip lives in `sub`
-// (▲/▼ + signed % or "new" when there is no prior baseline).
+// (▲/▼ + signed % or "new" when there is no prior baseline). A fourth
+// "went silent" widget (Phase 11 Task 7) lists entities that dropped to zero
+// this window — a crashed / scaled-to-zero incident signal.
 import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
@@ -61,6 +63,20 @@ export default function MoversTab({ filters }: TabProps) {
     );
   }, [data, t]);
 
+  // Went-silent rows: value/bar = prior (what was lost), formatted per the
+  // mover's own metric since the union mixes bytes and counts; always danger.
+  const silentRows: ToplistRow[] = useMemo(
+    () =>
+      (data?.silent ?? []).map((m) => ({
+        label: m.label,
+        value: m.prior,
+        display: (m.metric === 'DATA_TRANSFERRED' ? formatBytes : formatCount)(m.prior),
+        sub: `${t(`metric.${m.metric}`)} · ${t('insights.movers.priorValue')}`,
+        status: 'danger' as const,
+      })),
+    [data, t],
+  );
+
   return (
     <div
       data-testid="insights-movers-panel"
@@ -85,6 +101,23 @@ export default function MoversTab({ filters }: TabProps) {
           </LensState>
         </Widget>
       ))}
+      <Widget title={t('insights.movers.silent')} testId="widget-movers-silent">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={silentRows.length === 0}
+          emptyLabel={t('insights.movers.silentEmpty')}
+        >
+          <p className="mb-2 text-[11px] text-ink/40 dark:text-white/40">
+            {t('insights.movers.vsPrior')}
+          </p>
+          <Toplist
+            rows={silentRows}
+            valueFormatter={formatCount}
+            testId="toplist-movers-silent"
+          />
+        </LensState>
+      </Widget>
     </div>
   );
 }

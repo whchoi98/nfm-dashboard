@@ -5,7 +5,8 @@
 // combined across monitors into one per-bucket array (the StatDelta sparkline),
 // then reduced to the KPI value; deltaPct compares the window's halves.
 import type { NfmSeries } from './cw-metrics';
-import { percentile } from './analytics/aggregate';
+import type { FlowEdge } from './types';
+import { percentile, ratePerGb } from './analytics/aggregate';
 
 export type OverviewKpiKey = 'dataTransferred' | 'retransmissions' | 'timeouts' | 'rtt';
 export interface OverviewKpi {
@@ -19,6 +20,14 @@ export interface OverviewKpis {
   rttP95: number | null;
   nhi: number | null;
 }
+
+// Lab-scale reliability status thresholds shared by the overview KPI tiles and
+// the /monitors card health chips (heuristics like the cost tab's WARN/DANGER_USD
+// — revisit after observing real data).
+export const RETRANS_WARN = 1_000;
+export const RETRANS_DANGER = 10_000;
+export const TIMEOUT_WARN = 1;
+export const TIMEOUT_DANGER = 100;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => (xs.length === 0 ? 0 : sum(xs) / xs.length);
@@ -64,6 +73,27 @@ function kpiOf(spark: number[], reduce: (xs: number[]) => number): OverviewKpi {
     deltaPct: halfWindowDeltaPct(spark),
     spark,
   };
+}
+
+export interface ErrorRatePoint { t: string; retransRate: number; timeoutRate: number; }
+
+/**
+ * Golden-signal strip for the overview: fleet retransmission/timeout RATE
+ * (events per GB, shared ratePerGb guard) per 5-min bucket from the flows
+ * window, ascending by bucket. Additive to the /api/overview payload.
+ */
+export function errorRateSeries(flows: FlowEdge[]): ErrorRatePoint[] {
+  const byBucket = new Map<string, { bytes: number; retrans: number; timeouts: number }>();
+  for (const f of flows) {
+    const b = byBucket.get(f.bucket) ?? { bytes: 0, retrans: 0, timeouts: 0 };
+    if (f.metric === 'DATA_TRANSFERRED') b.bytes += f.value;
+    else if (f.metric === 'RETRANSMISSIONS') b.retrans += f.value;
+    else if (f.metric === 'TIMEOUTS') b.timeouts += f.value;
+    byBucket.set(f.bucket, b);
+  }
+  return [...byBucket.entries()]
+    .sort(([x], [y]) => x.localeCompare(y))
+    .map(([t, v]) => ({ t, retransRate: ratePerGb(v.retrans, v.bytes), timeoutRate: ratePerGb(v.timeouts, v.bytes) }));
 }
 
 /** /api/overview KPI block: 4 KPIs + pooled RTT percentiles + worst-latest NHI. */

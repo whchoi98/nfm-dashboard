@@ -8,6 +8,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { lensQuery } from '@/lib/analytics/filters';
 import type { ReliabilityLensResult } from '@/lib/analytics/reliability';
+import { STATUS } from '@/lib/chart-tokens';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
@@ -67,8 +68,23 @@ export default function ReliabilityTab({ filters }: TabProps) {
 
   const rate = (v: number) => `${v.toFixed(1)}/GB`;
 
+  // Pearson r badge over the scatter's points (null = <2 points or zero variance).
+  // Dual-encoded: numeric r + qualitative word, with a token-hued dot (never color-alone).
+  const corr = data?.correlation;
+  const corrStrengthKey =
+    corr?.r == null
+      ? null
+      : Math.abs(corr.r) >= 0.7
+        ? 'insights.reliability.correlationStrong'
+        : Math.abs(corr.r) >= 0.3
+          ? 'insights.reliability.correlationWeak'
+          : 'insights.reliability.correlationNone';
+
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div
+      data-testid="insights-reliability-panel"
+      className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+    >
       <Widget title={t('insights.reliability.summary')} testId="widget-reliability-summary">
         <LensState loading={firstLoad} error={error}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -165,7 +181,32 @@ export default function ReliabilityTab({ filters }: TabProps) {
         </LensState>
       </Widget>
 
-      <Widget title={t('insights.reliability.scatter')} testId="widget-reliability-scatter">
+      <Widget
+        title={t('insights.reliability.scatter')}
+        testId="widget-reliability-scatter"
+        actions={
+          corr ? (
+            <span
+              data-testid="reliability-correlation"
+              className="flex items-center gap-1.5 text-[11px] tabular-nums text-ink/50 dark:text-white/50"
+            >
+              {corr.r === null || corrStrengthKey === null ? (
+                t('insights.reliability.correlationNA')
+              ) : (
+                <>
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: Math.abs(corr.r) >= 0.7 ? STATUS.warn : STATUS.ok }}
+                    aria-hidden
+                  />
+                  {t('insights.reliability.correlation', { r: corr.r.toFixed(2) })} ·{' '}
+                  {t(corrStrengthKey)}
+                </>
+              )}
+            </span>
+          ) : undefined
+        }
+      >
         <LensState loading={firstLoad} error={error}>
           <Scatter
             points={scatterPoints}

@@ -11,6 +11,9 @@ export interface MonitorListItem {
   cluster?: string;
   nhi: number | null;
   dataTransferred: number;
+  /** Window sums, matching MonitorTraffic.retransmissionsSum/timeoutsSum semantics. */
+  retransmissions: number;
+  timeouts: number;
   spark: number[];
 }
 
@@ -73,6 +76,8 @@ export function buildMonitorList(
         name,
         nhi: latestValue(metrics[`HealthIndicator:${name}`]),
         dataTransferred: sum(data?.values ?? []),
+        retransmissions: sum(metrics[`Retransmissions:${name}`]?.values ?? []),
+        timeouts: sum(metrics[`Timeouts:${name}`]?.values ?? []),
         spark: data?.values ?? [],
       };
       if (clusters[name]) item.cluster = clusters[name];

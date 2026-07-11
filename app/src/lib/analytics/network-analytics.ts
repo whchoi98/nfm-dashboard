@@ -2,7 +2,7 @@
 // Pure functions, no I/O, no clock. Consumed by /api/network (the route supplies
 // windowSeconds and the bucket keys for sparklines via recentBuckets()).
 import type { FlowEdge } from '../types';
-import { entityKey } from './aggregate';
+import { entityKey, ratePerGb } from './aggregate';
 
 export type Scope = 'service' | 'namespace' | 'subnet' | 'az' | 'vpc' | 'category' | 'monitor';
 export type NetMetric = 'volume' | 'throughput' | 'retransmits' | 'rtt';
@@ -37,14 +37,11 @@ export interface NetworkAnalyticsResult {
   pairs: NetPair[];
   totalBytes: number;
   totalRetrans: number;
+  /** Fleet-wide retransmissions per GB across all flows (0 when no bytes observed). */
+  retransRateOverall: number;
   sourceScope: Scope;
   destScope: Scope;
   metric: NetMetric;
-}
-
-/** Events per GB with 0-division guard — same formula as reliability.ts ratePerGb (not exported there). */
-function ratePerGb(events: number, bytes: number): number {
-  return bytes === 0 ? 0 : events / Math.max(bytes / 1e9, 1e-9);
 }
 
 /** Aggregation key for one endpoint of a flow at the given scope. Missing fields → 'unknown'. */
@@ -188,6 +185,7 @@ export function networkAnalyticsLens(
     pairs: pairs.slice(0, topN),
     totalBytes,
     totalRetrans,
+    retransRateOverall: ratePerGb(totalRetrans, totalBytes),
     sourceScope: opts.sourceScope,
     destScope: opts.destScope,
     metric,

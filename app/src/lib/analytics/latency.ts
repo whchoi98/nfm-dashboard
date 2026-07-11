@@ -6,8 +6,10 @@ import type { FlowEdge } from '../types';
 import { entityKey, percentile, type Series } from './aggregate';
 
 // `min` is included for AWS console parity (§15.4): Round-trip time tile = Minimum (best-case latency).
-export interface LatencyStats { p50: number; p90: number; p95: number; min: number; max: number; count: number; }
+export interface LatencyStats { p50: number; p90: number; p95: number; p99: number; min: number; max: number; count: number; }
 export interface SlowPath { key: string; label: string; rtt: number; edgeHash: string; }
+export interface TailPath { key: string; label: string; edgeHash: string;
+  p50: number; p95: number; jitter: number; count: number; }
 export interface RttHeatmapCell { day: number; hour: number; value: number; count: number; }
 export interface RttBin { bucketMs: number; count: number; }
 export interface LatencyLensResult {
@@ -15,12 +17,13 @@ export interface LatencyLensResult {
   intra: LatencyStats;
   inter: LatencyStats;
   slowest: SlowPath[];
+  slowestTail: TailPath[];
   trend: Series;
   distribution: RttBin[];
   hourHeatmap: RttHeatmapCell[];
 }
 
-const ZERO_STATS: LatencyStats = { p50: 0, p90: 0, p95: 0, min: 0, max: 0, count: 0 };
+const ZERO_STATS: LatencyStats = { p50: 0, p90: 0, p95: 0, p99: 0, min: 0, max: 0, count: 0 };
 
 /** RTT sample values (ms) — only ROUND_TRIP_TIME flows carry RTT. */
 function rttValues(flows: FlowEdge[]): number[] {
@@ -29,7 +32,7 @@ function rttValues(flows: FlowEdge[]): number[] {
   return values;
 }
 
-/** Nearest-rank p50/p90/p95 + min/max/count over RTT samples; empty → all zeros. Input not mutated. */
+/** Nearest-rank p50/p90/p95/p99 + min/max/count over RTT samples; empty → all zeros. Input not mutated. */
 export function percentilesOf(rttValues: number[]): LatencyStats {
   if (rttValues.length === 0) return { ...ZERO_STATS };
   const sorted = [...rttValues].sort((a, b) => a - b);
@@ -37,6 +40,7 @@ export function percentilesOf(rttValues: number[]): LatencyStats {
     p50: percentile(sorted, 50),
     p90: percentile(sorted, 90),
     p95: percentile(sorted, 95),
+    p99: percentile(sorted, 99),
     min: sorted[0],
     max: sorted[sorted.length - 1],
     count: sorted.length,
@@ -76,6 +80,26 @@ export function slowestPaths(flows: FlowEdge[], n = 20): SlowPath[] {
     key: edgeHash, label: s.label, rtt: s.sum / s.count, edgeHash,
   }));
   paths.sort((x, y) => y.rtt - x.rtt || x.key.localeCompare(y.key));
+  return paths.slice(0, n);
+}
+
+/**
+ * Top-n edges by tail latency: per-edge p95 desc (ties: jitter desc, then key).
+ * Jitter = p95 - p50 — spread between typical and tail RTT on the same path.
+ */
+export function slowestByTail(flows: FlowEdge[], n = 20): TailPath[] {
+  const byEdge = new Map<string, { label: string; vals: number[] }>();
+  for (const f of flows) {
+    if (f.metric !== 'ROUND_TRIP_TIME') continue;
+    const e = byEdge.get(f.edgeHash) ?? { label: `${f.a.serviceName ?? f.a.ip ?? '?'} → ${f.b.serviceName ?? f.b.ip ?? '?'}`, vals: [] };
+    e.vals.push(f.value);
+    byEdge.set(f.edgeHash, e);
+  }
+  const paths: TailPath[] = [...byEdge.entries()].map(([edgeHash, e]) => {
+    const s = percentilesOf(e.vals);
+    return { key: edgeHash, label: e.label, edgeHash, p50: s.p50, p95: s.p95, jitter: s.p95 - s.p50, count: s.count };
+  });
+  paths.sort((x, y) => y.p95 - x.p95 || y.jitter - x.jitter || x.key.localeCompare(y.key));
   return paths.slice(0, n);
 }
 
@@ -161,6 +185,7 @@ export function latencyLens(flows: FlowEdge[]): LatencyLensResult {
     intra,
     inter,
     slowest: slowestPaths(flows),
+    slowestTail: slowestByTail(flows),
     trend: rttTrend(flows),
     distribution: rttDistribution(flows),
     hourHeatmap: rttByHourHeatmap(flows),

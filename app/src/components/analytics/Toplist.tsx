@@ -11,6 +11,9 @@ export type ToplistRow = {
   value: number;
   sub?: string;
   status?: keyof typeof STATUS; // 'ok' | 'warn' | 'danger'
+  /** Pre-formatted value text for this row; overrides valueFormatter (for
+   *  lists that mix units, e.g. bytes and counts). Bars still use `value`. */
+  display?: string;
 };
 
 export default function Toplist({
@@ -67,7 +70,7 @@ export default function Toplist({
                 <span className="truncate text-[11px] text-ink/40 dark:text-white/40">{r.sub}</span>
               ) : null}
             </span>
-            <span className="relative shrink-0 font-semibold tabular-nums">{valueFormatter(r.value)}</span>
+            <span className="relative shrink-0 font-semibold tabular-nums">{r.display ?? valueFormatter(r.value)}</span>
           </>
         );
         return (

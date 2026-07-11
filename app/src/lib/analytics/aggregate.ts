@@ -36,6 +36,17 @@ export function percentile(sortedAsc: number[], p: number): number {
   return sortedAsc[idx];
 }
 
+/** Events per GB with 0-division guard (shared by reliability/network-analytics lenses). */
+export function ratePerGb(events: number, bytes: number): number {
+  return bytes === 0 ? 0 : events / Math.max(bytes / 1e9, 1e-9);
+}
+
+/** Health thresholds for retransmission/timeout RATE (events per GB) — shared by monitor chips + edge-health matrix. */
+export const RETRANS_RATE_WARN = 5;
+export const RETRANS_RATE_DANGER = 10;
+export const TIMEOUT_RATE_WARN = 5;
+export const TIMEOUT_RATE_DANGER = 10;
+
 /** Sum of `value` over flows whose metric matches. */
 export function sumByMetric(flows: FlowEdge[], metric: MetricName): number {
   let sum = 0;

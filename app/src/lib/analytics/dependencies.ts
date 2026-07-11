@@ -15,6 +15,16 @@ export interface CategoryRow { category: DestCategory; bytes: number; }
 export interface HopCount { type: string; count: number; }
 export interface PathNode { name: string; value: number; children: PathNode[]; }
 export interface ParetoRow { key: string; label: string; value: number; cumulativePct: number; }
+export interface ConcentrationResult {
+  /** Shannon entropy normalized by ln(n): 0 = all traffic in one pair, 1 = evenly spread. */
+  entropy: number;
+  /** Gini coefficient over pair shares: 0 = perfectly even, →1 = concentrated. */
+  gini: number;
+  /** Largest single pair's share of total traffic (0..1). */
+  topShare: number;
+  /** Number of pairs with a positive total. */
+  n: number;
+}
 export interface DependenciesLensResult {
   sankey: SankeyData;
   /** True when the sankey was capped to SANKEY_MAX_LINKS (UI shows a top-N caption). */
@@ -27,6 +37,8 @@ export interface DependenciesLensResult {
   /** True when pathTree breadth was capped to PATH_TREE_MAX_CHILDREN. */
   pathTreeTruncated: boolean;
   pareto: ParetoRow[];
+  /** Traffic-concentration scalars over the same pair grouping as `pareto`. */
+  concentration: ConcentrationResult;
 }
 
 // Legibility caps (§16 polish). Live windows produce hundreds of sankey links
@@ -222,6 +234,27 @@ export function pathFrequencyTree(flows: FlowEdge[]): PathNode {
 }
 
 /**
+ * Per-pair totals of `metric`, grouped by direction-independent entity pair
+ * (insertion order). Single source of the pair-keying/summing shared by
+ * paretoTalkers and concentration — do not fork this grouping.
+ */
+function pairTotals(
+  flows: FlowEdge[],
+  kind: EntityKind,
+  metric: MetricName,
+): { key: string; label: string; value: number }[] {
+  const groups = groupBy(flows.filter((f) => f.metric === metric), (f) => pairOf(f, kind).join('|'));
+  const rows: { key: string; label: string; value: number }[] = [];
+  for (const [key, group] of groups) {
+    const [a, b] = pairOf(group[0], kind);
+    let value = 0;
+    for (const f of group) value += f.value;
+    rows.push({ key, label: a === b ? a : `${a} ↔ ${b}`, value });
+  }
+  return rows;
+}
+
+/**
  * Top-n talkers with a cumulative-% line: flows of `metric` grouped by
  * direction-independent entity pair, value summed, sorted desc.
  * `cumulativePct` accumulates against the grand total over ALL pairs, so the
@@ -233,22 +266,44 @@ export function paretoTalkers(
   metric: MetricName = 'DATA_TRANSFERRED',
   n = 20,
 ): ParetoRow[] {
-  const groups = groupBy(flows.filter((f) => f.metric === metric), (f) => pairOf(f, kind).join('|'));
-  const rows: { key: string; label: string; value: number }[] = [];
+  const rows = pairTotals(flows, kind, metric);
   let total = 0;
-  for (const [key, group] of groups) {
-    const [a, b] = pairOf(group[0], kind);
-    let value = 0;
-    for (const f of group) value += f.value;
-    total += value;
-    rows.push({ key, label: a === b ? a : `${a} ↔ ${b}`, value });
-  }
+  for (const r of rows) total += r.value;
   rows.sort((x, y) => y.value - x.value || x.key.localeCompare(y.key));
   let running = 0;
   return rows.slice(0, n).map((r) => {
     running += r.value;
     return { ...r, cumulativePct: total === 0 ? 0 : (running / total) * 100 };
   });
+}
+
+/**
+ * Traffic-concentration scalars over per-pair totals (same grouping as
+ * paretoTalkers): normalized Shannon entropy (0 = one pair carries everything,
+ * 1 = evenly spread), Gini coefficient, and the top pair's share of the total.
+ * Pairs with non-positive totals are ignored; empty input → all zeros (no NaN).
+ */
+export function concentration(
+  flows: FlowEdge[],
+  kind: EntityKind = 'service',
+  metric: MetricName = 'DATA_TRANSFERRED',
+): ConcentrationResult {
+  const vals = pairTotals(flows, kind, metric)
+    .map((r) => r.value)
+    .filter((v) => v > 0)
+    .sort((x, y) => y - x);
+  const n = vals.length;
+  if (n === 0) return { entropy: 0, gini: 0, topShare: 0, n: 0 };
+  const total = vals.reduce((s, v) => s + v, 0);
+  const shares = vals.map((v) => v / total);
+  const entropy =
+    n === 1 ? 0 : -shares.reduce((s, p) => s + (p > 0 ? p * Math.log(p) : 0), 0) / Math.log(n);
+  // Gini: G = (2*Σ i*x_i)/(n*Σ x_i) - (n+1)/n over ascending totals, i 1-based.
+  const asc = [...vals].sort((x, y) => x - y);
+  let cum = 0;
+  for (let i = 0; i < n; i++) cum += (i + 1) * asc[i];
+  const gini = n === 1 ? 0 : (2 * cum) / (n * total) - (n + 1) / n;
+  return { entropy, gini, topShare: shares[0], n };
 }
 
 /** Spec §6.4 response for /api/analytics/dependencies (sankey/pathTree capped for legibility). */
@@ -266,5 +321,6 @@ export function dependenciesLens(flows: FlowEdge[]): DependenciesLensResult {
     pathTree: pathTree.tree,
     pathTreeTruncated: pathTree.truncated,
     pareto: paretoTalkers(flows),
+    concentration: concentration(flows),
   };
 }

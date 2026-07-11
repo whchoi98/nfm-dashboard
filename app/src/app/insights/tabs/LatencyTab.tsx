@@ -1,8 +1,9 @@
 'use client';
 // Latency tab (Task 4b): RTT percentile tiles, intra- vs inter-AZ compare,
-// distribution histogram, slowest-path toplist, RTT trend and the day×hour
-// heatmap. NFM emits ROUND_TRIP_TIME for few flows, so an empty window is the
-// normal case — every widget falls back to the dedicated latency empty-state.
+// distribution histogram, slowest-path toplist, tail-paths (p95/jitter) table,
+// RTT trend and the day×hour heatmap. NFM emits ROUND_TRIP_TIME for few flows,
+// so an empty window is the normal case — every widget falls back to the
+// dedicated latency empty-state.
 import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
@@ -65,9 +66,14 @@ export default function LatencyTab({ filters }: TabProps) {
 
   const overall = data?.overall;
   const trendPoints = data?.trend.points ?? [];
+  // Tail-path rows arrive pre-sorted (p95 desc) and capped at 20 by the lens.
+  const tailRows = data?.slowestTail ?? [];
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div
+      data-testid="insights-latency-panel"
+      className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+    >
       <Widget title={t('insights.latency.summary')} testId="widget-latency-summary">
         <LensState
           loading={firstLoad}
@@ -90,6 +96,21 @@ export default function LatencyTab({ filters }: TabProps) {
               label={t('insights.latency.p95')}
               value={formatMicros(overall?.p95 ?? 0)}
               testId="stat-latency-p95"
+            />
+            <StatDelta
+              label={t('insights.latency.p99')}
+              value={formatMicros(overall?.p99 ?? 0)}
+              testId="stat-latency-p99"
+            />
+            <StatDelta
+              label={t('insights.latency.min')}
+              value={formatMicros(overall?.min ?? 0)}
+              testId="stat-latency-min"
+            />
+            <StatDelta
+              label={t('insights.latency.max')}
+              value={formatMicros(overall?.max ?? 0)}
+              testId="stat-latency-max"
             />
           </div>
         </LensState>
@@ -131,6 +152,41 @@ export default function LatencyTab({ filters }: TabProps) {
       <Widget title={t('insights.latency.slowest')} testId="widget-latency-slowest">
         <LensState loading={firstLoad} error={error} empty={slowRows.length === 0} emptyLabel={emptyLabel}>
           <Toplist rows={slowRows} valueFormatter={formatMicros} testId="toplist-latency-slowest" />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('insights.latency.tailPaths')} testId="widget-latency-tail">
+        <LensState
+          loading={firstLoad}
+          error={error}
+          empty={tailRows.length === 0}
+          emptyLabel={emptyLabel}
+        >
+          {/* Capped height + scroll: keeps up to 20 tail rows inside the bento cell. */}
+          <div className="max-h-96 overflow-auto">
+            <table data-testid="toplist-latency-tail" className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-ink/50 dark:text-white/50">
+                  <th className="py-1.5 pr-2 font-medium">{t('nav.paths')}</th>
+                  <th className="py-1.5 pr-2 font-medium">{t('insights.latency.p50')}</th>
+                  <th className="py-1.5 pr-2 font-medium">{t('insights.latency.p95')}</th>
+                  <th className="py-1.5 font-medium">{t('insights.latency.jitter')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tailRows.map((r) => (
+                  <tr key={r.key} className="border-t border-black/5 dark:border-white/10">
+                    <td className="max-w-48 truncate py-1.5 pr-2 font-medium" title={r.label}>
+                      {r.label}
+                    </td>
+                    <td className="py-1.5 pr-2 tabular-nums">{formatMicros(r.p50)}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{formatMicros(r.p95)}</td>
+                    <td className="py-1.5 tabular-nums">{formatMicros(r.jitter)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </LensState>
       </Widget>
 
