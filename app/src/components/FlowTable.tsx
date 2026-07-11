@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUp, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Download, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { EndpointInfo, FlowEdge } from '@/lib/types';
 import { CATEGORY_COLORS, type DestCategory } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
+import { downloadText, toCsv } from '@/lib/csv';
 
 export function endpointLabel(e: EndpointInfo): string {
   if (e.podName) return e.podNamespace ? `${e.podNamespace}/${e.podName}` : e.podName;
@@ -202,8 +203,35 @@ export default function FlowTable({
 
   const rowKey = (f: FlowEdge, i: number) => `${f.edgeHash}-${f.metric}-${f.bucket}-${i}`;
 
+  // Additive export of the CURRENT rows (sorted view) — see lib/csv.ts.
+  const exportCsv = () =>
+    downloadText(
+      `nfm-flows-${new Date().toISOString().slice(0, 10)}.csv`,
+      toCsv(
+        sorted.map((f) => ({
+          category: f.category,
+          metric: f.metric,
+          local: endpointLabel(f.a),
+          remote: endpointLabel(f.b),
+          value: f.value,
+          port: f.targetPort ?? null,
+        })),
+      ),
+    );
+
   return (
     <div data-testid="flow-table">
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          onClick={exportCsv}
+          data-testid="flow-export-csv"
+          className="inline-flex items-center gap-1 rounded-md bg-ink/[.06] px-2 py-1 text-[11px] font-medium text-ink/60 transition-colors hover:bg-ink/10 hover:text-ink dark:bg-white/10 dark:text-white/60 dark:hover:bg-white/20 dark:hover:text-white"
+        >
+          <Download size={12} strokeWidth={1.5} aria-hidden />
+          {t('reports.exportCsv')}
+        </button>
+      </div>
       {/* Desktop table */}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-sm">
