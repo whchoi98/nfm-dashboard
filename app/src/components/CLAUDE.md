@@ -7,7 +7,7 @@ Presentational React components for the dashboard: chart primitives, topology gr
 - `charts/` — recharts + custom SVG charts (TimeSeries, Sankey, Heatmap, Treemap, Icicle, Pareto, Gauge, StreamGraph, RegionArcMap, …) and `ChartTooltip.tsx`
 - `topology/` — reactflow-based pod/service topology view
 - `chat/` — `FloatingChat.tsx`, `ChatPanel.tsx`, `ChatMessages.tsx` (AI chatbot UI)
-- `layout/` — `AppShell.tsx`, `Sidebar.tsx`, `Topbar.tsx`, `MobileTabs.tsx`, `nav.ts`
+- `layout/` — `AppShell.tsx`, `TopNav.tsx`, `MobileTabs.tsx`, `nav.ts`
 - `cards/`, `analytics/`, `monitors/` — page-level widgets
 - `ui/Controls.tsx` — shared controls
 - Root: `FlowTable.tsx`, `HopPath.tsx`, `Markdown.tsx`, `CodeBlock.tsx`

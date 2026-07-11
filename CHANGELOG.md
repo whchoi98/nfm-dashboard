@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-11
+
+### Changed
+- **Horizontal top-nav layout**: replace the left sidebar with a horizontal top navigation bar (brand + version + menu with a "More" overflow dropdown + language/theme/refresh controls), and constrain the main content to a centered `max-w-[1536px]` so wide monitors no longer stretch content edge-to-edge.
+
+### Removed
+- Left `Sidebar` and `Topbar` components — their branding, version label, navigation, and controls now live in the new top-nav header.
+
 ## [1.3.0] - 2026-07-11
 
 ### Added
@@ -85,7 +93,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
@@ -105,6 +114,14 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-07-11
+
+### Changed
+- **상단 가로 내비게이션 레이아웃**: 좌측 사이드바를 상단 가로 내비게이션 바(브랜드 + 버전 + "더보기" 오버플로우 드롭다운 메뉴 + 언어/테마/새로고침 컨트롤)로 교체하고, 메인 콘텐츠를 중앙 정렬된 `max-w-[1536px]`로 제한하여 넓은 모니터에서 콘텐츠가 좌우로 과하게 늘어나지 않도록 개선.
+
+### Removed
+- 좌측 `Sidebar` 및 `Topbar` 컴포넌트 제거 — 브랜딩·버전 표기·내비게이션·컨트롤은 새 상단 내비 헤더로 이전.
 
 ## [1.3.0] - 2026-07-11
 
@@ -174,7 +191,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
