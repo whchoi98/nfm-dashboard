@@ -17,7 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-07-11
+## [0.6.0] - 2026-07-11
+
+### Added
+- **Overview summary cards**: 6 at-a-glance cards on the landing page — reliability score (SLO 0..100), estimated monthly cost run-rate, billed-traffic ratio, DNS health (failure rate + resolver p95), traffic concentration (top-pair share), and monitor status (healthy/total) — each deep-linking to its detail page.
+
+### Changed
+- **Left sidebar navigation**: replaced the horizontal top-nav with a grouped left sidebar exposing all menus across 6 sections (Overview / Network / Analysis / Operations / Business / Tools); controls (refresh, language, theme) moved to a slim top bar.
+- **Full-width content**: removed the 1536px content cap — the main area now uses the full width beside the sidebar.
+
+## [0.5.0] - 2026-07-11
 
 ### Added
 - **Fleet retransmission total + rate** on the Network Analytics header (events and events/GB across all pairs).
@@ -32,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Extract a shared `ratePerGb` helper and consolidate retransmission/timeout rate health thresholds (warn 5 / danger 10 events per GB), applied consistently across the monitor chips, topology health matrix, and network table.
 
-## [1.4.0] - 2026-07-11
+## [0.4.0] - 2026-07-11
 
 ### Changed
 - **Horizontal top-nav layout**: replace the left sidebar with a horizontal top navigation bar (brand + version + menu with a "More" overflow dropdown + language/theme/refresh controls), and constrain the main content to a centered `max-w-[1536px]` so wide monitors no longer stretch content edge-to-edge.
@@ -40,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Left `Sidebar` and `Topbar` components — their branding, version label, navigation, and controls now live in the new top-nav header.
 
-## [1.3.0] - 2026-07-11
+## [0.3.0] - 2026-07-11
 
 ### Added
 - **Network Analytics** menu (`/network`): Datadog-CNM-style source-scope → dest-scope aggregation (service/namespace/subnet/AZ/VPC/category/monitor), a metric toggle (volume/throughput/retransmits/RTT), per-row sparklines, retransmit-rate health coloring, and drill-down.
@@ -55,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduce anomaly spike noise with a minimum-absolute-change floor (large spikes and threshold anomalies still fire).
 - Fix a CategoryDonut legend overflow in narrow cards (dark mode).
 
-## [1.2.0] - 2026-07-11
+## [0.2.0] - 2026-07-11
 
 ### Added
 - **Alerts / Events** menu: live CloudWatch alarm states plus a derived event feed (NHI degradation, reliability breaches, collection gaps, retransmission/timeout spikes).
@@ -68,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Grant the app task role `cloudwatch:DescribeAlarms` (for the Alerts menu).
 
-## [1.1.0] - 2026-07-11
+## [0.1.0] - 2026-07-11
 
 ### Added
 - Insights hub **Efficiency & Cost-optimization** tab: billed vs free (inter-AZ/VPC/Region) traffic ratio, estimated monthly cost run-rate, top cross-AZ talkers, and a billed-cost trend.
@@ -76,12 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Insights hub **Top Movers** tab: entities whose data-transferred / retransmissions / timeouts changed most versus the prior window (window-over-window deltas with direction).
 - **DNS tab deep-dive**: internal vs external query ratio, top NXDOMAIN sources, resolver-latency band, failure breakdown by rcode, and top query sources.
 
-## [1.0.1] - 2026-07-10
+## [0.0.1] - 2026-07-10
 
 ### Fixed
 - Fix a React hydration mismatch (#418) on `/flows`: the bucket list was seeded from `Date.now()` + `toLocaleTimeString` in a `useState` initializer, differing between the server render and client hydration. It now starts empty and fills client-side on mount.
 
-## [1.0.0] - 2026-07-10
+## [0.0.0] - 2026-07-10
 
 First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dashboard with an Amazon Bedrock AgentCore chatbot, plus the Phase 6 analytics enrichment.
 
@@ -108,14 +117,15 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.5.0...HEAD
-[1.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
-[1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.0.1...v0.1.0
+[0.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v0.0.0...v0.0.1
+[0.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v0.0.0
 
 ---
 
@@ -131,7 +141,16 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-07-11
+## [0.6.0] - 2026-07-11
+
+### Added
+- **개요 요약 카드**: 랜딩 페이지에 한눈 요약 카드 6종 추가 — 신뢰성 점수(SLO 0~100), 월 예상 비용 run-rate, 청구 트래픽 비율, DNS 상태(실패율 + 리졸버 p95), 트래픽 집중도(최상위 페어 점유율), 모니터 상태(정상/전체) — 각 카드는 상세 페이지로 딥링크.
+
+### Changed
+- **좌측 사이드바 내비게이션**: 상단 가로 내비를 6개 그룹(개요/네트워크/분석/운영/비즈니스/도구)으로 전체 메뉴를 노출하는 좌측 사이드바로 교체; 컨트롤(새로고침·언어·테마)은 얇은 상단바로 이동.
+- **전체 폭 콘텐츠**: 1536px 폭 제한 제거 — 메인 영역이 사이드바 옆 전체 폭 사용.
+
+## [0.5.0] - 2026-07-11
 
 ### Added
 - 네트워크 분석 헤더에 **fleet 재전송 총량 + rate/GB**(전체 페어 합계) 추가.
@@ -146,7 +165,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Changed
 - 공유 `ratePerGb` 헬퍼 추출 및 재전송/타임아웃 rate 건강도 임계값(warn 5 / danger 10 events per GB) 통합 — 모니터 칩·토폴로지 헬스 매트릭스·네트워크 표에서 일관 적용.
 
-## [1.4.0] - 2026-07-11
+## [0.4.0] - 2026-07-11
 
 ### Changed
 - **상단 가로 내비게이션 레이아웃**: 좌측 사이드바를 상단 가로 내비게이션 바(브랜드 + 버전 + "더보기" 오버플로우 드롭다운 메뉴 + 언어/테마/새로고침 컨트롤)로 교체하고, 메인 콘텐츠를 중앙 정렬된 `max-w-[1536px]`로 제한하여 넓은 모니터에서 콘텐츠가 좌우로 과하게 늘어나지 않도록 개선.
@@ -154,7 +173,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 좌측 `Sidebar` 및 `Topbar` 컴포넌트 제거 — 브랜딩·버전 표기·내비게이션·컨트롤은 새 상단 내비 헤더로 이전.
 
-## [1.3.0] - 2026-07-11
+## [0.3.0] - 2026-07-11
 
 ### Added
 - **네트워크 분석** 메뉴(`/network`): Datadog CNM 스타일 source scope → dest scope 집계(service/namespace/subnet/AZ/VPC/category/monitor), 지표 토글(볼륨/처리량/재전송/RTT), 행별 스파크라인, 재전송률 건강도 색상, 드릴다운 추가.
@@ -169,7 +188,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 - 이상 징후 spike 노이즈를 최소 절대 변화량 하한으로 감소(대형 spike와 임계값 이상은 계속 탐지).
 - 좁은 카드에서 CategoryDonut 범례 오버플로우 수정(다크 모드).
 
-## [1.2.0] - 2026-07-11
+## [0.2.0] - 2026-07-11
 
 ### Added
 - **알림 / 이벤트** 메뉴: CloudWatch 알람 상태 + 파생 이벤트 피드(NHI 저하, 신뢰성 breach, 수집 공백, 재전송/타임아웃 급증) 추가.
@@ -182,7 +201,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Changed
 - 앱 태스크 역할에 `cloudwatch:DescribeAlarms` 권한 부여(알림 메뉴용).
 
-## [1.1.0] - 2026-07-11
+## [0.1.0] - 2026-07-11
 
 ### Added
 - 인사이트 허브 **효율성 & 비용 최적화** 탭: 과금 vs 무료(inter-AZ/VPC/Region) 트래픽 비율, 월간 비용 run-rate 추정, 상위 cross-AZ talker, 과금 비용 추세 추가.
@@ -190,12 +209,12 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 - 인사이트 허브 **Top Movers** 탭: 직전 창 대비 데이터 전송량/재전송/타임아웃이 가장 크게 변한 엔티티(창 대비 델타 + 방향) 추가.
 - **DNS 탭 심화**: 내부 vs 외부 쿼리 비율, 상위 NXDOMAIN 소스, 리졸버 지연 대역, rcode별 실패 분해, 상위 질의 소스 추가.
 
-## [1.0.1] - 2026-07-10
+## [0.0.1] - 2026-07-10
 
 ### Fixed
 - `/flows`의 React hydration mismatch(#418) 수정: 버킷 목록을 `useState` 초기화에서 `Date.now()` + `toLocaleTimeString`으로 생성해 서버 렌더와 클라이언트 하이드레이션이 달랐음. 이제 빈 상태로 시작해 마운트 시 클라이언트에서 채움.
 
-## [1.0.0] - 2026-07-10
+## [0.0.0] - 2026-07-10
 
 첫 정식 릴리스: Amazon Bedrock AgentCore 챗봇을 포함한 AWS Network Flow Monitor(NFM) Pod-to-Pod 관측 대시보드, 그리고 Phase 6 분석 고도화.
 
@@ -222,11 +241,12 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.5.0...HEAD
-[1.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
-[1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v1.0.0
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.0.1...v0.1.0
+[0.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v0.0.0...v0.0.1
+[0.0.0]: https://github.com/whchoi98/nfm-dashboard/releases/tag/v0.0.0
