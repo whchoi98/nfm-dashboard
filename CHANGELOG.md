@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-11
+
+### Added
+- **Network Analytics** menu (`/network`): Datadog-CNM-style source-scope → dest-scope aggregation (service/namespace/subnet/AZ/VPC/category/monitor), a metric toggle (volume/throughput/retransmits/RTT), per-row sparklines, retransmit-rate health coloring, and drill-down.
+- Reusable **FacetRail** and inline **Sparkline** components.
+
+### Changed
+- **Visual polish** toward a Datadog-dense aesthetic: refined tokens, card/table chrome, table density, and empty/loading states (light + dark).
+- **Topology graph**: edges are now colored by connection health (retransmit rate) alongside throughput dashing, with a health legend and metric-aware edge width.
+- Broaden entity search to also match instance IDs, monitor names, and VPC IDs.
+
+### Fixed
+- Reduce anomaly spike noise with a minimum-absolute-change floor (large spikes and threshold anomalies still fire).
+- Fix a CategoryDonut legend overflow in narrow cards (dark mode).
+
 ## [1.2.0] - 2026-07-11
 
 ### Added
@@ -70,7 +85,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
@@ -89,6 +105,21 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [1.3.0] - 2026-07-11
+
+### Added
+- **네트워크 분석** 메뉴(`/network`): Datadog CNM 스타일 source scope → dest scope 집계(service/namespace/subnet/AZ/VPC/category/monitor), 지표 토글(볼륨/처리량/재전송/RTT), 행별 스파크라인, 재전송률 건강도 색상, 드릴다운 추가.
+- 재사용 가능한 **FacetRail** 및 inline **Sparkline** 컴포넌트 추가.
+
+### Changed
+- Datadog식 dense 미학을 향한 **비주얼 폴리시**: 토큰, 카드/테이블 크롬, 테이블 밀도, empty/loading 상태 정리(라이트+다크).
+- **토폴로지 그래프**: 엣지를 처리율 점선과 함께 연결 건강도(재전송률)로 색상화, 건강도 범례 + 지표 반영 엣지 폭 추가.
+- 엔티티 검색이 인스턴스 ID·모니터 이름·VPC ID까지 매칭하도록 확대.
+
+### Fixed
+- 이상 징후 spike 노이즈를 최소 절대 변화량 하한으로 감소(대형 spike와 임계값 이상은 계속 탐지).
+- 좁은 카드에서 CategoryDonut 범례 오버플로우 수정(다크 모드).
 
 ## [1.2.0] - 2026-07-11
 
@@ -143,7 +174,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/whchoi98/nfm-dashboard/compare/v1.0.0...v1.0.1
