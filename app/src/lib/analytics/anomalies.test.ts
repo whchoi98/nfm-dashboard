@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectAnomalies } from './anomalies';
+import { detectAnomalies, SPIKE_MIN_DELTA } from './anomalies';
 import type { FlowEdge } from '../types';
 
 const GB = 1e9;
@@ -78,6 +78,54 @@ describe('detectAnomalies', () => {
     const prior = [flow({ metric: 'TIMEOUTS', value: 10, a: svc('api'), b: svc('api') })];
     const r = detectAnomalies(current, prior, OPTS);
     expect(r[0]).toMatchObject({ kind: 'spike', severity: 'critical' }); // 70 > 60
+  });
+
+  it('does not flag a small-absolute count spike (2→8 passes ×3 but misses the floor)', () => {
+    const current = [flow({ metric: 'RETRANSMISSIONS', value: 8, a: svc('api'), b: svc('api') })];
+    const prior = [flow({ metric: 'RETRANSMISSIONS', value: 2, a: svc('api'), b: svc('api') })];
+    expect(detectAnomalies(current, prior, OPTS)).toEqual([]); // delta 6 < 10-event floor
+  });
+
+  it('does not flag a small-absolute byte spike (1 MB→10 MB is ×10 but < 50 MB delta)', () => {
+    const current = [flow({ metric: 'DATA_TRANSFERRED', value: 10e6, a: svc('api'), b: svc('api') })];
+    const prior = [flow({ metric: 'DATA_TRANSFERRED', value: 1e6, a: svc('api'), b: svc('api') })];
+    expect(detectAnomalies(current, prior, OPTS)).toEqual([]);
+  });
+
+  it('still flags a large byte spike well above the floor (1 GB→5 GB)', () => {
+    const current = [flow({ metric: 'DATA_TRANSFERRED', value: 5 * GB, a: svc('api'), b: svc('api') })];
+    const prior = [flow({ metric: 'DATA_TRANSFERRED', value: GB, a: svc('api'), b: svc('api') })];
+    const r = detectAnomalies(current, prior, OPTS);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ kind: 'spike', metric: 'DATA_TRANSFERRED', value: 5 * GB, baseline: GB });
+  });
+
+  it('flags a spike whose delta is exactly at the floor (inclusive ≥)', () => {
+    const current = [flow({ metric: 'TIMEOUTS', value: 12, a: svc('api'), b: svc('api') })];
+    const prior = [flow({ metric: 'TIMEOUTS', value: 2, a: svc('api'), b: svc('api') })];
+    const r = detectAnomalies(current, prior, OPTS); // 12 > 3×2 AND 12−2 = 10 = floor
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ kind: 'spike', metric: 'TIMEOUTS', value: 12, baseline: 2 });
+  });
+
+  it('leaves threshold anomalies unaffected by the spike floor (tiny counts still flag rates)', () => {
+    const current = [
+      flow({ metric: 'DATA_TRANSFERRED', value: GB, a: svc('api'), b: svc('api') }),
+      flow({ metric: 'RETRANSMISSIONS', value: 11, a: svc('api'), b: svc('api') }), // 11/GB > 10/GB
+    ];
+    const prior = [flow({ metric: 'RETRANSMISSIONS', value: 3, a: svc('api'), b: svc('api') })];
+    const r = detectAnomalies(current, prior, OPTS);
+    // spike (3→11, delta 8 < floor 10) suppressed; threshold rate exceed kept
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ kind: 'retrans', value: 11, baseline: 10 });
+  });
+
+  it('documents the per-metric spike floors (bytes: 50 MB; counts: 10 events)', () => {
+    expect(SPIKE_MIN_DELTA).toEqual({
+      DATA_TRANSFERRED: 50e6,
+      RETRANSMISSIONS: 10,
+      TIMEOUTS: 10,
+    });
   });
 
   it('does not flag a spike at exactly sigma × prior (strict >)', () => {

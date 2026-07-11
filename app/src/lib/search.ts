@@ -1,6 +1,7 @@
 // Unified entity search across the data the dashboard already holds:
-// topology nodes, recent flow endpoints, and DNS names. Pure — the /api/search
-// route loads the sources and the /search page renders the grouped results.
+// topology nodes, recent flow endpoints, monitor names, and DNS names.
+// Pure — the /api/search route loads the sources and the /search page
+// renders the grouped results.
 import type { DnsAggregate, EndpointInfo, FlowEdge, TopologySnapshot } from './types';
 
 export type SearchResultType = 'pod' | 'service' | 'subnet' | 'ip' | 'node' | 'domain';
@@ -28,7 +29,8 @@ function podHref(name: string, namespace?: string): string {
 
 /**
  * Case-insensitive substring search of `q` across topology node
- * label/id/namespace/cluster, flow endpoint podName/serviceName/ip/subnetId,
+ * label/id/namespace/cluster/vpcId, flow endpoint
+ * podName/serviceName/ip/subnetId/instanceId, flow monitor names,
  * and DNS domain names. Results are deduped by type+label and capped at
  * `opts.limit` (default 30). Queries shorter than 2 chars return [].
  */
@@ -52,10 +54,10 @@ export function searchEntities(
     results.push(r);
   };
 
-  // Topology nodes — label/id/namespace/cluster all searchable.
+  // Topology nodes — label/id/namespace/cluster/vpcId all searchable.
   for (const node of sources.topology?.nodes ?? []) {
     if (results.length >= limit) return results.slice(0, limit);
-    if (hit(node.label, node.id, node.namespace, node.cluster)) {
+    if (hit(node.label, node.id, node.namespace, node.cluster, node.vpcId)) {
       add({
         type: 'node',
         label: node.label,
@@ -84,11 +86,24 @@ export function searchEntities(
     if (e.subnetId != null && hit(e.subnetId)) {
       add({ type: 'subnet', label: e.subnetId, sublabel: [e.az, e.vpcId].filter(Boolean).join(' · '), href: '/topology' });
     }
+    if (e.instanceId != null && hit(e.instanceId)) {
+      add({
+        type: 'node',
+        label: e.instanceId,
+        sublabel: [e.ip, e.az].filter(Boolean).join(' · '),
+        href: '/topology',
+      });
+    }
   };
   for (const flow of sources.flows ?? []) {
     if (results.length >= limit) return results.slice(0, limit);
     endpoint(flow.a);
     endpoint(flow.b);
+    // Monitor names are searchable too (e.g. "nfm") — deduped by type+label,
+    // so each monitor surfaces once regardless of how many flows carry it.
+    if (hit(flow.monitor)) {
+      add({ type: 'node', label: flow.monitor, sublabel: 'monitor', href: '/monitors' });
+    }
   }
 
   // DNS names — resolved domains from topDomains + the name↔flow join.

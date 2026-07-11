@@ -107,6 +107,36 @@ describe('searchEntities', () => {
     expect(subnet[0]).toMatchObject({ label: 'subnet-aaa111', href: '/topology' });
   });
 
+  it('matches flow endpoint instanceId → type node, href /topology', () => {
+    const flows = [edge({ instanceId: 'i-0abc123def456', ip: '10.0.3.30' })];
+    const results = searchEntities('i-0abc', { flows });
+    const nodes = ofType(results, 'node');
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ label: 'i-0abc123def456', href: '/topology' });
+  });
+
+  it('matches the flow monitor name → type node, sublabel monitor, href /monitors (deduped)', () => {
+    const flows = [
+      { ...edge({ ip: '10.0.1.10' }), monitor: 'nfm-monitor-prod' },
+      { ...edge({ ip: '10.0.2.20' }), monitor: 'nfm-monitor-prod' },
+    ];
+    const results = searchEntities('nfm', { flows });
+    const monitors = results.filter((r) => r.sublabel === 'monitor');
+    expect(monitors).toHaveLength(1); // deduped across flows of the same monitor
+    expect(monitors[0]).toMatchObject({ type: 'node', label: 'nfm-monitor-prod', href: '/monitors' });
+  });
+
+  it('matches topology nodes by vpcId when present', () => {
+    const topo: TopologySnapshot = {
+      generatedAt: '2026-07-11T00:00:00Z',
+      nodes: [{ id: 'node:ip-10-0-9-9', kind: 'node', label: 'ip-10-0-9-9', vpcId: 'vpc-99deadbeef' }],
+      edges: [],
+    };
+    const nodes = ofType(searchEntities('vpc-99dead', { topology: topo }), 'node');
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ label: 'ip-10-0-9-9', href: '/topology' });
+  });
+
   it('matches DNS topDomains and nameFlow names → type domain, href /insights?tab=dns', () => {
     const results = searchEntities('example.com', { dns: DNS });
     const domains = ofType(results, 'domain');
