@@ -204,6 +204,8 @@
   "monitors.historical": "과거 탐색",
   "monitors.nhi": "네트워크 상태 지표(NHI)",
   "monitors.trafficWindow": "전송 데이터 (최근 1시간)",
+  "monitors.retransChip": "재전송 {r}/GB",
+  "monitors.timeoutChip": "타임아웃 {r}/GB",
   "monitors.traffic.dataTransferred": "데이터 전송량 (평균)",
   "monitors.traffic.retransmissions": "재전송 (합계)",
   "monitors.traffic.timeouts": "타임아웃 (합계)",

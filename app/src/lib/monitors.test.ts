@@ -63,6 +63,24 @@ describe('buildMonitorList', () => {
   it('returns [] for an empty metrics map', () => {
     expect(buildMonitorList({})).toEqual([]);
   });
+
+  it('carries retransmissions and timeouts sums', () => {
+    const metrics = {
+      'DataTransferred:m1': series('DataTransferred', 'm1', [1e9, 1e9]),
+      'Retransmissions:m1': series('Retransmissions', 'm1', [3, 7]),
+      'Timeouts:m1': series('Timeouts', 'm1', [1, 1]),
+    };
+    const [item] = buildMonitorList(metrics, { m1: 'clusterA' });
+    expect(item.retransmissions).toBe(10);
+    expect(item.timeouts).toBe(2);
+  });
+
+  it('defaults retransmissions/timeouts to 0 when those series are missing', () => {
+    const list = buildMonitorList(METRICS);
+    const m2 = list.find((m) => m.name === 'm2')!;
+    expect(m2.retransmissions).toBe(0);
+    expect(m2.timeouts).toBe(0);
+  });
 });
 
 describe('buildMonitorDetail', () => {

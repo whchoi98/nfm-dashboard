@@ -204,6 +204,8 @@
   "monitors.historical": "Historical explorer",
   "monitors.nhi": "Network Health Indicator",
   "monitors.trafficWindow": "Data transferred (last hour)",
+  "monitors.retransChip": "Retrans {r}/GB",
+  "monitors.timeoutChip": "Timeouts {r}/GB",
   "monitors.traffic.dataTransferred": "Data Transferred (avg)",
   "monitors.traffic.retransmissions": "Retransmissions (sum)",
   "monitors.traffic.timeouts": "Timeouts (sum)",

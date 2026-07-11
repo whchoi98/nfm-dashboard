@@ -1,16 +1,49 @@
 'use client';
 
 // /monitors — one card per NFM monitor: name + latest NHI StatusBadge +
-// window traffic total + a DataTransferred sparkline. Each card links to the
-// per-monitor overview/historical page (/monitors/[name]).
+// retrans/timeout health chips + window traffic total + a DataTransferred
+// sparkline. Each card links to the per-monitor page (/monitors/[name]).
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { MonitorListItem } from '@/lib/monitors';
+import { ratePerGb } from '@/lib/analytics/aggregate';
+import {
+  RETRANS_DANGER,
+  RETRANS_WARN,
+  TIMEOUT_DANGER,
+  TIMEOUT_WARN,
+} from '@/lib/overview-metrics';
 import { formatBytes } from '@/lib/format';
-import { SERIES_COLORS } from '@/lib/chart-tokens';
+import { SERIES_COLORS, STATUS } from '@/lib/chart-tokens';
 import StatusBadge from '@/components/cards/StatusBadge';
 import { Line, LineChart, ResponsiveContainer } from 'recharts';
+
+/** overview's statusFor, on per-GB rates: ok < warnAt <= warn < dangerAt <= danger. */
+function statusFor(rate: number, warnAt: number, dangerAt: number): keyof typeof STATUS {
+  return rate >= dangerAt ? 'danger' : rate >= warnAt ? 'warn' : 'ok';
+}
+
+/** Pastel status pill, dual-encoded (localized label text + STATUS color). */
+function HealthChip({
+  testId,
+  label,
+  status,
+}: {
+  testId: string;
+  label: string;
+  status: keyof typeof STATUS;
+}) {
+  return (
+    <span
+      data-testid={testId}
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums text-ink"
+      style={{ backgroundColor: STATUS[status] }}
+    >
+      {label}
+    </span>
+  );
+}
 
 /** Tiny inline sparkline (StatDelta's mini-chart, without the tile chrome). */
 function Spark({ values }: { values: number[] }) {
@@ -54,37 +87,53 @@ export default function MonitorsPage() {
           data-testid="monitors-list"
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
         >
-          {monitors.map((m) => (
-            <Link
-              key={m.name}
-              href={`/monitors/${encodeURIComponent(m.name)}`}
-              data-testid="monitor-card"
-              className="rounded-card bg-surface p-5 text-ink transition-colors hover:bg-black/5 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-sm font-semibold" title={m.name}>
-                  {m.name}
-                </p>
-                <StatusBadge value={m.nhi} />
-              </div>
-              {m.cluster ? (
-                <p className="mt-1 truncate text-[11px] text-ink/50 dark:text-white/50">
-                  {m.cluster}
-                </p>
-              ) : null}
-              <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-ink/50 dark:text-white/50">
-                    {t('monitors.trafficWindow')}
+          {monitors.map((m) => {
+            const retransRate = ratePerGb(m.retransmissions, m.dataTransferred);
+            const timeoutRate = ratePerGb(m.timeouts, m.dataTransferred);
+            return (
+              <Link
+                key={m.name}
+                href={`/monitors/${encodeURIComponent(m.name)}`}
+                data-testid="monitor-card"
+                className="rounded-card bg-surface p-5 text-ink transition-colors hover:bg-black/5 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-sm font-semibold" title={m.name}>
+                    {m.name}
                   </p>
-                  <p className="text-xl font-semibold tabular-nums">
-                    {formatBytes(m.dataTransferred)}
-                  </p>
+                  <StatusBadge value={m.nhi} />
                 </div>
-                <Spark values={m.spark} />
-              </div>
-            </Link>
-          ))}
+                {m.cluster ? (
+                  <p className="mt-1 truncate text-[11px] text-ink/50 dark:text-white/50">
+                    {m.cluster}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <HealthChip
+                    testId="monitor-chip-retrans"
+                    label={t('monitors.retransChip', { r: retransRate.toFixed(1) })}
+                    status={statusFor(retransRate, RETRANS_WARN, RETRANS_DANGER)}
+                  />
+                  <HealthChip
+                    testId="monitor-chip-timeouts"
+                    label={t('monitors.timeoutChip', { r: timeoutRate.toFixed(1) })}
+                    status={statusFor(timeoutRate, TIMEOUT_WARN, TIMEOUT_DANGER)}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-ink/50 dark:text-white/50">
+                      {t('monitors.trafficWindow')}
+                    </p>
+                    <p className="text-xl font-semibold tabular-nums">
+                      {formatBytes(m.dataTransferred)}
+                    </p>
+                  </div>
+                  <Spark values={m.spark} />
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

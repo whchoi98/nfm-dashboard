@@ -20,6 +20,14 @@ export interface OverviewKpis {
   nhi: number | null;
 }
 
+// Lab-scale reliability status thresholds shared by the overview KPI tiles and
+// the /monitors card health chips (heuristics like the cost tab's WARN/DANGER_USD
+// — revisit after observing real data).
+export const RETRANS_WARN = 1_000;
+export const RETRANS_DANGER = 10_000;
+export const TIMEOUT_WARN = 1;
+export const TIMEOUT_DANGER = 100;
+
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => (xs.length === 0 ? 0 : sum(xs) / xs.length);
 

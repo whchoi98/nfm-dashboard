@@ -10,7 +10,13 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { CollectionStatus, Coverage } from '@/lib/types';
 import type { NfmSeries } from '@/lib/cw-metrics';
-import type { OverviewKpis } from '@/lib/overview-metrics';
+import {
+  RETRANS_DANGER,
+  RETRANS_WARN,
+  TIMEOUT_DANGER,
+  TIMEOUT_WARN,
+  type OverviewKpis,
+} from '@/lib/overview-metrics';
 import { cloudWatchMetricsUrl } from '@/lib/cloudwatch-url';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
 import { formatUsd } from '@/app/insights/tabs/shared';
@@ -32,12 +38,8 @@ interface OverviewData extends OverviewKpis {
   coverage: Coverage | null;
 }
 
-// Lab-scale status thresholds for the 1-hour fleet window (heuristics like the
-// cost tab's WARN/DANGER_USD — revisit after observing real data).
-const RETRANS_WARN = 1_000;
-const RETRANS_DANGER = 10_000;
-const TIMEOUT_WARN = 1;
-const TIMEOUT_DANGER = 100;
+// Lab-scale status threshold for the breach teaser (RETRANS/TIMEOUT thresholds
+// moved to overview-metrics.ts, shared with the /monitors card chips).
 const BREACH_DANGER = 5;
 
 function statusFor(
