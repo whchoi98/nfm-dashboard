@@ -175,6 +175,7 @@
   "topology.kind.external": "외부",
   "topology.badge.crossAz": "가용 영역(AZ) 간 트래픽",
   "topology.badge.highRetrans": "높은 재전송률",
+  "topology.minimap": "미니맵",
   "graph.live": "LIVE",
   "graph.paused": "일시정지됨",
   "graph.pause": "일시정지",

@@ -175,6 +175,7 @@
   "topology.kind.external": "External",
   "topology.badge.crossAz": "Cross-AZ traffic",
   "topology.badge.highRetrans": "High retransmit rate",
+  "topology.minimap": "Minimap",
   "graph.live": "LIVE",
   "graph.paused": "Paused",
   "graph.pause": "Pause",

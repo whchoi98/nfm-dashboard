@@ -7,8 +7,16 @@
 // (CNM style): STROKE COLOR = retransmission-rate health (STATUS ok/warn/
 // danger), WIDTH = selected-metric value (sqrt scale), DASH = DATA_TRANSFERRED
 // throughput > threshold.
-// Layout: d3-force simulation run for ~300 ticks up-front in a memo keyed by
-// the structural node/link id set. Node positions then live in local state
+// Layout (Phase 14 Task 5 — deterministic + persistent): d3-force simulation
+// run for ~300 ticks up-front in a memo keyed by the structural node/link id
+// set, seeded from `seedPosition` (a hash of the node id — see
+// `@/lib/graph-layout`) rather than d3-force's own array-index-based default,
+// so the SAME node id always starts from the SAME point and the layout is
+// reproducible across reloads. A ref-backed position cache (mirrored to
+// localStorage) remembers every node's last computed/dragged position; a
+// structural change (filter/level/groupBy) reseeds persisting node ids from
+// that cache instead of the id hash, so the layout settles back near where it
+// was instead of fully reshuffling. Node positions then live in local state
 // (useNodesState): manual drags persist across value-only polls and focus
 // changes; positions reset only when the structural layoutKey changes.
 // Replaces TierFlowMap in the /topology "graph" view.
@@ -20,6 +28,7 @@ import ReactFlow, {
   EdgeLabelRenderer,
   Handle,
   MarkerType,
+  MiniMap,
   Panel,
   Position,
   useNodesState,
@@ -36,6 +45,7 @@ import { ArrowLeftRight, TriangleAlert } from 'lucide-react';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
 import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode, type GroupBy } from '@/lib/topology-graph';
 import { neighbors } from '@/lib/graph-focus';
+import { graphSignature, seedPosition } from '@/lib/graph-layout';
 import { nodeResourceKind } from '@/lib/topology';
 import { KIND_META } from './ResourceIcon';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
@@ -271,8 +281,32 @@ interface SimNode extends SimulationNodeDatum {
   r: number;
 }
 
-function computeLayout(model: GraphModel): Map<string, { x: number; y: number }> {
-  const simNodes: SimNode[] = model.nodes.map((n) => ({ id: n.id, r: n.radius }));
+/**
+ * Any node id already present in `knownPositions` (the persisted cache —
+ * prior computed layouts + manual drags) is PINNED there via d3-force's
+ * `fx`/`fy` (fixed position): a fresh `forceSimulation` restarts alpha at 1,
+ * so merely seeding a node's starting x/y and letting the n-body forces run
+ * another 300 ticks does NOT reproduce the same resting point — the
+ * full-strength charge/collide/link forces relitigate the whole layout from
+ * scratch and chaotically amplify any tiny difference (that's what caused
+ * positions to drift on every reload before this fix). Pinning removes the
+ * ambiguity entirely: a pinned node cannot move, full stop, while it still
+ * exerts/receives forces on its unpinned neighbors. Only a node with NO known
+ * position (genuinely new) free-seeds from `seedPosition(id)` (a hash of the
+ * id, not the array index, so the SAME id always starts from the SAME point)
+ * and settles into the gaps around the pinned nodes via the simulation.
+ */
+function computeLayout(
+  model: GraphModel,
+  knownPositions: ReadonlyMap<string, { x: number; y: number }>,
+): Map<string, { x: number; y: number }> {
+  const simNodes: SimNode[] = model.nodes.map((n) => {
+    const known = knownPositions.get(n.id);
+    const seed = known ?? seedPosition(n.id);
+    return known
+      ? { id: n.id, r: n.radius, x: seed.x, y: seed.y, fx: seed.x, fy: seed.y }
+      : { id: n.id, r: n.radius, x: seed.x, y: seed.y };
+  });
   const simLinks: SimulationLinkDatum<SimNode>[] = model.links.map((l) => ({
     source: l.source,
     target: l.target,
@@ -289,6 +323,53 @@ function computeLayout(model: GraphModel): Map<string, { x: number; y: number }>
     .stop();
   sim.tick(300);
   return new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
+}
+
+// ── position persistence (Phase 14 Task 5) ──────────────────────────────────
+// Manual drags + computed layouts persist to localStorage so spatial memory
+// survives a reload, keyed by a signature of the FULL topology's node-id set
+// (not the currently-filtered view) — so flipping a filter/metric/groupBy
+// never invalidates positions for nodes outside today's view. Restore is
+// opportunistic PER-ID rather than gated on an exact signature match: a pod
+// cycling to a new suffix between polls is normal topology drift, not "a
+// different graph", so every surviving id simply keeps reusing its last known
+// spot regardless of whether the overall set matches byte-for-byte.
+const POSITIONS_STORAGE_KEY = 'nfm-topology-positions';
+/** Skip persisting past this many entries — a pathological topology shouldn't grow localStorage unbounded. */
+const MAX_PERSISTED_NODES = 3000;
+
+interface StoredLayout {
+  signature: string;
+  positions: Record<string, { x: number; y: number }>;
+}
+
+function loadStoredPositions(): Map<string, { x: number; y: number }> {
+  if (typeof window === 'undefined') return new Map();
+  try {
+    const raw = window.localStorage.getItem(POSITIONS_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Partial<StoredLayout> | null;
+    const entries = Object.entries(parsed?.positions ?? {}).filter(
+      (entry): entry is [string, { x: number; y: number }] => {
+        const p = entry[1] as { x?: unknown; y?: unknown } | null | undefined;
+        return !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
+      },
+    );
+    return new Map(entries);
+  } catch {
+    return new Map(); // corrupt JSON / storage unavailable — start fresh, no crash.
+  }
+}
+
+function persistPositions(signature: string, cache: ReadonlyMap<string, { x: number; y: number }>) {
+  if (typeof window === 'undefined' || cache.size === 0 || cache.size > MAX_PERSISTED_NODES) return;
+  try {
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const [id, p] of cache) positions[id] = p;
+    window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify({ signature, positions }));
+  } catch {
+    // Storage full / unavailable (private mode) — position memory degrades to session-only, no crash.
+  }
 }
 
 // ── component ───────────────────────────────────────────────────────────────
@@ -357,8 +438,33 @@ function NetworkGraphInner({
       `${model.nodes.map((n) => n.id).sort().join('|')}⇢${model.links.map((l) => l.id).sort().join('|')}`,
     [model],
   );
+
+  // Position persistence (Phase 14 Task 5): lazy-init once from localStorage
+  // (same synchronous-during-render pattern as the `synced` ref below), then
+  // mutated in place by drags + the layout-merge effect further down — never
+  // through setState, since it must be readable synchronously inside the
+  // `positions` memo without itself becoming a re-render trigger.
+  const positionCacheRef = useRef<Map<string, { x: number; y: number }> | null>(null);
+  if (positionCacheRef.current == null) {
+    positionCacheRef.current = loadStoredPositions();
+  }
+  // Keyed on the FULL topology's node-id set (not the filtered view) so a
+  // filter/metric/groupBy change never rewrites the storage key.
+  const topologySignature = useMemo(() => graphSignature(topology.nodes.map((n) => n.id)), [topology]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layoutKey by design
-  const positions = useMemo(() => computeLayout(model), [layoutKey]);
+  const positions = useMemo(() => computeLayout(model, positionCacheRef.current!), [layoutKey]);
+
+  // Every freshly computed layout (a structural change, incl. the very first
+  // mount) feeds back into the durable cache + localStorage, so the NEXT
+  // structural change — and the next reload — seeds persisting node ids from
+  // here instead of `seedPosition`, which is what keeps them from reshuffling.
+  useEffect(() => {
+    const cache = positionCacheRef.current;
+    if (!cache) return;
+    for (const [id, p] of positions) cache.set(id, p);
+    persistPositions(topologySignature, cache);
+  }, [positions, topologySignature]);
 
   // Focus only counts while the focused node exists in the current model — a
   // stale focusId (node unchecked, filter narrowed, poll churn) would
@@ -512,6 +618,20 @@ function NetworkGraphInner({
     [onGroupToggle, onNodeSelect],
   );
 
+  // Position persistence (Phase 14 Task 5): a manual drag writes straight
+  // into the durable cache + localStorage (not just RF's own node state), so
+  // the drop point survives the NEXT structural change (filter/groupBy) and
+  // a page reload, not only value-only polls.
+  const handleNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
+      const cache = positionCacheRef.current;
+      if (!cache) return;
+      cache.set(node.id, { x: node.position.x + node.data.radius, y: node.position.y + node.data.radius });
+      persistPositions(topologySignature, cache);
+    },
+    [topologySignature],
+  );
+
   // ESC clears focus (restores the full graph) — same pattern as
   // EdgeHopPanel's dialog-close handler.
   useEffect(() => {
@@ -567,12 +687,48 @@ function NetworkGraphInner({
           }}
           onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
+          onNodeDragStop={handleNodeDragStop}
           // Empty-canvas click clears focus (restores the full graph).
           onPaneClick={() => onNodeSelect?.(null)}
         >
           <Background gap={24} size={1} color="currentColor" style={{ opacity: 0.15 }} />
           {/* bottom-left: the fixed chat FAB sits over the graph's bottom-right corner */}
           <Controls showInteractive={false} position="bottom-left" />
+          {/* Live minimap (Phase 14 Task 5) — node color mirrors health (the
+              SAME STATUS read as the circle's own fill/border), so the
+              minimap reflects health at a glance even fully zoomed out.
+              Hidden below `sm`: the mobile canvas is already tight and a
+              corner minimap would crowd it further.
+              The `data-testid` lives on this WRAPPER, not on <MiniMap>
+              itself: the library component destructures its own named
+              props with no `...rest` passthrough, so an unrecognized prop
+              like `data-testid` is silently dropped — never reaches the
+              rendered <svg>. The wrapper is explicitly sized + absolutely
+              positioned (not just a plain div) so it isn't a zero-height
+              box that "no children contribute to an auto-sized parent's
+              height" would otherwise make it (MiniMap's own svg is itself
+              absolutely positioned) — a real box lets visibility checks
+              against the testid work as expected, and `hidden sm:block`
+              on it removes the whole subtree on mobile. Nudged down when the
+              expanded-groups chip panel (also top-right, Phase 14 Task 3) is
+              showing — both are plain `.react-flow__panel`s pinned to the
+              same corner with no shared stacking logic, so without this they
+              paint directly on top of each other. */}
+          <div
+            data-testid="topology-minimap"
+            className={`absolute right-0 hidden h-[180px] w-[230px] sm:block ${
+              groupBy !== 'none' && expandedGroups && expandedGroups.size > 0 ? 'top-11' : 'top-0'
+            }`}
+          >
+            <MiniMap
+              position="top-right"
+              pannable
+              ariaLabel={t('topology.minimap')}
+              nodeColor={(n) => statusColor((n.data as CircleNodeData | undefined)?.status ?? 'idle')}
+              maskColor="rgba(128,128,128,0.15)"
+              style={{ background: 'transparent' }}
+            />
+          </div>
           {activeFocusId != null ? (
             <Panel position="top-left">
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white/95 px-2.5 py-1.5 text-[11px] font-medium shadow-sm dark:border-white/15 dark:bg-ink/90">
