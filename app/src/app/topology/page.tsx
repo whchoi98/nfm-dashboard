@@ -14,7 +14,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
 import { filterTopology, resolveEdge, type TierLevel } from '@/lib/topology';
-import { buildGraphModel, DEFAULT_HEALTH_THRESHOLD, DEFAULT_HEALTH_WARN_THRESHOLD } from '@/lib/topology-graph';
+import { buildGraphModel, DEFAULT_HEALTH_THRESHOLD, DEFAULT_HEALTH_WARN_THRESHOLD, type GroupBy } from '@/lib/topology-graph';
 import type { HealthLevel } from '@/lib/analytics/edge-health';
 import { RETRANS_RATE_DANGER, RETRANS_RATE_WARN } from '@/lib/analytics/aggregate';
 import { CATEGORY_ORDER, STATUS } from '@/lib/chart-tokens';
@@ -43,6 +43,14 @@ const HEALTH_LEVELS: { value: HealthLevel; labelKey: string }[] = [
   { value: 'vpc', labelKey: 'topology.levelVpc' },
 ];
 const HEALTH_STATUSES = ['ok', 'warn', 'danger'] as const;
+// Node-grouping levels (Phase 14 Task 3). 'az' is flagged in its label as
+// cost-relevant (cross-zone data transfer is billed).
+const GROUP_BYS: { value: GroupBy; labelKey: string }[] = [
+  { value: 'none', labelKey: 'topology.group.none' },
+  { value: 'namespace', labelKey: 'topology.group.namespace' },
+  { value: 'az', labelKey: 'topology.group.az' },
+  { value: 'cluster', labelKey: 'topology.group.cluster' },
+];
 
 // Min-traffic slider (Phase 14 Task 1): a quadratic mapping between the
 // slider position and the cut value gives finer control near zero, where
@@ -186,6 +194,22 @@ export default function TopologyPage() {
   // counts) — a stale cut in the old unit would silently hide everything.
   useEffect(() => setMinEdgeValue(0), [metric]);
 
+  // Phase 14 Task 3 — node grouping (namespace/AZ/cluster) with collapse/expand.
+  // groupBy collapses members into group nodes; expandedGroups re-shows the
+  // members of the listed group keys. Clicking a group node toggles its key.
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setExpandedGroups((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  // Changing the grouping level (or its scope) invalidates the old group keys —
+  // reset the expansion so no stale key lingers across levels.
+  useEffect(() => setExpandedGroups(new Set()), [groupBy]);
+
   // Task 8 — matrix render mode: 'metric' (default, unchanged) or 'health'
   // (RED/AMBER/GREEN by connection health). healthLevel is independent of
   // `level` above: buildHealthMatrix keys directly off raw FlowEdge endpoint
@@ -221,6 +245,7 @@ export default function TopologyPage() {
   useEffect(() => {
     setSelectedIds(null);
     setFocusId(null);
+    setExpandedGroups(new Set());
   }, [cluster, category]);
 
   // TagFilterPanel apply: commit the selection and drop the focus if the new
@@ -264,9 +289,11 @@ export default function TopologyPage() {
             minEdgeValue,
             healthThreshold: healthDanger,
             healthWarnThreshold: healthWarn,
+            groupBy,
+            expandedGroups,
           }).hiddenEdgeCount
         : 0,
-    [topology, metric, selectedIds, minEdgeValue, healthDanger, healthWarn],
+    [topology, metric, selectedIds, minEdgeValue, healthDanger, healthWarn, groupBy, expandedGroups],
   );
 
   // Clamp the min-traffic cut if a narrower cluster/category scope (or a
@@ -432,6 +459,24 @@ export default function TopologyPage() {
           />
           {view === 'graph' ? (
             <>
+              <div className="flex flex-col gap-1">
+                <Select
+                  label={t('topology.groupBy')}
+                  value={groupBy}
+                  onChange={(v) => setGroupBy(v as GroupBy)}
+                  options={GROUP_BYS.map((g) => ({ value: g.value, label: t(g.labelKey) }))}
+                  testId="topology-groupby"
+                  title={groupBy === 'az' ? t('topology.azCostHint') : t('topology.groupHint')}
+                />
+                {groupBy === 'az' ? (
+                  <span
+                    data-testid="topology-az-cost-hint"
+                    className="max-w-[16rem] text-[10px] font-medium leading-tight text-ink/50 dark:text-white/50"
+                  >
+                    {t('topology.azCostHint')}
+                  </span>
+                ) : null}
+              </div>
               <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60">
                 <label htmlFor="topology-search-input">{t('topology.search')}</label>
                 <div className="flex items-center gap-1.5">
@@ -542,6 +587,9 @@ export default function TopologyPage() {
                   healthThreshold={healthDanger}
                   healthWarnThreshold={healthWarn}
                   healthFilter={healthFilter}
+                  groupBy={groupBy}
+                  expandedGroups={expandedGroups}
+                  onGroupToggle={toggleGroup}
                 />
               </div>
             ) : (

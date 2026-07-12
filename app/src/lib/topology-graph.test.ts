@@ -323,3 +323,153 @@ describe('buildGraphModel — min-traffic cut (minEdgeValue)', () => {
     expect(ids).not.toContain('b');
   });
 });
+
+// ── node grouping + collapse/expand (Phase 14 Task 3) ────────────────────────
+describe('buildGraphModel — node grouping (groupBy)', () => {
+  const GB = 1e9;
+  // Two namespaces: ns-a = {a1, a2}, ns-b = {b1}. Two cross-ns edges into b1
+  // plus one intra-ns-a edge (a1→a2). ids sort so group:namespace:ns-a < ns-b.
+  const nsNodes: TopologySnapshot['nodes'] = [
+    { id: 'a1', kind: 'pod', label: 'a1', namespace: 'ns-a' },
+    { id: 'a2', kind: 'pod', label: 'a2', namespace: 'ns-a' },
+    { id: 'b1', kind: 'pod', label: 'b1', namespace: 'ns-b' },
+  ];
+  const nsEdges: TopologySnapshot['edges'] = [
+    { id: 'x1', source: 'a1', target: 'b1', metrics: { DATA_TRANSFERRED: 2 * GB, RETRANSMISSIONS: 30 }, category: 'INTER_AZ' },
+    { id: 'x2', source: 'a2', target: 'b1', metrics: { DATA_TRANSFERRED: 1 * GB, RETRANSMISSIONS: 20 }, category: 'INTER_AZ' },
+    { id: 'i1', source: 'a1', target: 'a2', metrics: { DATA_TRANSFERRED: 5e8, RETRANSMISSIONS: 1 }, category: 'INTRA_AZ' },
+  ];
+  const nsTopo: TopologySnapshot = { generatedAt: '2026-07-12T00:00:00Z', nodes: nsNodes, edges: nsEdges };
+
+  it("groupBy:'none' (and the default) is byte-identical to omitting the option", () => {
+    const withNone = buildGraphModel(nsTopo, { groupBy: 'none' });
+    const without = buildGraphModel(nsTopo);
+    expect(withNone).toEqual(without);
+    // No node carries a group field in the ungrouped model.
+    for (const n of without.nodes) expect(n.group).toBeUndefined();
+  });
+
+  it('collapses members into 2 group nodes with correct memberCount + one aggregate cross-ns edge', () => {
+    const m = buildGraphModel(nsTopo, { groupBy: 'namespace' });
+    // 2 group nodes, emitted at first-member position → ns-a before ns-b.
+    expect(m.nodes.map((n) => n.id)).toEqual(['group:namespace:ns-a', 'group:namespace:ns-b']);
+    const a = m.nodes[0];
+    const b = m.nodes[1];
+    expect(a.group).toEqual({ key: 'ns-a', kind: 'group', memberCount: 2, expanded: false });
+    expect(b.group).toEqual({ key: 'ns-b', kind: 'group', memberCount: 1, expanded: false });
+    // Exactly one cross-group edge (x1+x2 aggregated); the intra-ns-a edge is a self-loop, not a link.
+    expect(m.links).toHaveLength(1);
+    const link = m.links[0];
+    expect(link.source).toBe('group:namespace:ns-a');
+    expect(link.target).toBe('group:namespace:ns-b');
+    // DATA_TRANSFERRED summed (2GB + 1GB) → link value under the default metric.
+    expect(link.value).toBe(3 * GB);
+  });
+
+  it('sums metrics across constituent edges (RETRANSMISSIONS) and re-derives health from summed retrans/GB', () => {
+    // 50 retrans over 3 GB → 16.7/GB ≥ 10 → danger.
+    const danger = buildGraphModel(nsTopo, { groupBy: 'namespace' });
+    expect(danger.links[0].health).toBe('danger');
+    // Selecting RETRANSMISSIONS exposes the summed count as the link value.
+    const retrans = buildGraphModel(nsTopo, { groupBy: 'namespace', metric: 'RETRANSMISSIONS' });
+    expect(retrans.links[0].value).toBe(50);
+    // Health is unaffected by the selected metric — still danger from retrans/GB.
+    expect(retrans.links[0].health).toBe('danger');
+  });
+
+  it('folds intra-group traffic into the group node self-loop (no intra link)', () => {
+    const twoInOneNs: TopologySnapshot = {
+      generatedAt: '',
+      nodes: [
+        { id: 'p1', kind: 'pod', label: 'p1', namespace: 'ns-a' },
+        { id: 'p2', kind: 'pod', label: 'p2', namespace: 'ns-a' },
+      ],
+      edges: [{ id: 'e', source: 'p1', target: 'p2', metrics: { DATA_TRANSFERRED: 7 * GB }, category: 'INTRA_AZ' }],
+    };
+    const m = buildGraphModel(twoInOneNs, { groupBy: 'namespace' });
+    expect(m.nodes).toHaveLength(1);
+    expect(m.links).toHaveLength(0);
+    expect(m.nodes[0].id).toBe('group:namespace:ns-a');
+    expect(m.nodes[0].selfBytes).toBe(7 * GB);
+    // In nsTopo, the ns-a group's self-loop carries the intra a1→a2 edge (5e8).
+    const grouped = buildGraphModel(nsTopo, { groupBy: 'namespace' });
+    expect(grouped.nodes.find((n) => n.id === 'group:namespace:ns-a')!.selfBytes).toBe(5e8);
+  });
+
+  it('expanding one group re-shows its members + intra-edges while the other stays collapsed', () => {
+    const m = buildGraphModel(nsTopo, { groupBy: 'namespace', expandedGroups: new Set(['ns-a']) });
+    const ids = m.nodes.map((n) => n.id).sort();
+    // ns-a expanded to members; ns-b still a collapsed group node.
+    expect(ids).toEqual(['a1', 'a2', 'group:namespace:ns-b']);
+    expect(m.nodes.find((n) => n.id === 'a1')!.group).toBeUndefined();
+    expect(m.nodes.find((n) => n.id === 'group:namespace:ns-b')!.group).toEqual({
+      key: 'ns-b', kind: 'group', memberCount: 1, expanded: false,
+    });
+    // Links: intra a1↔a2, plus a1↔ns-b and a2↔ns-b (each cross edge kept separate now).
+    const pairs = m.links.map((l) => [l.source, l.target].sort().join('|')).sort();
+    expect(pairs).toEqual([
+      'a1|a2',
+      'a1|group:namespace:ns-b',
+      'a2|group:namespace:ns-b',
+    ]);
+  });
+
+  it("accepts expandedGroups as a string[] and expands the same way", () => {
+    const asArray = buildGraphModel(nsTopo, { groupBy: 'namespace', expandedGroups: ['ns-a'] });
+    const asSet = buildGraphModel(nsTopo, { groupBy: 'namespace', expandedGroups: new Set(['ns-a']) });
+    expect(asArray).toEqual(asSet);
+  });
+
+  it("buckets nodes missing the grouped field into the 'unknown' group", () => {
+    const mixed: TopologySnapshot = {
+      generatedAt: '',
+      nodes: [
+        { id: 'p1', kind: 'pod', label: 'p1', namespace: 'ns-a' },
+        { id: 'p2', kind: 'pod', label: 'p2' }, // no namespace
+      ],
+      edges: [{ id: 'e', source: 'p1', target: 'p2', metrics: { DATA_TRANSFERRED: GB }, category: 'INTER_AZ' }],
+    };
+    const m = buildGraphModel(mixed, { groupBy: 'namespace' });
+    expect(m.nodes.map((n) => n.id)).toEqual(['group:namespace:ns-a', 'group:namespace:unknown']);
+    expect(m.nodes.find((n) => n.id === 'group:namespace:unknown')!.group!.key).toBe('unknown');
+    expect(m.links).toHaveLength(1);
+  });
+
+  it('averages ROUND_TRIP_TIME weighted by bytes across aggregated edges', () => {
+    // rtt 10 over 3GB and rtt 20 over 1GB → weighted (10·3 + 20·1)/4 = 12.5.
+    const rttTopo: TopologySnapshot = {
+      generatedAt: '',
+      nodes: [
+        { id: 'a1', kind: 'pod', label: 'a1', namespace: 'ns-a' },
+        { id: 'a2', kind: 'pod', label: 'a2', namespace: 'ns-a' },
+        { id: 'b1', kind: 'pod', label: 'b1', namespace: 'ns-b' },
+      ],
+      edges: [
+        { id: 'x1', source: 'a1', target: 'b1', metrics: { DATA_TRANSFERRED: 3 * GB, ROUND_TRIP_TIME: 10 }, category: 'INTER_AZ' },
+        { id: 'x2', source: 'a2', target: 'b1', metrics: { DATA_TRANSFERRED: 1 * GB, ROUND_TRIP_TIME: 20 }, category: 'INTER_AZ' },
+      ],
+    };
+    const m = buildGraphModel(rttTopo, { groupBy: 'namespace', metric: 'ROUND_TRIP_TIME' });
+    expect(m.links).toHaveLength(1);
+    expect(m.links[0].value).toBeCloseTo(12.5, 6);
+  });
+
+  it('groups by az and cluster off the corresponding TopoNode fields', () => {
+    const azTopo: TopologySnapshot = {
+      generatedAt: '',
+      nodes: [
+        { id: 'p1', kind: 'pod', label: 'p1', az: 'az-1', cluster: 'c1' },
+        { id: 'p2', kind: 'pod', label: 'p2', az: 'az-2', cluster: 'c1' },
+      ],
+      edges: [{ id: 'e', source: 'p1', target: 'p2', metrics: { DATA_TRANSFERRED: GB }, category: 'INTER_AZ' }],
+    };
+    const byAz = buildGraphModel(azTopo, { groupBy: 'az' });
+    expect(byAz.nodes.map((n) => n.id)).toEqual(['group:az:az-1', 'group:az:az-2']);
+    expect(byAz.links).toHaveLength(1); // cross-AZ aggregate edge
+    // Same nodes collapse to ONE cluster group (both in c1) → intra self-loop, no link.
+    const byCluster = buildGraphModel(azTopo, { groupBy: 'cluster' });
+    expect(byCluster.nodes.map((n) => n.id)).toEqual(['group:cluster:c1']);
+    expect(byCluster.links).toHaveLength(0);
+    expect(byCluster.nodes[0].selfBytes).toBe(GB);
+  });
+});

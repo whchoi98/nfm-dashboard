@@ -33,7 +33,7 @@ import 'reactflow/dist/style.css';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
-import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode } from '@/lib/topology-graph';
+import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode, type GroupBy } from '@/lib/topology-graph';
 import { neighbors } from '@/lib/graph-focus';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
@@ -51,6 +51,8 @@ interface CircleNodeData extends GraphNode {
   selfLoopTitle: string;
   /** Dimmed when a legend health-class filter is active and this node has no edge in that class (Phase 14 Task 1). */
   muted: boolean;
+  /** "{n} members" for a group node's badge tooltip (Phase 14 Task 3). */
+  membersLabel?: string;
 }
 
 // Both handles sit invisibly at the circle center so edges run center→center;
@@ -70,25 +72,43 @@ const centerHandle: React.CSSProperties = {
 
 function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
   const color = statusColor(data.status);
+  // Group nodes are drawn as a rounded-SQUARE (shape channel — COLOR stays
+  // reserved for health) with a member-count badge (Phase 14 Task 3).
+  const isGroup = data.group != null;
   const size = data.radius * 2;
+  // Shape distinguishes a group from a pod even at the same health color.
+  const cornerCls = isGroup ? 'rounded-2xl' : 'rounded-full';
   return (
     <div
-      className="relative"
+      className="relative cursor-pointer"
       style={{ width: size, height: size, opacity: data.muted ? 0.25 : 1 }}
-      title={data.label}
+      title={isGroup && data.membersLabel ? `${data.label} · ${data.membersLabel}` : data.label}
     >
       <Handle type="target" position={Position.Top} style={centerHandle} />
       <Handle type="source" position={Position.Bottom} style={centerHandle} />
       {/* translucent fill layer (keeps border + ring fully opaque) */}
-      <div className="absolute inset-0 rounded-full opacity-40" style={{ backgroundColor: color }} />
+      <div className={`absolute inset-0 opacity-40 ${cornerCls}`} style={{ backgroundColor: color }} />
       <div
-        className="absolute inset-0 rounded-full border-2"
+        className={`absolute inset-0 border-2 ${cornerCls}`}
         style={{
           borderColor: color,
+          // Group nodes get a heavier ring so they read as containers.
+          borderStyle: isGroup ? 'double' : 'solid',
+          borderWidth: isGroup ? 4 : 2,
           // Blue focus ring on the clicked node (WhaTap reference).
           boxShadow: data.focused ? `0 0 0 3px ${TOKENS.chartBlue}` : undefined,
         }}
       />
+      {/* group member-count badge — dual-encodes the "group" identity with text */}
+      {isGroup ? (
+        <span
+          data-testid="topology-group-badge"
+          className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold tabular-nums text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.membersLabel}
+        >
+          {data.group!.memberCount}
+        </span>
+      ) : null}
       {/* self-loop: arc anchored on top of the circle + its selected-metric total */}
       {data.selfBytes > 0 ? (
         <div
@@ -225,6 +245,9 @@ function NetworkGraphInner({
   healthThreshold,
   healthWarnThreshold,
   healthFilter = null,
+  groupBy = 'none',
+  expandedGroups,
+  onGroupToggle,
 }: {
   topology: TopologySnapshot;
   metric: MetricName;
@@ -242,6 +265,12 @@ function NetworkGraphInner({
   healthWarnThreshold?: number;
   /** Active legend isolate filter — edges/nodes outside this health class are dimmed. */
   healthFilter?: GraphLink['health'] | null;
+  /** Node grouping level (Phase 14 Task 3) — collapses members into group nodes. */
+  groupBy?: GroupBy;
+  /** Group keys currently expanded to their members. */
+  expandedGroups?: Set<string>;
+  /** Fired when a collapsed group node is clicked — the page toggles its expansion. */
+  onGroupToggle?: (key: string) => void;
 }) {
   const { t } = useLanguage();
 
@@ -255,8 +284,10 @@ function NetworkGraphInner({
         minEdgeValue,
         healthThreshold,
         healthWarnThreshold,
+        groupBy,
+        expandedGroups,
       }),
-    [topology, metric, selectedIds, breaches, warns, minEdgeValue, healthThreshold, healthWarnThreshold],
+    [topology, metric, selectedIds, breaches, warns, minEdgeValue, healthThreshold, healthWarnThreshold, groupBy, expandedGroups],
   );
 
   // Layout is keyed by the structural identity (sorted node + link id sets) so
@@ -335,6 +366,7 @@ function NetworkGraphInner({
           metric,
           selfLoopTitle: t('graph.selfLoop'),
           muted: nodesInHealthClass != null && !nodesInHealthClass.has(n.id),
+          membersLabel: n.group ? t('topology.members', { n: n.group.memberCount }) : undefined,
         },
         connectable: false,
       };
@@ -397,6 +429,16 @@ function NetworkGraphInner({
     [onLinkSelect],
   );
 
+  // A collapsed group node toggles its expansion (page rebuilds the model);
+  // every other node feeds the ego-isolate focus (Task 2), unchanged.
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
+      if (node.data?.group) onGroupToggle?.(node.data.group.key);
+      else onNodeSelect?.(node.id);
+    },
+    [onGroupToggle, onNodeSelect],
+  );
+
   // ESC clears focus (restores the full graph) — same pattern as
   // EdgeHopPanel's dialog-close handler.
   useEffect(() => {
@@ -450,7 +492,7 @@ function NetworkGraphInner({
           onInit={(inst) => {
             rfInstanceRef.current = inst;
           }}
-          onNodeClick={(_, node) => onNodeSelect?.(node.id)}
+          onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
           // Empty-canvas click clears focus (restores the full graph).
           onPaneClick={() => onNodeSelect?.(null)}
@@ -498,6 +540,31 @@ function NetworkGraphInner({
                 >
                   {t('topology.clearFocus')}
                 </button>
+              </div>
+            </Panel>
+          ) : null}
+          {/* Expanded groups: each chip collapses that group back (an expanded
+              group has no group node to click, so this is its collapse toggle). */}
+          {groupBy !== 'none' && expandedGroups && expandedGroups.size > 0 ? (
+            <Panel position="top-right">
+              <div
+                data-testid="topology-expanded-groups"
+                className="flex max-w-[14rem] flex-wrap items-center gap-1 rounded-lg border border-black/10 bg-white/95 px-2 py-1.5 text-[11px] shadow-sm dark:border-white/15 dark:bg-ink/90"
+              >
+                <span className="font-medium text-ink/60 dark:text-white/60">{t('topology.groupBy')}:</span>
+                {[...expandedGroups].map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onGroupToggle?.(key)}
+                    data-testid={`topology-collapse-group-${key}`}
+                    title={t('topology.groupHint')}
+                    className="flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-medium text-white dark:bg-white dark:text-ink"
+                  >
+                    <span className="max-w-[7rem] truncate">{key}</span>
+                    <span aria-hidden>×</span>
+                  </button>
+                ))}
               </div>
             </Panel>
           ) : null}
