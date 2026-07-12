@@ -6,14 +6,23 @@
 // the archive's start (~2 years of retention). Athena queries are async and
 // billed per byte scanned, so this is strictly on-demand: nothing fires until
 // the user clicks "Run query" (no polling, no query-on-keystroke).
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { History as HistoryIcon, TriangleAlert } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
 import Widget from '@/components/analytics/Widget';
+import { SortableHeader } from '@/components/SortableHeader';
+import type { SortState } from '@/lib/use-sortable';
+import { sortRowsByColumn, toggleColumnSort } from './history-sort';
 import { STATUS } from '@/lib/chart-tokens';
 import { formatBytes } from '@/lib/format';
 import type { MetricName } from '@/lib/types';
+
+// No initial sort column: Athena already orders results (`bucket DESC` — see
+// buildHistorySql), so rows pass through unmodified until the user clicks a
+// header (mirrors the Task-2 reliability-breaches fix: keep the server order
+// until the user opts into a client sort).
+const NO_SORT: SortState = { key: null, dir: 'desc' };
 
 // Local mirror of the /api/history success shape (app/src/lib/athena.ts
 // HistoryQueryResult) — kept independent so this client page never imports
@@ -48,6 +57,7 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<HistoryResult | null>(null);
   const [queriedRange, setQueriedRange] = useState<{ from: string; to: string } | null>(null);
+  const [sort, setSort] = useState<SortState>(NO_SORT);
 
   useEffect(() => {
     // Client-only initial fill of the last-7d default (avoids SSR hydration mismatch).
@@ -60,6 +70,7 @@ export default function HistoryPage() {
       setError(t('history.invalidRange'));
       setResult(null);
       setQueriedRange(null);
+      setSort(NO_SORT);
       return;
     }
     setLoading(true);
@@ -79,18 +90,31 @@ export default function HistoryPage() {
         setError(res.status === 400 && typeof body?.error === 'string' ? body.error : t('common.error'));
         setResult(null);
         setQueriedRange(null);
+        setSort(NO_SORT);
         return;
       }
       setResult(body as HistoryResult);
       setQueriedRange({ from, to });
+      // New result set (possibly a different column shape) — drop any
+      // sort from the previous query rather than carrying a stale index.
+      setSort(NO_SORT);
     } catch {
       setError(t('common.error'));
       setResult(null);
       setQueriedRange(null);
+      setSort(NO_SORT);
     } finally {
       setLoading(false);
     }
   };
+
+  const sortedRows = useMemo(() => {
+    if (!result || sort.key === null) return result?.rows ?? [];
+    const colIndex = Number(sort.key);
+    return sortRowsByColumn(result.rows, colIndex, sort.dir);
+  }, [result, sort]);
+
+  const handleSort = (key: string) => setSort((prev) => toggleColumnSort(prev, key));
 
   return (
     <div data-testid="history-page" className="flex flex-col gap-4">
@@ -180,18 +204,20 @@ export default function HistoryPage() {
               <table className="ui-table-dense w-full min-w-max border-collapse text-xs">
                 <thead>
                   <tr className="text-left">
-                    {result.columns.map((c) => (
-                      <th
+                    {result.columns.map((c, i) => (
+                      <SortableHeader
                         key={c}
-                        className="whitespace-nowrap py-1.5 pr-3 text-[11px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50"
-                      >
-                        {c}
-                      </th>
+                        label={c}
+                        columnKey={String(i)}
+                        sort={sort}
+                        onSort={handleSort}
+                        className="whitespace-nowrap pr-3"
+                      />
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {result.rows.map((row, i) => (
+                  {sortedRows.map((row, i) => (
                     <tr key={i}>
                       {row.map((cell, j) => (
                         <td key={j} className="whitespace-nowrap py-1.5 pr-3">
