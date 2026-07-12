@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-12
+
+### Added
+- **Sortable data tables**: click a column header to sort ascending/descending with type-aware comparison (string, number, boolean) — applied to flows, latency tail-paths, reliability breaches, network pairs, workload contributors, agent coverage, and the Athena history results (numeric/string column sniffing). Sorting keys off raw values (not the formatted display text), preserves each table's default order until you click, and adds `aria-sort` for accessibility.
+
+### Changed
+- The agent-coverage table now defaults to a deterministic `instanceId` ascending order (previously the arbitrary EC2-API order).
+
 ## [0.8.0] - 2026-07-12
 
 ### Added
@@ -136,7 +144,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
@@ -161,6 +170,14 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [0.9.0] - 2026-07-12
+
+### Added
+- **정렬 가능한 데이터 테이블**: 컬럼 헤더 클릭으로 오름/내림차순 정렬(문자열·숫자·불리언 타입 인지) — 플로우·지연 tail·신뢰성 breach·네트워크 페어·워크로드·에이전트 커버리지 + Athena 히스토리 결과(숫자/문자열 컬럼 자동 판별). 표시 문자열이 아닌 **원시값 기준** 정렬, 클릭 전까지 기본 순서 유지, `aria-sort` 접근성 추가.
+
+### Changed
+- 에이전트 커버리지 테이블 기본 정렬을 결정론적 `instanceId` 오름차순으로 변경(기존 임의의 EC2 API 순서).
 
 ## [0.8.0] - 2026-07-12
 
@@ -281,7 +298,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
