@@ -12,6 +12,7 @@ Next.js route handlers — the dashboard's entire API surface. All routes are pr
 - `insights`, `diagnose`, `agents` — workload insights, diagnose context, agent/coverage status
 - `nfm/refresh/route.ts` — manual collection refresh trigger
 - `health/route.ts` — unauthenticated ALB healthcheck
+- `history/route.ts` — Athena-backed query over the S3/Parquet flow archive (`nfm_dashboard.flows_archive`) via `app/src/lib/athena.ts`; `?from=&to=&monitor=&namespace=&metric=&limit=`, defaults to the last 7 days
 
 ## Rules
 - Handlers stay thin: parse/validate input, call `app/src/lib/*`, shape the response. No business logic in routes.
