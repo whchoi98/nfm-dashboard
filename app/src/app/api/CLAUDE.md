@@ -6,8 +6,13 @@ Next.js route handlers — the dashboard's entire API surface. All routes are pr
 ## Endpoints
 - `ai/route.ts` — AI chat: SSE stream, Bedrock Converse loop with AgentCore MCP tools (`maxDuration = 300`)
 - `auth/{login,callback,logout}/route.ts` — Cognito Hosted UI + PKCE session flow
-- `flows`, `topology`, `paths`, `workload`, `overview` — DynamoDB-backed dashboard data (via `app/src/lib/ddb.ts`)
-- `analytics/{latency,reliability,cost,dns,dependencies}` — aggregations (via `app/src/lib/analytics/*`)
+- `flows`, `topology`, `paths`, `workload` — DynamoDB-backed dashboard data (via `app/src/lib/ddb.ts`)
+- `overview/route.ts` — landing payload: fleet KPIs (CloudWatch) + an additive `summary` block composing the scorecard/efficiency/concentration/dns lenses over ONE shared flows window
+- `analytics/{latency,reliability,cost,dns,dependencies,efficiency,movers,scorecard}` — flow-lens aggregations (via `app/src/lib/analytics/*`)
+- `cost-explorer`, `network`, `anomalies` — cost-explorer / network-analytics (source→dest) / anomaly-detection lenses over the flows window
+- `alerts/route.ts` — derived alert-event feed (CW alarms + reliability breaches + collector failures + window-over-window spikes)
+- `reports/route.ts` — `ReportData` for the /reports export page (KPIs + top talkers + breaches + anomalies from one shared window)
+- `search/route.ts` — unified entity search across topology / recent flows / monitors / DNS
 - `monitors/route.ts`, `monitors/[name]/route.ts` — NFM monitor list/detail (CloudWatch)
 - `insights`, `diagnose`, `agents` — workload insights, diagnose context, agent/coverage status
 - `nfm/refresh/route.ts` — manual collection refresh trigger

@@ -1,24 +1,25 @@
 # Project Context
 
 ## Overview
-**NFM Dashboard** (v1.0.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
+**NFM Dashboard** (v0.7.0, pre-1.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
 Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUNT_ID>`, region `ap-northeast-2`.
 
 > The global `~/.claude/CLAUDE.md` (Korean-first responses) and the spec-driven workflow in `docs/superpowers/` take precedence for language and process. This file only adds project-specific context — keep it complementary and concise.
 
 ## Tech Stack
 - Node.js npm-workspaces monorepo, TypeScript throughout
-- `app`: Next.js 16 (App Router) + React 19, Tailwind CSS v4 design tokens (SnowUI), recharts + reactflow, vitest
-- `collector`: AWS Lambda (esbuild bundle → `dist/handler.mjs`), AWS SDK v3
+- `app`: Next.js 16 (App Router) + React 19, Tailwind CSS v4 design tokens (SnowUI), recharts + reactflow, `@aws-sdk/client-athena`, vitest
+- `collector`: AWS Lambda (esbuild → `dist/handler.mjs` + `dist/archive-transform.mjs`), AWS SDK v3 (incl. `@aws-sdk/client-firehose`, `@aws-sdk/util-dynamodb`)
 - `infra`: AWS CDK v2 (TypeScript)
 - AI: Amazon Bedrock (Converse API) + AgentCore gateway (MCP over SigV4)
-- Data: DynamoDB (`nfm-dashboard-flows`, `nfm-dashboard-meta`) + CloudWatch metrics
+- Data (hot): DynamoDB (`nfm-dashboard-flows`, `nfm-dashboard-meta`, 7-day TTL) + CloudWatch metrics
+- Data (cold/analytics): DynamoDB Stream → archive-transform Lambda → Kinesis Firehose (Parquet via Glue schema) → S3 Parquet archive → Glue Data Catalog + Athena. Deliberate DDB-hot / Athena-cold tiering; the archive persists flows past the 7-day TTL for arbitrary-date-range history.
 
 ## Project Structure
 ```
-app/          - Next.js 16 dashboard (src/app pages, src/app/api routes, src/lib, src/components)
-collector/    - NFM data-collector Lambda (5-min cycle, esbuild → dist/handler.mjs)
-infra/        - CDK stacks: NfmDash-Data / Onboarding / AgentCore / App / Ops / Dns
+app/          - Next.js 16 dashboard (src/app pages incl. /history, src/app/api incl. history/, src/lib incl. athena.ts, src/components incl. layout/ left Sidebar+Topbar nav)
+collector/    - NFM data-collector Lambda (5-min cycle → dist/handler.mjs) + archive-transform.ts (DDB Stream → Firehose, → dist/archive-transform.mjs)
+infra/        - CDK stacks: NfmDash-Data (incl. flow-archive pipeline: DDB Stream → Firehose → S3 Parquet → Glue/Athena) / Onboarding / AgentCore / App / Ops / Dns
 scripts/      - build-push.sh (ECR image), smoke.sh (e2e), setup-gateway.sh
 tools/        - AgentCore MCP tool Lambdas (Python: nfm_mcp, ddb_mcp, network_mcp) + create_gateway.py
 onboarding/   - NFM / CoreDNS onboarding scripts (Python)
@@ -30,7 +31,8 @@ docs/         - decisions/ (ADRs), reference/ (layer docs), runbooks/, superpowe
 - TypeScript everywhere; vitest tests co-located (`*.test.ts` / `*.test.tsx` next to source).
 - Tailwind v4 + SnowUI design tokens; chart colors ONLY from `app/src/lib/chart-tokens.ts` (keep in sync with `app/tailwind.config.ts`).
 - i18n ko/en: ALL UI strings go through `t()` (`app/src/lib/i18n`, `translations/{ko,en}.json`) — no hardcoded UI strings.
-- Data access via `app/src/lib/ddb.ts` (DynamoDB) and `app/src/lib/cw-metrics.ts` (CloudWatch). The 5-minute bucket formula in `ddb.ts` MUST match the collector exactly.
+- Left-sidebar nav is data-driven from `app/src/components/layout/nav.ts` (`NAV_GROUPS` = source of truth, `NAV_ITEMS` = flatMap); add menus there.
+- Data access via `app/src/lib/ddb.ts` (DynamoDB hot), `app/src/lib/cw-metrics.ts` (CloudWatch), and `app/src/lib/athena.ts` (Parquet archive / long-range history; SQL is injection-guarded). The 5-minute bucket formula in `ddb.ts` MUST match the collector exactly.
 
 ## Key Commands
 ```bash
