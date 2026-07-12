@@ -10,10 +10,23 @@ import { usePolling } from '@/lib/use-polling';
 import type { CollectionStatus, Coverage } from '@/lib/types';
 import { formatCount } from '@/lib/format';
 import { SERIES_COLORS } from '@/lib/chart-tokens';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 import Gauge, { type GaugeStatus } from '@/components/charts/Gauge';
 import StatDelta from '@/components/charts/StatDelta';
 import CollectionStatusCard from '@/components/cards/CollectionStatusCard';
+import { SortableHeader } from '@/components/SortableHeader';
 import { Card } from '@/components/ui/Controls';
+
+type StandaloneAgent = Coverage['standalone'][number];
+
+// Sort on the RAW fields — `role` falls back to '' (never rendered as '—' for sorting).
+// This is the boolean-comparator exercise: `tagged`/`policyAttached` sort false < true.
+const AGENT_COLUMNS: SortColumn<StandaloneAgent>[] = [
+  { key: 'instanceId', type: 'string', accessor: (s) => s.instanceId },
+  { key: 'role', type: 'string', accessor: (s) => s.roleName ?? '' },
+  { key: 'tagged', type: 'boolean', accessor: (s) => s.tagged },
+  { key: 'policyAttached', type: 'boolean', accessor: (s) => s.policyAttached },
+];
 
 // Coverage-rate thresholds: onboarding aims at the full fleet, so <90% warns
 // and <60% is danger — lab-scale heuristics, revisit with real fleet sizes.
@@ -68,6 +81,12 @@ export default function AgentsPage() {
 
   const coverage = data?.coverage;
   const standalone = coverage?.standalone ?? [];
+  // Default sort = instanceId asc (exercises the boolean comparator via tagged/policyAttached).
+  const { sorted: sortedStandalone, sort: agentSort, onSort: onAgentSort } = useSortableRows(
+    standalone,
+    AGENT_COLUMNS,
+    { key: 'instanceId', dir: 'asc' },
+  );
   const total = standalone.length;
   const taggedCount = standalone.filter((s) => s.tagged).length;
   const policyCount = standalone.filter((s) => s.policyAttached).length;
@@ -175,22 +194,14 @@ export default function AgentsPage() {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-black/5 text-left dark:border-white/10">
-                    <th className="py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60">
-                      {t('agents.instanceId')}
-                    </th>
-                    <th className="py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60">
-                      {t('agents.role')}
-                    </th>
-                    <th className="py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60">
-                      {t('agents.tagged')}
-                    </th>
-                    <th className="py-2 text-xs font-medium text-ink/60 dark:text-white/60">
-                      {t('agents.policyAttached')}
-                    </th>
+                    <SortableHeader label={t('agents.instanceId')} columnKey="instanceId" sort={agentSort} onSort={onAgentSort} className="pr-3" />
+                    <SortableHeader label={t('agents.role')} columnKey="role" sort={agentSort} onSort={onAgentSort} className="pr-3" />
+                    <SortableHeader label={t('agents.tagged')} columnKey="tagged" sort={agentSort} onSort={onAgentSort} className="pr-3" />
+                    <SortableHeader label={t('agents.policyAttached')} columnKey="policyAttached" sort={agentSort} onSort={onAgentSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {standalone.map((s) => (
+                  {sortedStandalone.map((s) => (
                     <tr key={s.instanceId} className="border-b border-black/5 dark:border-white/5">
                       <td className="py-2.5 pr-3 font-medium">{s.instanceId}</td>
                       <td className="py-2.5 pr-3 text-xs text-ink/70 dark:text-white/70">{s.roleName ?? '—'}</td>

@@ -10,10 +10,12 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { WiResult } from '@/lib/types';
 import { formatMetricValue } from '@/lib/format';
-import { contributorLabel, contributorRows, presentCategories, regionFromAz } from '@/lib/workload';
+import { contributorLabel, contributorRows, presentCategories, regionFromAz, type WiContributor } from '@/lib/workload';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 import Widget from '@/components/analytics/Widget';
 import Toplist from '@/components/analytics/Toplist';
 import { CategoryChip } from '@/components/FlowTable';
+import { SortableHeader } from '@/components/SortableHeader';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
 
 // WI metrics present in the snapshot (the collector does not query RTT).
@@ -22,8 +24,21 @@ type WiMetric = (typeof METRICS)[number];
 
 const TOPLIST_N = 8;
 
-const thCls = 'py-2 pr-3 text-xs font-medium text-ink/60 dark:text-white/60';
 const tdCls = 'py-2.5 pr-3 text-xs text-ink/80 dark:text-white/80';
+
+// Sort on the RAW fields (e.g. `r.value`), never the `formatMetricValue` display
+// text or a formatted region string. `region` is derived from `localAz` but is
+// itself a raw identifier, not a display format.
+const CONTRIBUTOR_COLUMNS: SortColumn<WiContributor>[] = [
+  { key: 'category', type: 'string', accessor: (r) => r.category },
+  { key: 'localSubnetId', type: 'string', accessor: (r) => r.localSubnetId },
+  { key: 'localAz', type: 'string', accessor: (r) => r.localAz },
+  { key: 'localVpcId', type: 'string', accessor: (r) => r.localVpcId },
+  { key: 'region', type: 'string', accessor: (r) => regionFromAz(r.localAz) },
+  { key: 'accountId', type: 'string', accessor: (r) => r.accountId },
+  { key: 'remoteIdentifier', type: 'string', accessor: (r) => r.remoteIdentifier },
+  { key: 'value', type: 'number', accessor: (r) => r.value },
+];
 
 /** One metric section: ranked toplist + the full Top Contributors table. */
 function MetricSection({
@@ -48,6 +63,30 @@ function MetricSection({
         .some((v) => v?.toLowerCase().includes(q)),
     );
   }, [rows, filter]);
+
+  // Sort is applied AFTER the text filter, so the two features compose.
+  // Default sort = value desc (unchanged first render vs. contributorRows' own pre-sort).
+  const { sorted, sort, onSort } = useSortableRows(filtered, CONTRIBUTOR_COLUMNS, {
+    key: 'value',
+    dir: 'desc',
+  });
+
+  // Stable React keys per row: identity fields only (never the post-sort index,
+  // which would remount every row on each sort toggle). All WiRow fields are
+  // optional, so duplicates of the same identity tuple get a deterministic
+  // ordinal from the ORIGINAL unsorted `rows` order — stable across sorting,
+  // since sorting reorders `filtered`/`sorted` but never `rows` itself.
+  const rowKeys = useMemo(() => {
+    const keys = new Map<WiContributor, string>();
+    const seen = new Map<string, number>();
+    for (const r of rows) {
+      const base = `${r.category}-${contributorLabel(r)}-${r.remoteIdentifier ?? r.localSubnetId ?? ''}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      keys.set(r, n === 0 ? base : `${base}-${n}`);
+    }
+    return keys;
+  }, [rows]);
 
   // contributorRows is already sorted desc — the Toplist contract requires it.
   const top = useMemo(
@@ -98,20 +137,22 @@ function MetricSection({
               <table className="w-full min-w-[44rem] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-black/5 text-left dark:border-white/10">
-                    {all ? <th className={thCls}>{t('workload.colCategory')}</th> : null}
-                    <th className={thCls}>{t('workload.colSubnet')}</th>
-                    <th className={thCls}>{t('workload.colAz')}</th>
-                    <th className={thCls}>{t('workload.colVpc')}</th>
-                    <th className={thCls}>{t('workload.colRegion')}</th>
-                    <th className={thCls}>{t('workload.colAccount')}</th>
-                    <th className={thCls}>{t('workload.colRemote')}</th>
-                    <th className={`${thCls} pr-0 text-right`}>{t('workload.colValue')}</th>
+                    {all ? (
+                      <SortableHeader label={t('workload.colCategory')} columnKey="category" sort={sort} onSort={onSort} className="pr-3" />
+                    ) : null}
+                    <SortableHeader label={t('workload.colSubnet')} columnKey="localSubnetId" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colAz')} columnKey="localAz" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colVpc')} columnKey="localVpcId" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colRegion')} columnKey="region" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colAccount')} columnKey="accountId" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colRemote')} columnKey="remoteIdentifier" sort={sort} onSort={onSort} className="pr-3" />
+                    <SortableHeader label={t('workload.colValue')} columnKey="value" sort={sort} onSort={onSort} align="right" />
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r, i) => (
+                  {sorted.map((r) => (
                     <tr
-                      key={`${r.category}-${contributorLabel(r)}-${i}`}
+                      key={rowKeys.get(r)}
                       className="border-b border-black/5 dark:border-white/5"
                     >
                       {all ? (

@@ -7,9 +7,10 @@ import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { lensQuery } from '@/lib/analytics/filters';
-import type { ReliabilityLensResult } from '@/lib/analytics/reliability';
+import type { ReliabilityLensResult, ReliabilityRow } from '@/lib/analytics/reliability';
 import { STATUS } from '@/lib/chart-tokens';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import { useHoverSync } from '@/components/analytics/HoverSync';
@@ -17,10 +18,19 @@ import StatDelta from '@/components/charts/StatDelta';
 import TimeSeries from '@/components/charts/TimeSeries';
 import Swimlane from '@/components/charts/Swimlane';
 import Scatter from '@/components/charts/Scatter';
+import { SortableHeader } from '@/components/SortableHeader';
 import { LensState, type TabProps } from './shared';
 
 const timeLabel = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+// Sort on the RAW numeric fields, never the `.toFixed(1)` / `formatBytes` display text.
+const BREACH_COLUMNS: SortColumn<ReliabilityRow>[] = [
+  { key: 'label', type: 'string', accessor: (r) => r.label },
+  { key: 'retransRate', type: 'number', accessor: (r) => r.retransRate },
+  { key: 'timeoutRate', type: 'number', accessor: (r) => r.timeoutRate },
+  { key: 'bytes', type: 'number', accessor: (r) => r.bytes },
+];
 
 export default function ReliabilityTab({ filters }: TabProps) {
   const { t } = useLanguage();
@@ -34,6 +44,14 @@ export default function ReliabilityTab({ filters }: TabProps) {
 
   const breaches = useMemo(() => data?.breaches ?? [], [data]);
   const breachKeys = useMemo(() => new Set(breaches.map((b) => b.key)), [breaches]);
+  // No initial sort key: the server already orders breaches by SEVERITY
+  // (max(retransRate/10, timeoutRate/5) desc — see analytics/reliability.ts),
+  // so pass the array through unmodified until the user clicks a header.
+  const { sorted: sortedBreaches, sort: breachSort, onSort: onBreachSort } = useSortableRows(
+    breaches,
+    BREACH_COLUMNS,
+    { key: null, dir: 'desc' },
+  );
 
   // Toplist contract: rows pre-sorted desc by value (retransRate).
   const hotspotRows: ToplistRow[] = useMemo(
@@ -128,15 +146,15 @@ export default function ReliabilityTab({ filters }: TabProps) {
           <div className="max-h-96 overflow-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-ink/50 dark:text-white/50">
-                  <th className="py-1.5 pr-2 font-medium">{t('insights.reliability.colEntity')}</th>
-                  <th className="py-1.5 pr-2 font-medium">{t('insights.reliability.colRetransRate')}</th>
-                  <th className="py-1.5 pr-2 font-medium">{t('insights.reliability.colTimeoutRate')}</th>
-                  <th className="py-1.5 font-medium">{t('insights.reliability.colBytes')}</th>
+                <tr className="text-left">
+                  <SortableHeader label={t('insights.reliability.colEntity')} columnKey="label" sort={breachSort} onSort={onBreachSort} className="pr-2" />
+                  <SortableHeader label={t('insights.reliability.colRetransRate')} columnKey="retransRate" sort={breachSort} onSort={onBreachSort} className="pr-2" />
+                  <SortableHeader label={t('insights.reliability.colTimeoutRate')} columnKey="timeoutRate" sort={breachSort} onSort={onBreachSort} className="pr-2" />
+                  <SortableHeader label={t('insights.reliability.colBytes')} columnKey="bytes" sort={breachSort} onSort={onBreachSort} />
                 </tr>
               </thead>
               <tbody>
-                {breaches.map((r) => (
+                {sortedBreaches.map((r) => (
                   <tr key={r.key} className="border-t border-black/5 dark:border-white/10">
                     <td className="max-w-48 truncate py-1.5 pr-2 font-medium" title={r.label}>
                       {r.label}
