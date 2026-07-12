@@ -71,6 +71,23 @@ function MetricSection({
     dir: 'desc',
   });
 
+  // Stable React keys per row: identity fields only (never the post-sort index,
+  // which would remount every row on each sort toggle). All WiRow fields are
+  // optional, so duplicates of the same identity tuple get a deterministic
+  // ordinal from the ORIGINAL unsorted `rows` order — stable across sorting,
+  // since sorting reorders `filtered`/`sorted` but never `rows` itself.
+  const rowKeys = useMemo(() => {
+    const keys = new Map<WiContributor, string>();
+    const seen = new Map<string, number>();
+    for (const r of rows) {
+      const base = `${r.category}-${contributorLabel(r)}-${r.remoteIdentifier ?? r.localSubnetId ?? ''}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      keys.set(r, n === 0 ? base : `${base}-${n}`);
+    }
+    return keys;
+  }, [rows]);
+
   // contributorRows is already sorted desc — the Toplist contract requires it.
   const top = useMemo(
     () =>
@@ -133,9 +150,9 @@ function MetricSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((r, i) => (
+                  {sorted.map((r) => (
                     <tr
-                      key={`${r.category}-${contributorLabel(r)}-${i}`}
+                      key={rowKeys.get(r)}
                       className="border-b border-black/5 dark:border-white/5"
                     >
                       {all ? (

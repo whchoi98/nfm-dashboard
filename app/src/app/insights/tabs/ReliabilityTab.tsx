@@ -44,11 +44,13 @@ export default function ReliabilityTab({ filters }: TabProps) {
 
   const breaches = useMemo(() => data?.breaches ?? [], [data]);
   const breachKeys = useMemo(() => new Set(breaches.map((b) => b.key)), [breaches]);
-  // Default sort = retransRate desc (unchanged first render vs. the pre-Phase-15 lens order).
+  // No initial sort key: the server already orders breaches by SEVERITY
+  // (max(retransRate/10, timeoutRate/5) desc — see analytics/reliability.ts),
+  // so pass the array through unmodified until the user clicks a header.
   const { sorted: sortedBreaches, sort: breachSort, onSort: onBreachSort } = useSortableRows(
     breaches,
     BREACH_COLUMNS,
-    { key: 'retransRate', dir: 'desc' },
+    { key: null, dir: 'desc' },
   );
 
   // Toplist contract: rows pre-sorted desc by value (retransRate).
