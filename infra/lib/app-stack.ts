@@ -209,12 +209,13 @@ export class AppStack extends cdk.Stack {
         `arn:aws:glue:${region}:${this.account}:database/nfm_dashboard`,
         `arn:aws:glue:${region}:${this.account}:table/nfm_dashboard/flows_archive`] }));
     task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: read Parquet objects from the flow archive bucket
-      actions: ['s3:GetObject', 's3:ListBucket'],
+      actions: ['s3:GetObject', 's3:ListBucket', 's3:GetBucketLocation'],
       resources: [
         'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>',
         'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>/*'] }));
     task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: Athena writes/reads query results in this bucket
-      actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
+      // GetBucketLocation is required for Athena to verify the query-output bucket.
+      actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket', 's3:GetBucketLocation'],
       resources: [
         'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>',
         'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>/*'] }));
