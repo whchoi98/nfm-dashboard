@@ -309,6 +309,14 @@ export default function TopologyPage() {
     const exact = tagNodes.find((n) => n.id.toLowerCase() === q || n.label.toLowerCase() === q);
     const match = exact ?? tagNodes.find((n) => n.id.toLowerCase().includes(q) || n.label.toLowerCase().includes(q));
     if (match) {
+      // tagNodes is the PRE-tag-selection node set, so a match may be excluded
+      // by the applied tag filter — NetworkGraph's focusPresent guard would
+      // then silently drop the focus (no pan, no feedback). Clear the tag
+      // selection first so the searched node is visible before focusing it
+      // (inverse of applyTagSelection dropping a focus its selection removed).
+      if (selectedIds != null && selectedIds.size > 0 && !selectedIds.has(match.id)) {
+        setSelectedIds(null);
+      }
       setFocusId(match.id);
       setSearchNoMatch(false);
     } else {

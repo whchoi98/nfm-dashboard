@@ -276,11 +276,11 @@ function NetworkGraphInner({
   const activeFocusId = focusPresent ? focusId : null;
 
   // Click-to-isolate ego-network (Phase 14 Task 2): 1 or 2 hop toggle,
-  // default 1. Resets to 1 whenever focus clears so re-focusing another node
-  // always starts from the tightest view.
+  // default 1. Resets to 1 on EVERY focus change (clear or A→B pivot) so
+  // focusing any node always starts from the tightest view.
   const [hops, setHops] = useState<1 | 2>(1);
   useEffect(() => {
-    if (activeFocusId == null) setHops(1);
+    setHops(1);
   }, [activeFocusId]);
   const ego = useMemo(
     () => (activeFocusId != null ? neighbors(model.links, activeFocusId, hops) : null),
