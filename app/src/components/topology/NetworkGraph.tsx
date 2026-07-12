@@ -32,9 +32,12 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
+import { ArrowLeftRight, TriangleAlert } from 'lucide-react';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
 import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode, type GroupBy } from '@/lib/topology-graph';
 import { neighbors } from '@/lib/graph-focus';
+import { nodeResourceKind } from '@/lib/topology';
+import { KIND_META } from './ResourceIcon';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -53,6 +56,20 @@ interface CircleNodeData extends GraphNode {
   muted: boolean;
   /** "{n} members" for a group node's badge tooltip (Phase 14 Task 3). */
   membersLabel?: string;
+  /** Tooltip for the kind icon (Phase 14 Task 4) — e.g. "Pod"/"Node"/"VPC"/"External". */
+  kindLabel: string;
+  /** Tooltip for the cross-AZ corner badge. */
+  crossAzLabel: string;
+  /**
+   * True when >=1 rendered edge touching this node is retransmission-rate
+   * 'danger' (GraphLink.health, NOT the breach/warn-derived GraphNode.status —
+   * this page never wires breaches/warns, so status alone would never fire).
+   * Computed in the component from `visibleLinks`, same pattern as
+   * `nodesInHealthClass` below (Phase 14 Task 4) — presentational, no model change.
+   */
+  highRetrans: boolean;
+  /** Tooltip for the high-retransmit corner badge. */
+  highRetransLabel: string;
 }
 
 // Both handles sit invisibly at the circle center so edges run center→center;
@@ -78,6 +95,12 @@ function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
   const size = data.radius * 2;
   // Shape distinguishes a group from a pod even at the same health color.
   const cornerCls = isGroup ? 'rounded-2xl' : 'rounded-full';
+  // Kind icon (Phase 14 Task 4) — SHAPE-only channel, no per-kind color, so the
+  // circle's fill/border stays the sole health-color read. Group nodes render
+  // their own rounded-square + member badge instead (no kind — a group folds
+  // many kinds together).
+  const KindIcon = KIND_META[nodeResourceKind(data.kind)].icon;
+  const iconSize = Math.max(12, Math.min(size * 0.42, 26));
   return (
     <div
       className="relative cursor-pointer"
@@ -107,6 +130,43 @@ function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
           title={data.membersLabel}
         >
           {data.group!.memberCount}
+        </span>
+      ) : null}
+      {/* kind icon (Phase 14 Task 4) — regular nodes only; group nodes keep their
+          distinct shape + member badge instead. currentColor only: shape is the
+          encoding, not a new hue. */}
+      {!isGroup ? (
+        <span
+          data-testid="topology-node-kind"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center text-ink/55 dark:text-white/70"
+          title={data.kindLabel}
+        >
+          <KindIcon size={iconSize} strokeWidth={1.75} aria-hidden />
+        </span>
+      ) : null}
+      {/* cross-AZ badge (Phase 14 Task 4) — shape + tooltip only, same neutral
+          pill as the group badge above: no new color axis. */}
+      {data.crossAz ? (
+        <span
+          data-testid="topology-node-badge-crossaz"
+          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.crossAzLabel}
+        >
+          <ArrowLeftRight size={9} strokeWidth={2.25} aria-hidden />
+        </span>
+      ) : null}
+      {/* high-retransmit badge (Phase 14 Task 4) — fires when >=1 rendered edge
+          touching this node is retransmission-rate 'danger' (the SAME signal
+          already drawn as that edge's STATUS.danger stroke), so the badge
+          re-states an existing color, never introduces one; shape + tooltip
+          make it legible without relying on color at all. */}
+      {data.highRetrans ? (
+        <span
+          data-testid="topology-node-badge-retrans"
+          className="absolute -right-1.5 -bottom-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.highRetransLabel}
+        >
+          <TriangleAlert size={9} strokeWidth={2.25} aria-hidden />
         </span>
       ) : null}
       {/* self-loop: arc anchored on top of the circle + its selected-metric total */}
@@ -344,6 +404,15 @@ function NetworkGraphInner({
     [visibleLinks, healthFilter],
   );
 
+  // High-retransmit badge (Phase 14 Task 4): same shape of derivation as
+  // nodesInHealthClass above, unconditionally for the 'danger' class — nodes
+  // touching >=1 rendered danger-health edge. Independent of healthFilter
+  // (the badge marks danger nodes whether or not the legend is isolating them).
+  const dangerNodeIds = useMemo(
+    () => new Set(visibleLinks.filter((l) => l.health === 'danger').flatMap((l) => [l.source, l.target])),
+    [visibleLinks],
+  );
+
   const { layoutNodes, rfEdges } = useMemo(() => {
     // Radius/width scales stay keyed off the FULL model — isolating a node
     // must not rescale the surviving nodes/edges relative to each other.
@@ -367,6 +436,10 @@ function NetworkGraphInner({
           selfLoopTitle: t('graph.selfLoop'),
           muted: nodesInHealthClass != null && !nodesInHealthClass.has(n.id),
           membersLabel: n.group ? t('topology.members', { n: n.group.memberCount }) : undefined,
+          kindLabel: t(`topology.kind.${n.kind}`),
+          crossAzLabel: t('topology.badge.crossAz'),
+          highRetrans: dangerNodeIds.has(n.id),
+          highRetransLabel: t('topology.badge.highRetrans'),
         },
         connectable: false,
       };
@@ -395,7 +468,7 @@ function NetworkGraphInner({
       interactionWidth: 16,
     }));
     return { layoutNodes, rfEdges };
-  }, [model, visibleNodes, visibleLinks, positions, activeFocusId, metric, t, nodesInHealthClass, healthFilter]);
+  }, [model, visibleNodes, visibleLinks, positions, activeFocusId, metric, t, nodesInHealthClass, dangerNodeIds, healthFilter]);
 
   // Positions live in state so manual drags stick (onNodesChange applies RF's
   // drag deltas). Sync from layoutNodes during render (React's "adjust state

@@ -83,6 +83,16 @@ const NONPOD_KIND: Record<Exclude<TopoNode['kind'], 'pod'>, ResourceKind> = {
   node: 'instance', vpc: 'vpc', external: 'other',
 };
 
+/**
+ * Map a raw TopoNode.kind ('pod'|'node'|'vpc'|'external') to the ResourceIcon
+ * glyph kind (Phase 14 Task 4 node-kind icons in NetworkGraph) — the same
+ * pod/instance/vpc/other convention `levelEntityOf` already uses for
+ * HopPath/TierFlowMap lanes, kept as one exported mapping instead of forking it.
+ */
+export function nodeResourceKind(kind: TopoNode['kind']): ResourceKind {
+  return kind === 'pod' ? 'pod' : NONPOD_KIND[kind];
+}
+
 // Aggregate a topology node to the chosen level entity. Only pods roll up;
 // infra/external nodes stay as themselves so the outer lanes remain meaningful.
 function levelEntityOf(n: TopoNode, level: TierLevel): TierEntity {

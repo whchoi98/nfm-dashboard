@@ -1,19 +1,30 @@
 'use client';
 
-// GraphLegend (Task 6; interactive health filter — Phase 14 Task 1) — LIVE
-// indicator (snapshot timestamp + pause/resume toggle that stops the
-// topology poll) plus the solid/dashed edge legend for the NetworkGraph rate
-// threshold and the edge-health (retrans/GB) color legend (STATUS colors,
-// dual-encoded with text labels). Each health entry is also a toggle button:
-// clicking "ok"/"warn"/"danger" isolates that class in the graph (edges/nodes
-// outside it are dimmed); clicking the active entry again clears the filter.
-import { Pause, Play } from 'lucide-react';
+// GraphLegend (Task 6; interactive health filter — Phase 14 Task 1; node kind
+// icons + cross-AZ/high-retransmit badges — Phase 14 Task 4) — LIVE indicator
+// (snapshot timestamp + pause/resume toggle that stops the topology poll)
+// plus the solid/dashed edge legend for the NetworkGraph rate threshold, the
+// edge-health (retrans/GB) color legend (STATUS colors, dual-encoded with
+// text labels), and — SHAPE/glyph only, no new color axis — the node-kind
+// icon legend and the two corner-badge glyphs CircleNodeView renders. Each
+// health entry is also a toggle button: clicking "ok"/"warn"/"danger"
+// isolates that class in the graph (edges/nodes outside it are dimmed);
+// clicking the active entry again clears the filter.
+import { ArrowLeftRight, Pause, Play, TriangleAlert } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { DEFAULT_HEALTH_THRESHOLD, DEFAULT_RATE_THRESHOLD } from '@/lib/topology-graph';
+import { nodeResourceKind } from '@/lib/topology';
+import type { TopoNode } from '@/lib/types';
+import { KIND_META } from './ResourceIcon';
 
 export type HealthStatus = 'ok' | 'warn' | 'danger';
 const HEALTH_LEVELS: HealthStatus[] = ['ok', 'warn', 'danger'];
+// Same 4 kinds CircleNodeView renders an icon for (group nodes have no kind icon).
+const NODE_KINDS: TopoNode['kind'][] = ['pod', 'node', 'vpc', 'external'];
+/** Neutral (no-color-axis) glyph pill — matches CircleNodeView's corner badges exactly. */
+const badgePillCls =
+  'flex h-4 w-4 items-center justify-center rounded-full bg-ink text-white dark:bg-white dark:text-ink';
 
 /** generatedAt ISO string → local HH:MM:SS. */
 function hhmmss(iso: string): string {
@@ -112,6 +123,38 @@ export default function GraphLegend({
             </button>
           );
         })}
+      </span>
+      {/* node-kind icon legend (Phase 14 Task 4) — SHAPE only, matches the
+          glyph CircleNodeView renders inside each (non-group) node. */}
+      <span data-testid="graph-kind-legend" className="flex items-center gap-x-2.5 text-ink/60 dark:text-white/60">
+        <span className="font-medium">{t('topology.kindLegend')}</span>
+        {NODE_KINDS.map((k) => {
+          const Icon = KIND_META[nodeResourceKind(k)].icon;
+          return (
+            <span key={k} className="flex items-center gap-1" title={t(`topology.kind.${k}`)}>
+              <Icon size={12} strokeWidth={1.75} aria-hidden />
+              {t(`topology.kind.${k}`)}
+            </span>
+          );
+        })}
+      </span>
+      {/* corner-badge legend (Phase 14 Task 4) — dual-encoded glyph + text; the
+          retrans glyph fires when a node touches a rendered danger-health edge
+          (the SAME STATUS.danger color already on that edge, re-stated, not a
+          new axis), so its legend pill stays neutral too. */}
+      <span data-testid="graph-badge-legend" className="flex items-center gap-x-2.5 text-ink/60 dark:text-white/60">
+        <span className="flex items-center gap-1" title={t('topology.badge.crossAz')}>
+          <span className={badgePillCls}>
+            <ArrowLeftRight size={9} strokeWidth={2.25} aria-hidden />
+          </span>
+          {t('topology.badge.crossAz')}
+        </span>
+        <span className="flex items-center gap-1" title={t('topology.badge.highRetrans')}>
+          <span className={badgePillCls}>
+            <TriangleAlert size={9} strokeWidth={2.25} aria-hidden />
+          </span>
+          {t('topology.badge.highRetrans')}
+        </span>
       </span>
     </div>
   );

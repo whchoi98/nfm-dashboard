@@ -473,3 +473,64 @@ describe('buildGraphModel — node grouping (groupBy)', () => {
     expect(byCluster.nodes[0].selfBytes).toBe(GB);
   });
 });
+
+// Phase 14 Task 4 — cross-AZ participation flag, derived purely from each
+// rendered edge's endpoint `az` fields (no I/O, no rendering).
+describe('buildGraphModel — crossAz flag', () => {
+  it('flags both endpoints of an edge whose AZs differ', () => {
+    const t = topo(
+      [{ id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 100 }, category: 'INTER_AZ' }],
+      [
+        { id: 'a', kind: 'pod', label: 'a', az: 'ap-northeast-2a' },
+        { id: 'b', kind: 'pod', label: 'b', az: 'ap-northeast-2c' },
+      ],
+    );
+    const m = buildGraphModel(t);
+    const byId = new Map(m.nodes.map((n) => [n.id, n]));
+    expect(byId.get('a')!.crossAz).toBe(true);
+    expect(byId.get('b')!.crossAz).toBe(true);
+  });
+
+  it('does not flag either endpoint when both AZs match', () => {
+    const t = topo(
+      [{ id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 100 }, category: 'INTRA_AZ' }],
+      [
+        { id: 'a', kind: 'pod', label: 'a', az: 'ap-northeast-2a' },
+        { id: 'b', kind: 'pod', label: 'b', az: 'ap-northeast-2a' },
+      ],
+    );
+    const m = buildGraphModel(t);
+    for (const n of m.nodes) expect(n.crossAz).toBe(false);
+  });
+
+  it('does not flag either endpoint when either side is missing az', () => {
+    const t = topo(
+      [{ id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 100 }, category: 'INTRA_AZ' }],
+      [
+        { id: 'a', kind: 'pod', label: 'a' }, // no az
+        { id: 'b', kind: 'pod', label: 'b', az: 'ap-northeast-2a' },
+      ],
+    );
+    const m = buildGraphModel(t);
+    for (const n of m.nodes) expect(n.crossAz).toBe(false);
+  });
+
+  it('a node with one same-AZ and one cross-AZ edge is flagged (participates in >=1)', () => {
+    const t = topo(
+      [
+        { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 100 }, category: 'INTRA_AZ' },
+        { id: 'e2', source: 'a', target: 'c', metrics: { DATA_TRANSFERRED: 100 }, category: 'INTER_AZ' },
+      ],
+      [
+        { id: 'a', kind: 'pod', label: 'a', az: 'ap-northeast-2a' },
+        { id: 'b', kind: 'pod', label: 'b', az: 'ap-northeast-2a' },
+        { id: 'c', kind: 'pod', label: 'c', az: 'ap-northeast-2c' },
+      ],
+    );
+    const m = buildGraphModel(t);
+    const byId = new Map(m.nodes.map((n) => [n.id, n]));
+    expect(byId.get('a')!.crossAz).toBe(true);
+    expect(byId.get('b')!.crossAz).toBe(false);
+    expect(byId.get('c')!.crossAz).toBe(true);
+  });
+});

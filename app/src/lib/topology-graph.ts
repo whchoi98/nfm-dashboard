@@ -29,6 +29,12 @@ export interface GraphNode {
   /** Self-loop total in the SELECTED metric (historical field name kept). */
   selfBytes: number;
   status: 'ok' | 'warn' | 'danger' | 'idle';
+  /**
+   * True when >=1 rendered (post min-traffic-cut) edge connects this node to
+   * an endpoint in a different `az` (Phase 14 Task 4). Either side missing
+   * `az` never sets this on either endpoint — no signal, no guess.
+   */
+  crossAz: boolean;
   /** Present only on collapsed GROUP nodes (Phase 14 Task 3) — distinguishes them for the renderer. */
   group?: GraphNodeGroup;
 }
@@ -344,6 +350,20 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
   const links = minEdgeValue > 0 ? allLinks.filter((l) => l.value >= minEdgeValue) : allLinks;
   const hiddenEdgeCount = allLinks.length - links.length;
 
+  // Cross-AZ participation (Phase 14 Task 4): both endpoints of a RENDERED
+  // (post min-traffic-cut) edge carry an `az` and the two differ. A cut edge
+  // never sets the flag — it isn't drawn, so there's nothing to badge.
+  const azById = new Map(pipelineNodes.map((n) => [n.id, n.az]));
+  const crossAzIds = new Set<string>();
+  for (const l of links) {
+    const a = azById.get(l.source);
+    const b = azById.get(l.target);
+    if (a && b && a !== b) {
+      crossAzIds.add(l.source);
+      crossAzIds.add(l.target);
+    }
+  }
+
   // Nodes orphaned by the cut: had >=1 link before it, but neither a
   // remaining link nor a self-loop after. Nodes with zero links from the
   // start (already-idle floating nodes) are untouched either way.
@@ -393,6 +413,7 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
       traffic: nodeTraffic,
       selfBytes: selfBytes.get(n.id) ?? 0,
       status,
+      crossAz: crossAzIds.has(n.id),
     };
     // Attach group metadata only for collapsed group nodes — plain/expanded
     // member nodes keep the exact today shape (byte-identical when groupBy=none).
