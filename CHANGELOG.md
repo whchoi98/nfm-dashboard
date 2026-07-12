@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-12
+
+### Added
+- **Topology node grouping** (namespace / AZ / cluster) with collapse/expand and aggregate edges — collapse a dense pod map into a handful of group nodes and expand only what you are investigating; the AZ mode surfaces cross-zone traffic.
+- **Click-to-isolate ego-network** (1- or 2-hop) plus a **canvas search** that focuses and pans to a node.
+- **Min-traffic threshold slider** (with a hidden-edge count) and an **interactive health legend** (click a status to isolate that class).
+- **Node kind icons** (pod / node / vpc / external) plus **cross-AZ** and **high-retransmit badges** — colour stays reserved for health, so the extra signals use shape/icon/badge.
+- **Deterministic topology layout** with persisted node positions (stable across reloads and filter changes) and a **live minimap**.
+
 ## [0.7.0] - 2026-07-12
 
 ### Added
@@ -127,7 +136,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0
@@ -151,6 +161,15 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [0.8.0] - 2026-07-12
+
+### Added
+- **토폴로지 노드 그룹핑**(namespace/AZ/cluster) + collapse/expand + 집계 엣지 — 밀집 pod 맵을 소수의 그룹 노드로 접고 조사 대상만 전개; AZ 모드는 cross-zone 트래픽을 드러냄.
+- **클릭→ego-network 격리**(1/2-hop) + 노드로 이동하는 **캔버스 검색**.
+- **min-traffic 임계 슬라이더**(숨김 엣지 수 표시) + **인터랙티브 헬스 legend**(상태 클릭 시 해당 클래스만 격리).
+- **노드 kind 아이콘**(pod/node/vpc/external) + **cross-AZ**·**high-retransmit 배지** — 색은 health 전용 유지, 부가 신호는 모양/아이콘/배지로.
+- **결정론적 토폴로지 레이아웃** + 위치 지속(리로드·필터 변경에도 안정) + **라이브 미니맵**.
 
 ## [0.7.0] - 2026-07-12
 
@@ -262,7 +281,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0

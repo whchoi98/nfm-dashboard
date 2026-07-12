@@ -39,17 +39,21 @@ export function Select({
   onChange,
   options,
   allLabel,
+  testId,
+  title,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   allLabel?: string;
+  testId?: string;
+  title?: string;
 }) {
   return (
-    <label className="flex max-w-full flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60">
+    <label className="flex max-w-full flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60" title={title}>
       {label}
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldCls}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={fieldCls} data-testid={testId}>
         {allLabel != null ? <option value="">{allLabel}</option> : null}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -81,6 +85,46 @@ export function TextInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={`${fieldCls} min-w-32`}
+      />
+    </label>
+  );
+}
+
+export function NumberInput({
+  label,
+  value,
+  onChange,
+  min = 0,
+  step = 1,
+  testId,
+  title,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  step?: number;
+  testId?: string;
+  title?: string;
+}) {
+  return (
+    <label
+      className="flex max-w-full flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60"
+      title={title}
+    >
+      {label}
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value}
+        min={min}
+        step={step}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (Number.isFinite(v)) onChange(v);
+        }}
+        data-testid={testId}
+        className={`${fieldCls} w-20`}
       />
     </label>
   );

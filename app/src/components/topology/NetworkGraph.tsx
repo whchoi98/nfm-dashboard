@@ -7,12 +7,21 @@
 // (CNM style): STROKE COLOR = retransmission-rate health (STATUS ok/warn/
 // danger), WIDTH = selected-metric value (sqrt scale), DASH = DATA_TRANSFERRED
 // throughput > threshold.
-// Layout: d3-force simulation run for ~300 ticks up-front in a memo keyed by
-// the structural node/link id set. Node positions then live in local state
+// Layout (Phase 14 Task 5 — deterministic + persistent): d3-force simulation
+// run for ~300 ticks up-front in a memo keyed by the structural node/link id
+// set, seeded from `seedPosition` (a hash of the node id — see
+// `@/lib/graph-layout`) rather than d3-force's own array-index-based default,
+// so the SAME node id always starts from the SAME point and the layout is
+// reproducible across reloads. A ref-backed position cache (mirrored to
+// localStorage, pruned to the live node-id working set on every merge)
+// remembers each node's last computed/dragged position; a
+// structural change (filter/level/groupBy) reseeds persisting node ids from
+// that cache instead of the id hash, so the layout settles back near where it
+// was instead of fully reshuffling. Node positions then live in local state
 // (useNodesState): manual drags persist across value-only polls and focus
 // changes; positions reset only when the structural layoutKey changes.
 // Replaces TierFlowMap in the /topology "graph" view.
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   BaseEdge,
   Background,
@@ -20,21 +29,31 @@ import ReactFlow, {
   EdgeLabelRenderer,
   Handle,
   MarkerType,
+  MiniMap,
+  Panel,
   Position,
   useNodesState,
   type Edge as RFEdge,
   type EdgeProps,
   type Node as RFNode,
   type NodeProps,
+  type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
+import { ArrowLeftRight, TriangleAlert } from 'lucide-react';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
-import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode } from '@/lib/topology-graph';
+import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode, type GroupBy } from '@/lib/topology-graph';
+import { neighbors } from '@/lib/graph-focus';
+import { graphSignature, seedPosition } from '@/lib/graph-layout';
+import { nodeResourceKind } from '@/lib/topology';
+import { KIND_META } from './ResourceIcon';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+
+const HOPS: (1 | 2)[] = [1, 2];
 
 const statusColor = (s: GraphNode['status']) => (s === 'idle' ? TOKENS.chartGrey : STATUS[s]);
 
@@ -44,6 +63,24 @@ interface CircleNodeData extends GraphNode {
   /** Active metric — the self-loop label must match the edge labels' unit. */
   metric: MetricName;
   selfLoopTitle: string;
+  /** Dimmed when a legend health-class filter is active and this node has no edge in that class (Phase 14 Task 1). */
+  muted: boolean;
+  /** "{n} members" for a group node's badge tooltip (Phase 14 Task 3). */
+  membersLabel?: string;
+  /** Tooltip for the kind icon (Phase 14 Task 4) — e.g. "Pod"/"Node"/"VPC"/"External". */
+  kindLabel: string;
+  /** Tooltip for the cross-AZ corner badge. */
+  crossAzLabel: string;
+  /**
+   * True when >=1 rendered edge touching this node is retransmission-rate
+   * 'danger' (GraphLink.health, NOT the breach/warn-derived GraphNode.status —
+   * this page never wires breaches/warns, so status alone would never fire).
+   * Computed in the component from `visibleLinks`, same pattern as
+   * `nodesInHealthClass` below (Phase 14 Task 4) — presentational, no model change.
+   */
+  highRetrans: boolean;
+  /** Tooltip for the high-retransmit corner badge. */
+  highRetransLabel: string;
 }
 
 // Both handles sit invisibly at the circle center so edges run center→center;
@@ -63,21 +100,86 @@ const centerHandle: React.CSSProperties = {
 
 function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
   const color = statusColor(data.status);
+  // Group nodes are drawn as a rounded-SQUARE (shape channel — COLOR stays
+  // reserved for health) with a member-count badge (Phase 14 Task 3).
+  const isGroup = data.group != null;
   const size = data.radius * 2;
+  // Shape distinguishes a group from a pod even at the same health color.
+  const cornerCls = isGroup ? 'rounded-2xl' : 'rounded-full';
+  // Kind icon (Phase 14 Task 4) — SHAPE-only channel, no per-kind color, so the
+  // circle's fill/border stays the sole health-color read. Group nodes render
+  // their own rounded-square + member badge instead (no kind — a group folds
+  // many kinds together).
+  const KindIcon = KIND_META[nodeResourceKind(data.kind)].icon;
+  const iconSize = Math.max(12, Math.min(size * 0.42, 26));
   return (
-    <div className="relative" style={{ width: size, height: size }} title={data.label}>
+    <div
+      className="relative cursor-pointer"
+      style={{ width: size, height: size, opacity: data.muted ? 0.25 : 1 }}
+      title={isGroup && data.membersLabel ? `${data.label} · ${data.membersLabel}` : data.label}
+    >
       <Handle type="target" position={Position.Top} style={centerHandle} />
       <Handle type="source" position={Position.Bottom} style={centerHandle} />
       {/* translucent fill layer (keeps border + ring fully opaque) */}
-      <div className="absolute inset-0 rounded-full opacity-40" style={{ backgroundColor: color }} />
+      <div className={`absolute inset-0 opacity-40 ${cornerCls}`} style={{ backgroundColor: color }} />
       <div
-        className="absolute inset-0 rounded-full border-2"
+        className={`absolute inset-0 border-2 ${cornerCls}`}
         style={{
           borderColor: color,
+          // Group nodes get a heavier ring so they read as containers.
+          borderStyle: isGroup ? 'double' : 'solid',
+          borderWidth: isGroup ? 4 : 2,
           // Blue focus ring on the clicked node (WhaTap reference).
           boxShadow: data.focused ? `0 0 0 3px ${TOKENS.chartBlue}` : undefined,
         }}
       />
+      {/* group member-count badge — dual-encodes the "group" identity with text */}
+      {isGroup ? (
+        <span
+          data-testid="topology-group-badge"
+          className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold tabular-nums text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.membersLabel}
+        >
+          {data.group!.memberCount}
+        </span>
+      ) : null}
+      {/* kind icon (Phase 14 Task 4) — regular nodes only; group nodes keep their
+          distinct shape + member badge instead. currentColor only: shape is the
+          encoding, not a new hue. */}
+      {!isGroup ? (
+        <span
+          data-testid="topology-node-kind"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center text-ink/55 dark:text-white/70"
+          title={data.kindLabel}
+        >
+          <KindIcon size={iconSize} strokeWidth={1.75} aria-hidden />
+        </span>
+      ) : null}
+      {/* cross-AZ badge (Phase 14 Task 4) — shape + tooltip only, same neutral
+          pill as the group badge above: no new color axis. */}
+      {data.crossAz ? (
+        <span
+          data-testid="topology-node-badge-crossaz"
+          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.crossAzLabel}
+        >
+          <ArrowLeftRight size={9} strokeWidth={2.25} aria-hidden />
+        </span>
+      ) : null}
+      {/* high-retransmit badge (Phase 14 Task 4) — fires when >=1 rendered edge
+          touching this node is retransmission-rate 'danger' (the SAME signal
+          already drawn as that edge's STATUS.danger stroke), so the badge
+          re-states an existing color, never introduces one; shape + tooltip
+          make it legible without relying on color at all. */}
+      {data.highRetrans ? (
+        <span
+          data-testid="topology-node-badge-retrans"
+          className="absolute -right-1.5 -bottom-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-ink text-white ring-2 ring-white dark:bg-white dark:text-ink dark:ring-ink"
+          title={data.highRetransLabel}
+        >
+          <TriangleAlert size={9} strokeWidth={2.25} aria-hidden />
+        </span>
+      ) : null}
       {/* self-loop: arc anchored on top of the circle + its selected-metric total */}
       {data.selfBytes > 0 ? (
         <div
@@ -180,8 +282,32 @@ interface SimNode extends SimulationNodeDatum {
   r: number;
 }
 
-function computeLayout(model: GraphModel): Map<string, { x: number; y: number }> {
-  const simNodes: SimNode[] = model.nodes.map((n) => ({ id: n.id, r: n.radius }));
+/**
+ * Any node id already present in `knownPositions` (the persisted cache —
+ * prior computed layouts + manual drags) is PINNED there via d3-force's
+ * `fx`/`fy` (fixed position): a fresh `forceSimulation` restarts alpha at 1,
+ * so merely seeding a node's starting x/y and letting the n-body forces run
+ * another 300 ticks does NOT reproduce the same resting point — the
+ * full-strength charge/collide/link forces relitigate the whole layout from
+ * scratch and chaotically amplify any tiny difference (that's what caused
+ * positions to drift on every reload before this fix). Pinning removes the
+ * ambiguity entirely: a pinned node cannot move, full stop, while it still
+ * exerts/receives forces on its unpinned neighbors. Only a node with NO known
+ * position (genuinely new) free-seeds from `seedPosition(id)` (a hash of the
+ * id, not the array index, so the SAME id always starts from the SAME point)
+ * and settles into the gaps around the pinned nodes via the simulation.
+ */
+function computeLayout(
+  model: GraphModel,
+  knownPositions: ReadonlyMap<string, { x: number; y: number }>,
+): Map<string, { x: number; y: number }> {
+  const simNodes: SimNode[] = model.nodes.map((n) => {
+    const known = knownPositions.get(n.id);
+    const seed = known ?? seedPosition(n.id);
+    return known
+      ? { id: n.id, r: n.radius, x: seed.x, y: seed.y, fx: seed.x, fy: seed.y }
+      : { id: n.id, r: n.radius, x: seed.x, y: seed.y };
+  });
   const simLinks: SimulationLinkDatum<SimNode>[] = model.links.map((l) => ({
     source: l.source,
     target: l.target,
@@ -200,6 +326,75 @@ function computeLayout(model: GraphModel): Map<string, { x: number; y: number }>
   return new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
 }
 
+// ── position persistence (Phase 14 Task 5) ──────────────────────────────────
+// Manual drags + computed layouts persist to localStorage so spatial memory
+// survives a reload. Restore is opportunistic PER-ID (no gating on an exact
+// node-set match): a pod cycling to a new suffix between polls is normal
+// topology drift, not "a different graph", so every surviving id simply keeps
+// reusing its last known spot. The cache is pruned to the LIVE node-id
+// working set on every merge (see `evictStalePositions`) — ids covering the
+// FULL topology (a filtered-out node is still live, so flipping a
+// filter/metric/groupBy never drops positions outside today's view) plus the
+// current model's synthetic group nodes.
+const POSITIONS_STORAGE_KEY = 'nfm-topology-positions';
+/** Skip persisting past this many entries — a pathological topology shouldn't grow localStorage unbounded. Exported for tests. */
+export const MAX_PERSISTED_NODES = 3000;
+
+interface StoredLayout {
+  positions: Record<string, { x: number; y: number }>;
+}
+
+/** Exported for tests. */
+export function loadStoredPositions(): Map<string, { x: number; y: number }> {
+  if (typeof window === 'undefined') return new Map();
+  try {
+    const raw = window.localStorage.getItem(POSITIONS_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Partial<StoredLayout> | null;
+    const entries = Object.entries(parsed?.positions ?? {}).filter(
+      (entry): entry is [string, { x: number; y: number }] => {
+        const p = entry[1] as { x?: unknown; y?: unknown } | null | undefined;
+        return !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
+      },
+    );
+    return new Map(entries);
+  } catch {
+    return new Map(); // corrupt JSON / storage unavailable — start fresh, no crash.
+  }
+}
+
+/** Exported for tests. */
+export function persistPositions(cache: ReadonlyMap<string, { x: number; y: number }>) {
+  if (typeof window === 'undefined' || cache.size === 0 || cache.size > MAX_PERSISTED_NODES) return;
+  try {
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const [id, p] of cache) positions[id] = p;
+    const stored: StoredLayout = { positions };
+    window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // Storage full / unavailable (private mode) — position memory degrades to session-only, no crash.
+  }
+}
+
+/**
+ * Working-set eviction — the cache must track what's currently ON the graph,
+ * not everything EVER seen. Without this, pod churn on a long-lived dashboard
+ * (NOC screen) grows the map unbounded, and once its size ever crossed
+ * MAX_PERSISTED_NODES, `persistPositions` stopped writing PERMANENTLY (the
+ * size only grew), silently ending drag persistence with no recovery.
+ * Dropping ids absent from the live set bounds the cache by the live node
+ * set, so persistence always resumes once the working set is back under the
+ * cap. Exported for tests.
+ */
+export function evictStalePositions(
+  cache: Map<string, { x: number; y: number }>,
+  liveIds: ReadonlySet<string>,
+) {
+  for (const id of cache.keys()) {
+    if (!liveIds.has(id)) cache.delete(id);
+  }
+}
+
 // ── component ───────────────────────────────────────────────────────────────
 function NetworkGraphInner({
   topology,
@@ -210,6 +405,13 @@ function NetworkGraphInner({
   focusId = null,
   onNodeSelect,
   onLinkSelect,
+  minEdgeValue = 0,
+  healthThreshold,
+  healthWarnThreshold,
+  healthFilter = null,
+  groupBy = 'none',
+  expandedGroups,
+  onGroupToggle,
 }: {
   topology: TopologySnapshot;
   metric: MetricName;
@@ -217,14 +419,39 @@ function NetworkGraphInner({
   breaches?: Set<string>;
   warns?: Set<string>;
   focusId?: string | null;
-  onNodeSelect?: (id: string) => void;
+  /** Also fired with `null` to clear focus (ESC / empty-canvas click / clear-focus button). */
+  onNodeSelect?: (id: string | null) => void;
   onLinkSelect?: (source: string, target: string) => void;
+  /** Min-traffic threshold (Phase 14 Task 1) — links below this VALUE are cut. */
+  minEdgeValue?: number;
+  /** Tunable edge-health thresholds (retransmissions per GB); default to topology-graph's own defaults when omitted. */
+  healthThreshold?: number;
+  healthWarnThreshold?: number;
+  /** Active legend isolate filter — edges/nodes outside this health class are dimmed. */
+  healthFilter?: GraphLink['health'] | null;
+  /** Node grouping level (Phase 14 Task 3) — collapses members into group nodes. */
+  groupBy?: GroupBy;
+  /** Group keys currently expanded to their members. */
+  expandedGroups?: Set<string>;
+  /** Fired when a collapsed group node is clicked — the page toggles its expansion. */
+  onGroupToggle?: (key: string) => void;
 }) {
   const { t } = useLanguage();
 
   const model = useMemo(
-    () => buildGraphModel(topology, { metric, selectedIds, breaches, warns }),
-    [topology, metric, selectedIds, breaches, warns],
+    () =>
+      buildGraphModel(topology, {
+        metric,
+        selectedIds,
+        breaches,
+        warns,
+        minEdgeValue,
+        healthThreshold,
+        healthWarnThreshold,
+        groupBy,
+        expandedGroups,
+      }),
+    [topology, metric, selectedIds, breaches, warns, minEdgeValue, healthThreshold, healthWarnThreshold, groupBy, expandedGroups],
   );
 
   // Layout is keyed by the structural identity (sorted node + link id sets) so
@@ -234,34 +461,139 @@ function NetworkGraphInner({
       `${model.nodes.map((n) => n.id).sort().join('|')}⇢${model.links.map((l) => l.id).sort().join('|')}`,
     [model],
   );
+
+  // Position persistence (Phase 14 Task 5): lazy-init once from localStorage
+  // (same synchronous-during-render pattern as the `synced` ref below), then
+  // mutated in place by drags + the layout-merge effect further down — never
+  // through setState, since it must be readable synchronously inside the
+  // `positions` memo without itself becoming a re-render trigger.
+  const positionCacheRef = useRef<Map<string, { x: number; y: number }> | null>(null);
+  if (positionCacheRef.current == null) {
+    positionCacheRef.current = loadStoredPositions();
+  }
+  // Order-independent identity of the FULL topology's node-id set — a stable
+  // string key, so the `liveIds` memo below only re-derives (and the merge
+  // effect only re-fires) when the id set actually changes, not on every
+  // value-only poll's fresh topology object.
+  const topologySignature = useMemo(() => graphSignature(topology.nodes.map((n) => n.id)), [topology]);
+
+  // Live node-id working set for cache eviction: the FULL topology's ids (a
+  // node hidden by a filter is still live — its position must survive the
+  // filter round-trip) plus the current model's ids (covers groupBy's
+  // synthetic group nodes, which never appear in topology.nodes).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the stable id-set identities by design
+  const liveIds = useMemo(() => {
+    const ids = new Set(topology.nodes.map((n) => n.id));
+    for (const n of model.nodes) ids.add(n.id);
+    return ids;
+  }, [topologySignature, layoutKey]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layoutKey by design
-  const positions = useMemo(() => computeLayout(model), [layoutKey]);
+  const positions = useMemo(() => computeLayout(model, positionCacheRef.current!), [layoutKey]);
+
+  // Every freshly computed layout (a structural change, incl. the very first
+  // mount) feeds back into the durable cache + localStorage, so the NEXT
+  // structural change — and the next reload — seeds persisting node ids from
+  // here instead of `seedPosition`, which is what keeps them from reshuffling.
+  // Merging then PRUNES to the live working set: without eviction the cache
+  // grew one-way with pod churn until it latched past MAX_PERSISTED_NODES and
+  // persistence silently died forever.
+  useEffect(() => {
+    const cache = positionCacheRef.current;
+    if (!cache) return;
+    for (const [id, p] of positions) cache.set(id, p);
+    evictStalePositions(cache, liveIds);
+    persistPositions(cache);
+  }, [positions, liveIds]);
 
   // Focus only counts while the focused node exists in the current model — a
   // stale focusId (node unchecked, filter narrowed, poll churn) would
-  // otherwise mute EVERY edge with no focus ring to recover from.
+  // otherwise isolate down to nothing with no focus ring to recover from.
   const focusPresent = focusId != null && model.nodes.some((n) => n.id === focusId);
   const activeFocusId = focusPresent ? focusId : null;
 
+  // Click-to-isolate ego-network (Phase 14 Task 2): 1 or 2 hop toggle,
+  // default 1. Resets to 1 on EVERY focus change (clear or A→B pivot) so
+  // focusing any node always starts from the tightest view.
+  const [hops, setHops] = useState<1 | 2>(1);
+  useEffect(() => {
+    setHops(1);
+  }, [activeFocusId]);
+  const ego = useMemo(
+    () => (activeFocusId != null ? neighbors(model.links, activeFocusId, hops) : null),
+    [model, activeFocusId, hops],
+  );
+  // Memoized (not a plain .filter() on every render): the result feeds the
+  // layoutNodes memo below, whose array identity drives a state sync during
+  // render (see `synced` further down) — a fresh array reference every
+  // render there would re-trigger that sync every render, an infinite loop.
+  const { visibleNodes, visibleLinks } = useMemo(
+    () =>
+      ego == null
+        ? { visibleNodes: model.nodes, visibleLinks: model.links }
+        : {
+            visibleNodes: model.nodes.filter((n) => ego.nodeIds.has(n.id)),
+            visibleLinks: model.links.filter((l) => ego.edgeIds.has(l.id)),
+          },
+    [model, ego],
+  );
+
+  // Legend isolate filter (Phase 14 Task 1): nodes touching >=1 edge in the
+  // active health class stay full-opacity; everything else dims. A self-loop
+  // has no health classification, so a node with only a self-loop dims too
+  // when a filter is active — it isn't part of that edge-health class.
+  const nodesInHealthClass = useMemo(
+    () =>
+      healthFilter == null
+        ? null
+        : new Set(visibleLinks.filter((l) => l.health === healthFilter).flatMap((l) => [l.source, l.target])),
+    [visibleLinks, healthFilter],
+  );
+
+  // High-retransmit badge (Phase 14 Task 4): same shape of derivation as
+  // nodesInHealthClass above, unconditionally for the 'danger' class — nodes
+  // touching >=1 rendered danger-health edge. Independent of healthFilter
+  // (the badge marks danger nodes whether or not the legend is isolating them).
+  const dangerNodeIds = useMemo(
+    () => new Set(visibleLinks.filter((l) => l.health === 'danger').flatMap((l) => [l.source, l.target])),
+    [visibleLinks],
+  );
+
   const { layoutNodes, rfEdges } = useMemo(() => {
+    // Radius/width scales stay keyed off the FULL model — isolating a node
+    // must not rescale the surviving nodes/edges relative to each other.
     const radii = new Map(model.nodes.map((n) => [n.id, n.radius]));
     // Selected-metric value → stroke width (sqrt scale, like node radii).
     const [wMin, wMax] = EDGE_WIDTH_RANGE;
     const maxValue = Math.max(0, ...model.links.map((l) => l.value));
     const widthOf = (v: number) =>
       maxValue <= 0 ? wMin : wMin + (wMax - wMin) * Math.sqrt(v / maxValue);
-    const layoutNodes: RFNode<CircleNodeData>[] = model.nodes.map((n) => {
+    const layoutNodes: RFNode<CircleNodeData>[] = visibleNodes.map((n) => {
       const p = positions.get(n.id) ?? { x: 0, y: 0 };
       return {
         id: n.id,
         type: 'circle',
         // d3-force coordinates are circle centers; RF positions are top-left.
         position: { x: p.x - n.radius, y: p.y - n.radius },
-        data: { ...n, focused: n.id === activeFocusId, metric, selfLoopTitle: t('graph.selfLoop') },
+        data: {
+          ...n,
+          focused: n.id === activeFocusId,
+          metric,
+          selfLoopTitle: t('graph.selfLoop'),
+          muted: nodesInHealthClass != null && !nodesInHealthClass.has(n.id),
+          membersLabel: n.group ? t('topology.members', { n: n.group.memberCount }) : undefined,
+          kindLabel: t(`topology.kind.${n.kind}`),
+          crossAzLabel: t('topology.badge.crossAz'),
+          highRetrans: dangerNodeIds.has(n.id),
+          highRetransLabel: t('topology.badge.highRetrans'),
+        },
         connectable: false,
       };
     });
-    const rfEdges: RFEdge<CurvedEdgeData>[] = model.links.map((l) => ({
+    // Isolate mode already removes non-neighbor edges from `visibleLinks` —
+    // no separate focus-mute condition needed here, only the legend's
+    // health-class isolate filter (Phase 14 Task 1) still dims by opacity.
+    const rfEdges: RFEdge<CurvedEdgeData>[] = visibleLinks.map((l) => ({
       id: l.id,
       source: l.source,
       target: l.target,
@@ -272,7 +604,7 @@ function NetworkGraphInner({
         dashed: l.dashed,
         health: l.health,
         width: widthOf(l.value),
-        muted: activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId,
+        muted: healthFilter != null && l.health !== healthFilter,
         sourceRadius: radii.get(l.source) ?? 0,
         targetRadius: radii.get(l.target) ?? 0,
       },
@@ -282,7 +614,7 @@ function NetworkGraphInner({
       interactionWidth: 16,
     }));
     return { layoutNodes, rfEdges };
-  }, [model, positions, activeFocusId, metric, t]);
+  }, [model, visibleNodes, visibleLinks, positions, activeFocusId, metric, t, nodesInHealthClass, dangerNodeIds, healthFilter]);
 
   // Positions live in state so manual drags stick (onNodesChange applies RF's
   // drag deltas). Sync from layoutNodes during render (React's "adjust state
@@ -316,6 +648,54 @@ function NetworkGraphInner({
     [onLinkSelect],
   );
 
+  // A collapsed group node toggles its expansion (page rebuilds the model);
+  // every other node feeds the ego-isolate focus (Task 2), unchanged.
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
+      if (node.data?.group) onGroupToggle?.(node.data.group.key);
+      else onNodeSelect?.(node.id);
+    },
+    [onGroupToggle, onNodeSelect],
+  );
+
+  // Position persistence (Phase 14 Task 5): a manual drag writes straight
+  // into the durable cache + localStorage (not just RF's own node state), so
+  // the drop point survives the NEXT structural change (filter/groupBy) and
+  // a page reload, not only value-only polls.
+  const handleNodeDragStop = useCallback((_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
+    const cache = positionCacheRef.current;
+    if (!cache) return;
+    cache.set(node.id, { x: node.position.x + node.data.radius, y: node.position.y + node.data.radius });
+    persistPositions(cache);
+  }, []);
+
+  // ESC clears focus (restores the full graph) — same pattern as
+  // EdgeHopPanel's dialog-close handler.
+  useEffect(() => {
+    if (activeFocusId == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onNodeSelect?.(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeFocusId, onNodeSelect]);
+
+  // Imperative pan/zoom to the current ego-network (click-to-isolate target
+  // or a canvas search match) — captured via onInit since `layoutKey` stays
+  // structural-change-free across focus/hop toggles (positions must NOT
+  // reset), so ReactFlow never remounts to re-trigger its own `fitView` prop.
+  const rfInstanceRef = useRef<ReactFlowInstance<CircleNodeData, CurvedEdgeData> | null>(null);
+  useEffect(() => {
+    const inst = rfInstanceRef.current;
+    if (!inst) return;
+    if (ego != null) {
+      inst.fitView({ nodes: [...ego.nodeIds].map((id) => ({ id })), padding: 0.35, duration: 300, maxZoom: 2 });
+    } else {
+      inst.fitView({ padding: 0.25, duration: 300 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ego` already captures activeFocusId+hops+model; layoutKey guards the remount-triggered initial fitView separately
+  }, [ego]);
+
   return (
     <div data-testid="network-graph" className="h-[560px] w-full">
       {model.nodes.length === 0 ? (
@@ -339,12 +719,121 @@ function NetworkGraphInner({
           // onNodesChange would otherwise honor Backspace node deletion.
           deleteKeyCode={null}
           elementsSelectable
-          onNodeClick={(_, node) => onNodeSelect?.(node.id)}
+          onInit={(inst) => {
+            rfInstanceRef.current = inst;
+          }}
+          onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
+          onNodeDragStop={handleNodeDragStop}
+          // Empty-canvas click clears focus (restores the full graph).
+          onPaneClick={() => onNodeSelect?.(null)}
         >
           <Background gap={24} size={1} color="currentColor" style={{ opacity: 0.15 }} />
           {/* bottom-left: the fixed chat FAB sits over the graph's bottom-right corner */}
           <Controls showInteractive={false} position="bottom-left" />
+          {/* Live minimap (Phase 14 Task 5) — node color mirrors health (the
+              SAME STATUS read as the circle's own fill/border), so the
+              minimap reflects health at a glance even fully zoomed out.
+              Hidden below `sm`: the mobile canvas is already tight and a
+              corner minimap would crowd it further.
+              The `data-testid` lives on this WRAPPER, not on <MiniMap>
+              itself: the library component destructures its own named
+              props with no `...rest` passthrough, so an unrecognized prop
+              like `data-testid` is silently dropped — never reaches the
+              rendered <svg>. The wrapper is explicitly sized + absolutely
+              positioned (not just a plain div) so it isn't a zero-height
+              box that "no children contribute to an auto-sized parent's
+              height" would otherwise make it (MiniMap's own svg is itself
+              absolutely positioned) — a real box lets visibility checks
+              against the testid work as expected, and `hidden sm:block`
+              on it removes the whole subtree on mobile. Nudged down when the
+              expanded-groups chip panel (also top-right, Phase 14 Task 3) is
+              showing — both are plain `.react-flow__panel`s pinned to the
+              same corner with no shared stacking logic, so without this they
+              paint directly on top of each other. */}
+          <div
+            data-testid="topology-minimap"
+            className={`absolute right-0 hidden h-[180px] w-[230px] sm:block ${
+              groupBy !== 'none' && expandedGroups && expandedGroups.size > 0 ? 'top-11' : 'top-0'
+            }`}
+          >
+            <MiniMap
+              position="top-right"
+              pannable
+              ariaLabel={t('topology.minimap')}
+              nodeColor={(n) => statusColor((n.data as CircleNodeData | undefined)?.status ?? 'idle')}
+              maskColor="rgba(128,128,128,0.15)"
+              style={{ background: 'transparent' }}
+            />
+          </div>
+          {activeFocusId != null ? (
+            <Panel position="top-left">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white/95 px-2.5 py-1.5 text-[11px] font-medium shadow-sm dark:border-white/15 dark:bg-ink/90">
+                <span className="text-ink/70 dark:text-white/70">
+                  {t('topology.isolate')}:{' '}
+                  <span className="font-semibold text-ink dark:text-white">
+                    {model.nodes.find((n) => n.id === activeFocusId)?.label ?? activeFocusId}
+                  </span>
+                </span>
+                <div
+                  role="group"
+                  aria-label={t('topology.hops')}
+                  data-testid="topology-hop-toggle"
+                  className="flex items-center gap-0.5 rounded-md border border-black/10 p-0.5 dark:border-white/15"
+                >
+                  {HOPS.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      aria-pressed={hops === h}
+                      onClick={() => setHops(h)}
+                      data-testid={`topology-hop-toggle-${h}`}
+                      className={`h-6 min-w-6 rounded px-1.5 text-[11px] font-semibold ${
+                        hops === h
+                          ? 'bg-ink text-white dark:bg-white dark:text-ink'
+                          : 'text-ink/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNodeSelect?.(null)}
+                  data-testid="topology-clear-focus"
+                  className="h-6 rounded-md border border-black/10 px-2 text-[11px] font-medium text-ink/70 hover:bg-black/5 dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                >
+                  {t('topology.clearFocus')}
+                </button>
+              </div>
+            </Panel>
+          ) : null}
+          {/* Expanded groups: each chip collapses that group back (an expanded
+              group has no group node to click, so this is its collapse toggle). */}
+          {groupBy !== 'none' && expandedGroups && expandedGroups.size > 0 ? (
+            <Panel position="top-right">
+              <div
+                data-testid="topology-expanded-groups"
+                className="flex max-w-[14rem] flex-wrap items-center gap-1 rounded-lg border border-black/10 bg-white/95 px-2 py-1.5 text-[11px] shadow-sm dark:border-white/15 dark:bg-ink/90"
+              >
+                <span className="font-medium text-ink/60 dark:text-white/60">{t('topology.groupBy')}:</span>
+                {[...expandedGroups].map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onGroupToggle?.(key)}
+                    data-testid={`topology-collapse-group-${key}`}
+                    title={t('topology.groupHint')}
+                    className="flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-medium text-white dark:bg-white dark:text-ink"
+                  >
+                    <span className="max-w-[7rem] truncate">{key}</span>
+                    <span aria-hidden>×</span>
+                  </button>
+                ))}
+              </div>
+            </Panel>
+          ) : null}
         </ReactFlow>
       )}
     </div>
