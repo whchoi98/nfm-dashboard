@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHistorySql } from './athena';
+import { buildHistorySql, HistoryValidationError } from './athena';
 
 describe('buildHistorySql', () => {
   it('builds a partition-pruned query with the default db/table and LIMIT', () => {
@@ -37,25 +37,36 @@ describe('buildHistorySql', () => {
 
   it('rejects a malformed from date (single-digit month/day)', () => {
     expect(() => buildHistorySql({ from: '2026-7-1', to: '2026-07-08' })).toThrow('invalid date');
+    expect(() => buildHistorySql({ from: '2026-7-1', to: '2026-07-08' }))
+      .toThrow(HistoryValidationError);
   });
 
   it('rejects a from date with an injection payload', () => {
     expect(() => buildHistorySql({ from: "2026-01-01'; DROP TABLE flows_archive; --", to: '2026-07-08' }))
       .toThrow('invalid date');
+    expect(() => buildHistorySql({ from: "2026-01-01'; DROP TABLE flows_archive; --", to: '2026-07-08' }))
+      .toThrow(HistoryValidationError);
   });
 
   it('rejects a malformed to date', () => {
     expect(() => buildHistorySql({ from: '2026-07-01', to: '2026/07/08' })).toThrow('invalid date');
+    expect(() => buildHistorySql({ from: '2026-07-01', to: '2026/07/08' }))
+      .toThrow(HistoryValidationError);
   });
 
   it('rejects a monitor filter containing a quote (injection guard)', () => {
     expect(() => buildHistorySql({ from: '2026-07-01', to: '2026-07-08', monitor: "x' OR '1'='1" }))
-      .toThrow();
+      .toThrow(HistoryValidationError);
   });
 
   it('rejects a namespace filter containing a semicolon', () => {
     expect(() => buildHistorySql({ from: '2026-07-01', to: '2026-07-08', namespace: 'ns; DROP TABLE x' }))
-      .toThrow();
+      .toThrow(HistoryValidationError);
+  });
+
+  it('rejects a metric filter containing whitespace (injection guard)', () => {
+    expect(() => buildHistorySql({ from: '2026-07-01', to: '2026-07-08', metric: 'a b' }))
+      .toThrow(HistoryValidationError);
   });
 
   it('allows the permitted charset [A-Za-z0-9._/-] in filters', () => {

@@ -15,6 +15,14 @@ const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
 const MIN_LIMIT = 1;
 
+/** Thrown when user-supplied query options fail validation (bad date / disallowed filter chars). */
+export class HistoryValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HistoryValidationError';
+  }
+}
+
 export interface HistoryQueryOpts {
   from: string;
   to: string;
@@ -25,12 +33,12 @@ export interface HistoryQueryOpts {
 }
 
 function assertDate(value: string, field: string): void {
-  if (!DATE_RE.test(value)) throw new Error(`invalid date: ${field}`);
+  if (!DATE_RE.test(value)) throw new HistoryValidationError(`invalid date: ${field}`);
 }
 
 /** Validates + single-quotes a filter value against the allowlisted charset. Throws on anything else. */
 function safeLiteral(value: string, field: string): string {
-  if (!SAFE_FILTER_RE.test(value)) throw new Error(`invalid ${field}`);
+  if (!SAFE_FILTER_RE.test(value)) throw new HistoryValidationError(`invalid ${field}`);
   return `'${value}'`;
 }
 
