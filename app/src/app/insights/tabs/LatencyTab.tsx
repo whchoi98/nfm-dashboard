@@ -8,8 +8,9 @@ import { useMemo } from 'react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { lensQuery } from '@/lib/analytics/filters';
-import type { LatencyLensResult } from '@/lib/analytics/latency';
+import type { LatencyLensResult, TailPath } from '@/lib/analytics/latency';
 import { formatMicros } from '@/lib/format';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import { useHoverSync } from '@/components/analytics/HoverSync';
@@ -17,10 +18,19 @@ import StatDelta from '@/components/charts/StatDelta';
 import TimeSeries from '@/components/charts/TimeSeries';
 import Distribution from '@/components/charts/Distribution';
 import Heatmap, { type HeatmapCell } from '@/components/charts/Heatmap';
+import { SortableHeader } from '@/components/SortableHeader';
 import { LensState, type TabProps } from './shared';
 
 const timeLabel = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+// Sort on the RAW numeric fields, never the `formatMicros` display text.
+const TAIL_COLUMNS: SortColumn<TailPath>[] = [
+  { key: 'label', type: 'string', accessor: (r) => r.label },
+  { key: 'p50', type: 'number', accessor: (r) => r.p50 },
+  { key: 'p95', type: 'number', accessor: (r) => r.p95 },
+  { key: 'jitter', type: 'number', accessor: (r) => r.jitter },
+];
 
 export default function LatencyTab({ filters }: TabProps) {
   const { t, lang } = useLanguage();
@@ -68,6 +78,12 @@ export default function LatencyTab({ filters }: TabProps) {
   const trendPoints = data?.trend.points ?? [];
   // Tail-path rows arrive pre-sorted (p95 desc) and capped at 20 by the lens.
   const tailRows = data?.slowestTail ?? [];
+  // Default sort = p95 desc (unchanged first render vs. the pre-Phase-15 lens order).
+  const { sorted: sortedTail, sort: tailSort, onSort: onTailSort } = useSortableRows(
+    tailRows,
+    TAIL_COLUMNS,
+    { key: 'p95', dir: 'desc' },
+  );
 
   return (
     <div
@@ -166,15 +182,15 @@ export default function LatencyTab({ filters }: TabProps) {
           <div className="max-h-96 overflow-auto">
             <table data-testid="toplist-latency-tail" className="w-full text-xs">
               <thead>
-                <tr className="text-left text-ink/50 dark:text-white/50">
-                  <th className="py-1.5 pr-2 font-medium">{t('nav.paths')}</th>
-                  <th className="py-1.5 pr-2 font-medium">{t('insights.latency.p50')}</th>
-                  <th className="py-1.5 pr-2 font-medium">{t('insights.latency.p95')}</th>
-                  <th className="py-1.5 font-medium">{t('insights.latency.jitter')}</th>
+                <tr className="text-left">
+                  <SortableHeader label={t('nav.paths')} columnKey="label" sort={tailSort} onSort={onTailSort} className="pr-2" />
+                  <SortableHeader label={t('insights.latency.p50')} columnKey="p50" sort={tailSort} onSort={onTailSort} className="pr-2" />
+                  <SortableHeader label={t('insights.latency.p95')} columnKey="p95" sort={tailSort} onSort={onTailSort} className="pr-2" />
+                  <SortableHeader label={t('insights.latency.jitter')} columnKey="jitter" sort={tailSort} onSort={onTailSort} />
                 </tr>
               </thead>
               <tbody>
-                {tailRows.map((r) => (
+                {sortedTail.map((r) => (
                   <tr key={r.key} className="border-t border-black/5 dark:border-white/10">
                     <td className="max-w-48 truncate py-1.5 pr-2 font-medium" title={r.label}>
                       {r.label}

@@ -26,9 +26,11 @@ import {
 import type { TopologySnapshot } from '@/lib/types';
 import { CATEGORY_ORDER, STATUS } from '@/lib/chart-tokens';
 import { formatBytes, formatCount, formatMicros } from '@/lib/format';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 import { Card, Select } from '@/components/ui/Controls';
 import FacetRail, { type FacetGroup } from '@/components/analytics/FacetRail';
 import Sparkline from '@/components/charts/Sparkline';
+import { SortableHeader } from '@/components/SortableHeader';
 import { LensState } from '@/app/insights/tabs/shared';
 
 /** Selected-metric cell, formatted per metric unit. */
@@ -42,6 +44,22 @@ function metricValue(metric: NetMetric, p: NetPair): string {
       return formatCount(p.retransmissions);
     case 'rtt':
       return p.rtt == null ? '—' : formatMicros(p.rtt);
+  }
+}
+
+/** RAW value of the selected metric — sort input (never the formatted string
+ *  from `metricValue`). `rtt` stays `null` (not NaN) so it sorts LAST, matching
+ *  the pairs' own null-RTT semantics. */
+function metricRawValue(metric: NetMetric, p: NetPair): number | null {
+  switch (metric) {
+    case 'volume':
+      return p.bytes;
+    case 'throughput':
+      return p.throughput;
+    case 'retransmits':
+      return p.retransmissions;
+    case 'rtt':
+      return p.rtt;
   }
 }
 
@@ -72,6 +90,26 @@ export default function NetworkPage() {
   );
   const firstLoad = loading && !data;
   const pairs = data?.pairs ?? [];
+
+  // The metric-value column tracks whichever metric is currently selected —
+  // its accessor must stay in sync so sorting always reflects the visible column.
+  const pairColumns: SortColumn<NetPair>[] = useMemo(
+    () => [
+      { key: 'source', type: 'string', accessor: (p) => p.source },
+      { key: 'dest', type: 'string', accessor: (p) => p.dest },
+      { key: 'metricValue', type: 'number', accessor: (p) => metricRawValue(metric, p) },
+      { key: 'retransRate', type: 'number', accessor: (p) => p.retransRate },
+      { key: 'rtt', type: 'number', accessor: (p) => p.rtt },
+    ],
+    [metric],
+  );
+  // Default sort = the current metric desc — matches the lens's own pre-sort
+  // (server ranks `pairs` desc by the selected metric), so first render is unchanged.
+  const { sorted: sortedPairs, sort: pairSort, onSort: onPairSort } = useSortableRows(
+    pairs,
+    pairColumns,
+    { key: 'metricValue', dir: 'desc' },
+  );
 
   // Namespace facet options (with node counts) come from the topology
   // snapshot — stable regardless of the currently selected scopes.
@@ -208,16 +246,16 @@ export default function NetworkPage() {
               <table className="w-full min-w-[560px] text-xs">
                 <thead>
                   <tr className="text-left text-ink/50 dark:text-white/50">
-                    <th className="py-1.5 pr-2 font-medium">{t('network.col.source')}</th>
-                    <th className="py-1.5 pr-2 font-medium">{t('network.col.dest')}</th>
-                    <th className="py-1.5 pr-2 text-right font-medium">{t(`netmetric.${metric}`)}</th>
-                    <th className="py-1.5 pr-2 text-right font-medium">{t('network.col.retrans')}</th>
-                    <th className="py-1.5 pr-2 text-right font-medium">{t('network.col.rtt')}</th>
+                    <SortableHeader label={t('network.col.source')} columnKey="source" sort={pairSort} onSort={onPairSort} className="pr-2" />
+                    <SortableHeader label={t('network.col.dest')} columnKey="dest" sort={pairSort} onSort={onPairSort} className="pr-2" />
+                    <SortableHeader label={t(`netmetric.${metric}`)} columnKey="metricValue" sort={pairSort} onSort={onPairSort} align="right" className="pr-2" />
+                    <SortableHeader label={t('network.col.retrans')} columnKey="retransRate" sort={pairSort} onSort={onPairSort} align="right" className="pr-2" />
+                    <SortableHeader label={t('network.col.rtt')} columnKey="rtt" sort={pairSort} onSort={onPairSort} align="right" className="pr-2" />
                     <th className="py-1.5 font-medium">{t('network.col.trend')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pairs.map((p) => (
+                  {sortedPairs.map((p) => (
                     <tr
                       key={`${p.source}→${p.dest}`}
                       tabIndex={0}
