@@ -12,9 +12,10 @@ Scheduled Lambda (5-minute cycle) that queries CloudWatch Network Flow Monitor (
 - `src/categories.ts` — destination-category classification per cycle
 - `src/onboard.ts` — onboarding coverage discovery (EC2/IAM)
 - `src/types.ts` — shared types (keep aligned with `app/src/lib/types.ts`)
+- `src/archive-transform.ts` — DynamoDB Streams (`nfm-dashboard-flows` NEW_IMAGE) → flat JSON → Firehose `PutRecordBatch` (Phase 13 flow archive; `flattenFlowImage` is pure, `handler` is the stream Lambda entry)
 
 ## Rules
-- Build: `npm -w collector run build` (esbuild → `dist/handler.mjs`). ALWAYS build before deploying `NfmDash-Data` (root script `npm run deploy:data` does both).
+- Build: `npm -w collector run build` (esbuild → `dist/handler.mjs` AND `dist/archive-transform.mjs`, two entrypoints in one script). ALWAYS build before deploying `NfmDash-Data` (root script `npm run deploy:data` does both).
 - Test: `npm -w collector run test` (vitest, co-located `*.test.ts`).
 - The 5-minute bucket formula `new Date(Math.floor(t/300000)*300000).toISOString().replace(/\.\d+Z/,'Z')` MUST stay identical to `recentBuckets()` in `app/src/lib/ddb.ts`.
 - Monitor→cluster mapping comes from the `MONITORS` env var (`name=cluster,...`); table names from `TABLE_FLOWS` / `TABLE_META` env vars.

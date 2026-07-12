@@ -13,7 +13,7 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 | Component | Path | Purpose |
 |---|---|---|
 | CDK app entry | `infra/bin/nfm-dashboard.ts` | Instantiates the 6 stacks; `NfmDash-Ops` consumes `alb`/`targetGroup` from AppStack |
-| Data stack | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB tables + collector Lambda + schedule |
+| Data stack | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB tables + collector Lambda + schedule + flow-archive pipeline (DDB Streams → transform Lambda → Firehose Parquet → S3 + Glue/Athena) |
 | Onboarding stack | `infra/lib/nfm-onboarding-stack.ts` | `NfmDash-Onboarding`: NFM monitor onboarding resources |
 | AgentCore stack | `infra/lib/agentcore-stack.ts` | `NfmDash-AgentCore`: MCP tool Lambdas (Python 3.13, arm64) + gateway IAM role |
 | App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito runtime |
@@ -23,6 +23,8 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 
 ### 3. Key Decisions
 <!-- TODO: list 3-5 decisions or link to docs/decisions/ADR-*.md -->
+- Flow archive infra co-located in `NfmDash-Data` (not a separate stack): enabling the DynamoDB stream mutates the `Flows` Table construct and `grantStreamRead`/`DynamoEventSource` need the L2 object in-scope, so this avoids a cross-stack stream-ARN export. Fixed resource names let `NfmDash-App` reference them by ARN.
+- Firehose Parquet conversion, Glue catalog, and Athena workgroup use **L1 `Cfn*`** constructs — the stable L2 `DeliveryStream` does not expose `DataFormatConversionConfiguration`, and Glue/Athena have no L2 in `aws-cdk-lib` (alpha not installed). Glue table columns MUST match the transform Lambda's `FlatFlowRow` exactly or Firehose routes records to the `errors/` prefix.
 
 ### 4. Code Pointers
 <!-- TODO: 3-7 entries; paths must be valid (checked by /sync-docs) -->
@@ -46,7 +48,7 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 | 구성요소 | 경로 | 목적 |
 |---|---|---|
 | CDK 앱 엔트리 | `infra/bin/nfm-dashboard.ts` | 6개 스택 생성; `NfmDash-Ops`는 AppStack의 `alb`/`targetGroup` 사용 |
-| Data 스택 | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB 테이블 + collector Lambda + 스케줄 |
+| Data 스택 | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB 테이블 + collector Lambda + 스케줄 + flow 아카이브 파이프라인(DDB Streams → transform Lambda → Firehose Parquet → S3 + Glue/Athena) |
 | Onboarding 스택 | `infra/lib/nfm-onboarding-stack.ts` | `NfmDash-Onboarding`: NFM 모니터 온보딩 리소스 |
 | AgentCore 스택 | `infra/lib/agentcore-stack.ts` | `NfmDash-AgentCore`: MCP 툴 Lambda(Python 3.13, arm64) + 게이트웨이 IAM 롤 |
 | App 스택 | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito 런타임 |
@@ -56,6 +58,8 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 
 ### 3. 주요 결정
 <!-- TODO: 3-5개 결정 나열 또는 docs/decisions/ADR-*.md 링크 -->
+- flow 아카이브 인프라는 `NfmDash-Data`에 함께 배치(별도 스택 아님): DynamoDB 스트림 활성화는 `Flows` 테이블 construct를 변경하고 `grantStreamRead`/`DynamoEventSource`가 L2 객체를 필요로 하므로, 크로스 스택 stream-ARN export를 피한다. 고정 리소스 이름으로 `NfmDash-App`이 ARN으로 참조한다.
+- Firehose Parquet 변환·Glue 카탈로그·Athena 워크그룹은 **L1 `Cfn*`** construct 사용 — 안정 L2 `DeliveryStream`은 `DataFormatConversionConfiguration`을 노출하지 않고, Glue/Athena는 `aws-cdk-lib`에 L2가 없다(alpha 미설치). Glue 테이블 컬럼은 transform Lambda의 `FlatFlowRow`와 정확히 일치해야 하며, 어긋나면 Firehose가 레코드를 `errors/` 프리픽스로 보낸다.
 
 ### 4. 코드 포인터
 <!-- TODO: 3-7개 항목; 경로는 실재해야 함 (/sync-docs가 점검) -->

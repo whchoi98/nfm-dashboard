@@ -6,7 +6,7 @@ CDK v2 (TypeScript) app defining all AWS infrastructure. Six stacks, env pinned 
 
 ## Key Files
 - `bin/nfm-dashboard.ts` — app entry; instantiates the 6 stacks (Ops consumes `alb`/`targetGroup` from AppStack)
-- `lib/data-stack.ts` — DynamoDB tables + collector Lambda + schedule
+- `lib/data-stack.ts` — DynamoDB tables + collector Lambda + schedule + flow-archive pipeline: `flows` stream (`NEW_IMAGE`) → transform Lambda (`archive-transform.handler`) → Firehose L1 `CfnDeliveryStream` (Parquet, dynamic-partition by `dt`) → S3 archive bucket, catalogued by Glue L1 `CfnDatabase`/`CfnTable` (`nfm_dashboard.flows_archive`, partition projection) + Athena L1 `CfnWorkGroup` (`nfm-dashboard`). Glue columns MUST match the transform Lambda's `FlatFlowRow` (minus `dt`) or Firehose routes records to `errors/`. Fixed resource names (account `<ACCOUNT_ID>`) — no cross-stack export
 - `lib/nfm-onboarding-stack.ts` — NFM onboarding resources
 - `lib/agentcore-stack.ts` — AgentCore MCP tool Lambdas (Python 3.13, arm64) + gateway IAM role
 - `lib/app-stack.ts` — ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront, Cognito Hosted UI (PKCE). Header comment documents the ALB → CloudFront → Cognito circular-dependency resolution — read it before touching ordering.

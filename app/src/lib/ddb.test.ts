@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getDns,
-  getCollectionHistory } from './ddb';
+  getCollectionHistory, mapPool } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -217,6 +217,47 @@ describe('getCollectionHistory', () => {
   it('returns [] when the partition has no items', async () => {
     ddbMock.on(QueryCommand).resolves({});
     await expect(getCollectionHistory()).resolves.toEqual([]);
+  });
+});
+
+describe('mapPool', () => {
+  it('runs every task exactly once and concatenates all results in order', async () => {
+    const items = [1, 2, 3, 4, 5];
+    const seen: number[] = [];
+    const results = await mapPool(items, 2, async (i) => {
+      seen.push(i);
+      return i * 10;
+    });
+    expect(seen.slice().sort((a, b) => a - b)).toEqual(items); // each item processed exactly once
+    expect(results).toEqual([10, 20, 30, 40, 50]); // order preserved regardless of completion order
+  });
+
+  it('never runs more than `limit` tasks concurrently', async () => {
+    const items = Array.from({ length: 20 }, (_, i) => i);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const limit = 4;
+    await mapPool(items, limit, async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight--;
+      return null;
+    });
+    expect(maxInFlight).toBeLessThanOrEqual(limit);
+    expect(maxInFlight).toBeGreaterThan(1); // sanity: the pool did overlap work, not run serially
+  });
+
+  it('handles a limit larger than the item count (falls back to full parallelism)', async () => {
+    const results = await mapPool([1, 2], 40, async (i) => i * 2);
+    expect(results).toEqual([2, 4]);
+  });
+
+  it('handles an empty items array without invoking fn', async () => {
+    const fn = vi.fn(async () => 1);
+    const results = await mapPool([] as number[], 5, fn);
+    expect(results).toEqual([]);
+    expect(fn).not.toHaveBeenCalled();
   });
 });
 

@@ -11,6 +11,7 @@ import {
   parseFilters,
   parseLensParams,
   rangeToBuckets,
+  TIME_RANGES,
 } from './filters';
 
 describe('rangeToBuckets', () => {
@@ -25,6 +26,16 @@ describe('rangeToBuckets', () => {
   });
   it('maps 24h to 288 buckets', () => {
     expect(rangeToBuckets('24h')).toBe(288);
+  });
+  it('maps 7d to 2016 buckets', () => {
+    expect(rangeToBuckets('7d')).toBe(2016);
+  });
+});
+
+describe('TIME_RANGES', () => {
+  it('includes 7d and has length 5', () => {
+    expect(TIME_RANGES).toContain('7d');
+    expect(TIME_RANGES).toHaveLength(5);
   });
 });
 
@@ -131,11 +142,11 @@ describe('parseBuckets', () => {
     expect(parseBuckets(req('?buckets=-3'))).toBe(12);
   });
 
-  it('floors and clamps valid values into [1, 288]', () => {
+  it('floors and clamps valid values into [1, 2016]', () => {
     expect(parseBuckets(req('?buckets=5'))).toBe(5);
     expect(parseBuckets(req('?buckets=5.9'))).toBe(5);
     expect(parseBuckets(req('?buckets=1'))).toBe(1);
-    expect(parseBuckets(req('?buckets=9999'))).toBe(288);
+    expect(parseBuckets(req('?buckets=9999'))).toBe(2016);
   });
 });
 
@@ -150,6 +161,16 @@ describe('parseLensParams', () => {
   it('yields defaults/nulls when params are absent', () => {
     const req = new Request('http://localhost/api/analytics/cost');
     expect(parseLensParams(req)).toEqual({ buckets: 12, namespace: null, category: null });
+  });
+
+  it('clamps an over-range buckets value (7d+) down to 2016', () => {
+    const req = new Request('http://localhost/api/analytics/cost?buckets=5000');
+    expect(parseLensParams(req).buckets).toBe(2016);
+  });
+
+  it('accepts exactly 2016 (the 7d ceiling) unchanged', () => {
+    const req = new Request('http://localhost/api/analytics/cost?buckets=2016');
+    expect(parseLensParams(req).buckets).toBe(2016);
   });
 });
 

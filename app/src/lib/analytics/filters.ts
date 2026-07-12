@@ -2,7 +2,7 @@
 // Every hub widget consumes AnalyticsFilters; 'all' is the no-filter sentinel.
 import type { FlowEdge, MetricName } from '../types';
 
-export type TimeRange = '15m' | '1h' | '3h' | '24h';
+export type TimeRange = '15m' | '1h' | '3h' | '24h' | '7d';
 
 export interface AnalyticsFilters {
   range: TimeRange;
@@ -12,7 +12,7 @@ export interface AnalyticsFilters {
   metric: MetricName;
 }
 
-export const TIME_RANGES: TimeRange[] = ['15m', '1h', '3h', '24h'];
+export const TIME_RANGES: TimeRange[] = ['15m', '1h', '3h', '24h', '7d'];
 
 export const METRIC_NAMES: MetricName[] = [
   'DATA_TRANSFERRED',
@@ -40,11 +40,13 @@ export function rangeToBuckets(range: TimeRange): number {
       return 36;
     case '24h':
       return 288;
+    case '7d':
+      return 2016;
   }
 }
 
-/** Widest flows window a lens route will fetch: 24h of 5-minute buckets. */
-const MAX_BUCKETS = 288;
+/** Widest flows window a lens route will fetch: 7 days of 5-minute buckets (7*24*12). */
+const MAX_BUCKETS = 2016;
 const DEFAULT_BUCKETS = 12;
 
 function bucketsFrom(url: URL): number {
@@ -58,7 +60,7 @@ function bucketsFrom(url: URL): number {
 
 /**
  * Parse `?buckets=` for the /api/analytics/* flow routes: valid values are
- * floored and clamped to [1, 288]; missing/NaN/<1 falls back to 12 (1h).
+ * floored and clamped to [1, 2016]; missing/NaN/<1 falls back to 12 (1h).
  */
 export function parseBuckets(req: Request): number {
   return bucketsFrom(new URL(req.url));

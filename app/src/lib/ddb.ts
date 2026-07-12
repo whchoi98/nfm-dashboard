@@ -80,8 +80,38 @@ export async function getDns(): Promise<DnsAggregate | null> {
   return (res.Item?.dns as DnsAggregate | undefined) ?? null;
 }
 
+/**
+ * Bounded-concurrency map: runs `fn` over `items` with at most `limit` in
+ * flight at once, using a small worker pool (no dependency). Every item is
+ * processed exactly once; results are returned in input order regardless of
+ * completion order. A `limit` >= items.length degenerates to Promise.all-like
+ * full parallelism.
+ */
+export async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+// Max concurrent per-bucket DynamoDB Queries: a 7d window is 2016 buckets, so
+// fanning out unbounded (one Query per bucket) would fire ~2016 concurrent
+// requests. This caps the fan-out regardless of window size.
+const BUCKET_QUERY_CONCURRENCY = 40;
+
 async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
-  const results = await Promise.all(recentBuckets(n).map(b => queryFlowsByBucket(b)));
+  const results = await mapPool(recentBuckets(n), BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
   return results.flat();
 }
 
@@ -114,7 +144,7 @@ export async function getFlowsWindowPair(
 ): Promise<{ current: FlowEdge[]; prior: FlowEdge[] }> {
   const buckets = recentBuckets(2 * n);
   const fetchAll = (bs: string[]) =>
-    Promise.all(bs.map(b => queryFlowsByBucket(b))).then(r => r.flat());
+    mapPool(bs, BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b)).then(r => r.flat());
   const [current, prior] = await Promise.all([
     fetchAll(buckets.slice(0, n)),
     fetchAll(buckets.slice(n)),

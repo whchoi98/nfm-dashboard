@@ -12,7 +12,7 @@ Next.js 16 App Router frontend (React 19): one page per dashboard view under `ap
 ### 2. Components
 | Component | Path | Purpose |
 |---|---|---|
-| Pages | `app/src/app/` | Views: overview (`page.tsx`), flows, topology, paths, workload, monitors, insights, diagnose, agents, chat-popup, login |
+| Pages | `app/src/app/` | Views: overview (`page.tsx`), flows, topology, paths, workload, monitors, history, insights, diagnose, agents, chat-popup, login |
 | Root layout | `app/src/app/layout.tsx` | App shell wiring, providers, global styles (`globals.css`) |
 | i18n | `app/src/lib/i18n/` | `LanguageContext.tsx` + `translations/{ko,en}.json`; every UI string via `t()` |
 | Data hooks | `app/src/lib/use-sse.ts`, `app/src/lib/use-polling.ts`, `app/src/lib/hooks/useAnalyticsFilters.ts` | SSE / polling data fetching and filter state |
@@ -43,7 +43,7 @@ Next.js 16 App Router 프론트엔드(React 19): `app/src/app/` 아래 대시보
 ### 2. 구성요소
 | 구성요소 | 경로 | 목적 |
 |---|---|---|
-| 페이지 | `app/src/app/` | 뷰: overview(`page.tsx`), flows, topology, paths, workload, monitors, insights, diagnose, agents, chat-popup, login |
+| 페이지 | `app/src/app/` | 뷰: overview(`page.tsx`), flows, topology, paths, workload, monitors, history, insights, diagnose, agents, chat-popup, login |
 | 루트 레이아웃 | `app/src/app/layout.tsx` | 앱 셸 연결, 프로바이더, 전역 스타일(`globals.css`) |
 | i18n | `app/src/lib/i18n/` | `LanguageContext.tsx` + `translations/{ko,en}.json`; 모든 UI 문자열은 `t()` 경유 |
 | 데이터 훅 | `app/src/lib/use-sse.ts`, `app/src/lib/use-polling.ts`, `app/src/lib/hooks/useAnalyticsFilters.ts` | SSE/polling 데이터 조회 및 필터 상태 |

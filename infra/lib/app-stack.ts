@@ -167,7 +167,10 @@ export class AppStack extends cdk.Stack {
         TABLE_FLOWS: 'nfm-dashboard-flows',
         TABLE_META: 'nfm-dashboard-meta',
         COLLECTOR_FUNCTION: 'nfm-dashboard-collector',
-        MONITORS: this.node.tryGetContext('nfmMonitors') ?? '' },
+        MONITORS: this.node.tryGetContext('nfmMonitors') ?? '',
+        ATHENA_WORKGROUP: 'nfm-dashboard',
+        GLUE_DB: 'nfm_dashboard',
+        GLUE_TABLE: 'flows_archive' },
       secrets: { ORIGIN_VERIFY_SECRET: ecs.Secret.fromSecretsManager(originVerify) } });
 
     // Task role — least privilege per runtime needs of the app.
@@ -195,6 +198,26 @@ export class AppStack extends cdk.Stack {
     task.addToPrincipalPolicy(new iam.PolicyStatement({ // SecureString /nfm-dashboard/gateway-url (aws/ssm key)
       actions: ['kms:Decrypt'], resources: ['*'],
       conditions: { StringEquals: { 'kms:ViaService': `ssm.${region}.amazonaws.com` } } }));
+    task.addToPrincipalPolicy(new iam.PolicyStatement({ // /api/history: run Athena queries against the flow archive
+      actions: ['athena:StartQueryExecution', 'athena:GetQueryExecution', 'athena:GetQueryResults',
+        'athena:StopQueryExecution'],
+      resources: [`arn:aws:athena:${region}:${this.account}:workgroup/nfm-dashboard`] }));
+    task.addToPrincipalPolicy(new iam.PolicyStatement({ // Glue: resolve the flows_archive table schema/partitions
+      actions: ['glue:GetTable', 'glue:GetDatabase', 'glue:GetPartitions', 'glue:GetTableVersions'],
+      resources: [
+        `arn:aws:glue:${region}:${this.account}:catalog`,
+        `arn:aws:glue:${region}:${this.account}:database/nfm_dashboard`,
+        `arn:aws:glue:${region}:${this.account}:table/nfm_dashboard/flows_archive`] }));
+    task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: read Parquet objects from the flow archive bucket
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [
+        'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>',
+        'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>/*'] }));
+    task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: Athena writes/reads query results in this bucket
+      actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket'],
+      resources: [
+        'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>',
+        'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>/*'] }));
 
     const service = new ecs.FargateService(this, 'Service', {
       cluster, taskDefinition: taskDef, serviceName: 'nfm-dashboard-app',
