@@ -1,7 +1,7 @@
 # Project Context
 
 ## Overview
-**NFM Dashboard** (v0.7.0, pre-1.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
+**NFM Dashboard** (v0.10.0, pre-1.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
 Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUNT_ID>`, region `ap-northeast-2`.
 
 > The global `~/.claude/CLAUDE.md` (Korean-first responses) and the spec-driven workflow in `docs/superpowers/` take precedence for language and process. This file only adds project-specific context — keep it complementary and concise.
@@ -17,7 +17,7 @@ Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUN
 
 ## Project Structure
 ```
-app/          - Next.js 16 dashboard (src/app pages incl. /history, src/app/api incl. history/, src/lib incl. athena.ts, src/components incl. layout/ left Sidebar+Topbar nav)
+app/          - Next.js 16 dashboard (src/app pages incl. /history (+ history-sort.ts col sniffing) & /topology force graph, src/app/api incl. history/, src/lib incl. athena.ts + use-sortable.ts (sortable tables) + graph-focus.ts/graph-layout.ts (topology ego-network + deterministic layout), src/components incl. layout/ left Sidebar+Topbar nav, SortableHeader.tsx & topology/NetworkGraph.tsx)
 collector/    - NFM data-collector Lambda (5-min cycle → dist/handler.mjs) + archive-transform.ts (DDB Stream → Firehose, → dist/archive-transform.mjs)
 infra/        - CDK stacks: NfmDash-Data (incl. flow-archive pipeline: DDB Stream → Firehose → S3 Parquet → Glue/Athena) / Onboarding / AgentCore / App / Ops / Dns
 scripts/      - build-push.sh (ECR image), smoke.sh (e2e), setup-gateway.sh
@@ -33,6 +33,8 @@ docs/         - decisions/ (ADRs), reference/ (layer docs), runbooks/, superpowe
 - i18n ko/en: ALL UI strings go through `t()` (`app/src/lib/i18n`, `translations/{ko,en}.json`) — no hardcoded UI strings.
 - Left-sidebar nav is data-driven from `app/src/components/layout/nav.ts` (`NAV_GROUPS` = source of truth, `NAV_ITEMS` = flatMap); add menus there.
 - Data access via `app/src/lib/ddb.ts` (DynamoDB hot), `app/src/lib/cw-metrics.ts` (CloudWatch), and `app/src/lib/athena.ts` (Parquet archive / long-range history; SQL is injection-guarded). The 5-minute bucket formula in `ddb.ts` MUST match the collector exactly.
+- Sortable data: raw `<table>`s use shared `useSortableRows`/`compareBy` (`app/src/lib/use-sortable.ts`, sorts RAW values not formatted text, null-last) + `SortableHeader` (`app/src/components/SortableHeader.tsx`, `aria-sort`); the ranked `Toplist` (`app/src/components/analytics/Toplist.tsx`) opts in via a `sortable` prop while compact teasers keep a fixed top-N.
+- Topology `/topology` (`app/src/components/topology/NetworkGraph.tsx`): COLOR is reserved for health — express extra signals (cross-AZ, high-retransmit, node kind) via shape/icon/badge; layout is deterministic (id-hash seed + fx/fy pinning) with localStorage position persistence.
 
 ## Key Commands
 ```bash

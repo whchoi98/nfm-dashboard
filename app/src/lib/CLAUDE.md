@@ -18,7 +18,7 @@ Server-side data access (DynamoDB, CloudWatch, SSM), Bedrock/MCP clients, auth h
 - `i18n/` — `LanguageContext.tsx` + `translations/{ko,en}.json` (`t()`)
 - `chart-tokens.ts` — SnowUI palette (mirrors `app/tailwind.config.ts` — keep in sync)
 - `analytics/` — flow lenses (pure, no I/O): `latency`, `reliability`, `cost`, `cost-explorer`, `dns-insights`, `dependencies`, `edge-health`, `efficiency`, `scorecard`, `movers`, `anomalies`, `network-analytics`; shared `aggregate` + `filters` (`TimeRange` incl. `7d`, `parseLensParams`/`applyFlowFilters`)
-- Domain/view logic: `topology.ts`, `topology-graph.ts`, `flow-aggregates.ts`, `overview-metrics.ts`, `workload.ts`, `monitors.ts`, `recent-paths.ts`, `diagnose-context.ts`, `followups.ts`, `alerts.ts`, `report.ts`, `search.ts`
+- Domain/view logic: `topology.ts`, `topology-graph.ts` (`buildGraphModel` + `applyGrouping` namespace/AZ/cluster + `crossAz`/min-edge thresholds), `graph-focus.ts` (pure ego-network `neighbors()` — 1/2-hop induced subgraph for click-to-isolate), `graph-layout.ts` (deterministic force-layout seed: `seedPosition` id-hash + `graphSignature`), `flow-aggregates.ts`, `overview-metrics.ts`, `workload.ts`, `monitors.ts`, `recent-paths.ts`, `diagnose-context.ts`, `followups.ts`, `alerts.ts`, `report.ts`, `search.ts`
 - Client/util: `sse.ts`, `use-sse.ts`, `use-polling.ts`, `use-sortable.ts` (shared click-to-sort primitive — `useSortableRows` + `compareBy`, type-aware string/number/boolean, paired with `components/SortableHeader.tsx`), `hooks/useAnalyticsFilters.ts`, `format.ts`, `csv.ts`, `settings.ts`, `ua.ts`, `cloudwatch-url.ts`, `types.ts`, `version.ts`
 
 ## Rules

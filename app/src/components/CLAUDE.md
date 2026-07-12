@@ -5,7 +5,7 @@ Presentational React components for the dashboard: chart primitives, topology gr
 
 ## Key Files
 - `charts/` — recharts + custom SVG charts (TimeSeries, Sankey, Heatmap, Treemap, Icicle, Pareto, Gauge, StreamGraph, RegionArcMap, …) and `ChartTooltip.tsx`
-- `topology/` — reactflow-based pod/service topology view
+- `topology/` — reactflow-rendered + d3-force-laid-out pod/service topology view (`NetworkGraph.tsx`): node grouping (namespace/AZ/cluster) with collapse/expand + aggregate edges, click-to-isolate ego-network, min-traffic threshold slider, `ResourceIcon` kind icons (shape-only channel), cross-AZ / high-retransmit corner badges, deterministic pinned layout + localStorage persistence, and a live `MiniMap`; `GraphLegend` (interactive health legend), `AdjacencyMatrix`, `TierFlowMap`, `TopEdgesPanel`, `TagFilterPanel`
 - `chat/` — `FloatingChat.tsx`, `ChatPanel.tsx`, `ChatMessages.tsx` (AI chatbot UI)
 - `layout/` — `AppShell.tsx`, `Sidebar.tsx`, `Topbar.tsx`, `MobileTabs.tsx`, `nav.ts`
 - `cards/`, `analytics/`, `monitors/` — page-level widgets
@@ -27,3 +27,11 @@ Presentational React components for the dashboard: chart primitives, topology gr
   formatted display string (`formatMetricValue`, translated labels, etc) — sorting must reflect the true value.
 - `FlowTable.tsx` is the reference consumer (`FLOW_COLUMNS`); it preserves default value-desc first render, CSV
   export of the `sorted` view, and the mobile card list rendering `sorted`.
+
+## Sortable ranked lists (Phase 16)
+- `analytics/Toplist.tsx` has an opt-in `sortable` prop (off by default — output is byte-identical to pre-Phase-16
+  when off). When on it reuses `useSortableRows` and renders a compact `<ul>`-friendly header toggle
+  (`ToplistSortButton`, `aria-pressed`/`aria-label` in place of the table-only `aria-sort`), sorting the RAW
+  `label`/`value` fields and keeping the caller's incoming value-desc order until first click.
+- Enabled on ~18 ranked lists (cost / DNS / hotspots / pareto / scorecard / movers / slowest / efficiency, etc.);
+  compact teasers stay fixed top-N (leave `sortable` off).

@@ -1,7 +1,7 @@
 # NFM Dashboard
 
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)]()
-[![Version](https://img.shields.io/badge/Version-0.7.0-green.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.10.0-green.svg)]()
 <a href="#english"><img src="https://img.shields.io/badge/lang-English-blue.svg" alt="English"></a>
 <a href="#korean"><img src="https://img.shields.io/badge/lang-한국어-red.svg" alt="Korean"></a>
 
@@ -68,6 +68,8 @@ NFM onboarding (NfmDash-Onboarding):
 - **Left-sidebar navigation** — A grouped left sidebar (`Sidebar.tsx`, 6 groups: Overview / Network / Analysis / Operations / Business / Tools) exposes all 16 pages, paired with a slim top bar (`Topbar.tsx` — refresh, language, theme) and full-width content (no max-width cap); mobile keeps the tab bar (`MobileTabs.tsx`). `nav.ts` exports `NAV_GROUPS` (source) plus `NAV_ITEMS` (flatMap).
 - **Overview summary cards** — Six at-a-glance cards (reliability, cost, billed, DNS, concentration, monitors) on the overview page, fed by an additive `summary` block in `/api/overview` that composes the scorecard, efficiency, DNS, and concentration lenses (shared `healthByMonitor` lives in `app/src/lib/cw-metrics.ts`).
 - **7-day analytics range** — The analytics time-range selector adds a `7d` option (up to 2016 five-minute buckets), backed by a bounded-concurrency pool (K=40) for the per-bucket flow-query fan-out.
+- **Topology visibility** — The `/topology` force-directed graph adds node grouping (by namespace / AZ / cluster) with collapse/expand and aggregate edges, click-to-isolate ego-networks (1/2-hop) with a canvas search + pan-to, a min-traffic threshold slider paired with an interactive health legend, and node-kind icons (`ResourceIcon`) plus cross-AZ / high-retransmit badges (color stays reserved for health — extra signals ride on shape/icon/badge). Layout is deterministic (id-hash seed + `fx`/`fy` pinning) with `localStorage` position persistence (working-set eviction) and a live MiniMap. Helpers: `graph-focus.ts` (neighbors/ego) and `graph-layout.ts` (deterministic seed + `graphSignature`).
+- **Sortable data tables + ranked lists** — All raw data tables (flows, latency tail, reliability breaches, network pairs, workload contributors, agent coverage, and the dynamic Athena history table) are sortable via a shared `useSortableRows` + `compareBy` hook and a `SortableHeader` component: type-aware ascending/descending on strings, numbers, and booleans, sorting the raw values (not the formatted text) with nulls last, and `aria-sort` on the active column. Ranked lists share the same sorting through an opt-in `sortable` prop on the `Toplist` component (enabled on ~18 lists — cost, DNS, hotspots, pareto, scorecard, movers, slowest, efficiency, etc.), while compact teasers keep a fixed top-N.
 - **Flow archive + Athena-backed history** — A DynamoDB Stream (NEW_IMAGE) on `nfm-dashboard-flows` feeds a transform Lambda → Kinesis Firehose (Parquet conversion via a Glue schema, dynamic `dt` partitioning) → an S3 archive bucket, catalogued in Glue (partition projection, no crawler) and queried through a dedicated Athena workgroup. This archives flows before the 7-day DynamoDB TTL deletes them, so the History page (`/history`) runs on-demand queries over arbitrary date ranges beyond 7 days. DynamoDB stays the hot operational store (bursty writes, key-based recent-window reads, 7-day TTL); S3 + Parquet + Athena is the cold long-term analytics tier.
 - **Bilingual, themed, responsive** — ko/en i18n (including SSE status messages), light/dark themes with SnowUI design tokens, and iPhone (Safari) responsive layout.
 
@@ -199,8 +201,10 @@ nfm-dashboard/
                #    DynamoDB Stream -> transform Lambda -> Firehose -> S3/Parquet -> Glue + Athena)
   app/         # Next.js 16 full stack (App Router, Tailwind v4, React Flow topology,
                #   SnowUI design tokens, i18n ko/en, mobile responsive)
-               #   src/app/history (Athena-backed history page),
-               #   src/lib/athena.ts (buildHistorySql + runHistoryQuery)
+               #   src/app/history (Athena-backed history page + history-sort.ts column sniffing),
+               #   src/lib/athena.ts (buildHistorySql + runHistoryQuery),
+               #   src/lib/graph-focus.ts + graph-layout.ts (topology ego/deterministic layout),
+               #   src/lib/use-sortable.ts + src/components/SortableHeader.tsx (sortable tables/lists)
   collector/   # Collector Lambda (TypeScript, esbuild -> dist/handler.mjs) —
                #   NFM query/normalize/store/auto-onboarding;
                #   src/archive-transform.ts -> dist/archive-transform.mjs (DDB Stream -> Firehose transform)
@@ -364,6 +368,8 @@ NFM onboarding (NfmDash-Onboarding):
 - **좌측 사이드바 내비게이션** — 그룹화된 좌측 사이드바(`Sidebar.tsx`, 6개 그룹: Overview / Network / Analysis / Operations / Business / Tools)가 16개 페이지를 모두 노출하며, 슬림한 상단 바(`Topbar.tsx` — 새로고침·언어·테마)와 전체 폭 콘텐츠(max-width 제한 없음)를 함께 제공합니다. 모바일은 탭 바(`MobileTabs.tsx`)를 유지합니다. `nav.ts`는 `NAV_GROUPS`(소스)와 `NAV_ITEMS`(flatMap)를 내보냅니다.
 - **개요 요약 카드** — 개요 페이지의 한눈에 보는 카드 6개(reliability, cost, billed, DNS, concentration, monitors)로, scorecard·efficiency·DNS·concentration 렌즈를 합성하는 `/api/overview`의 추가형 `summary` 블록이 공급합니다(공유 `healthByMonitor`는 `app/src/lib/cw-metrics.ts`에 위치).
 - **7일 분석 범위** — 분석 시간 범위 선택기에 `7d` 옵션(최대 2016개 5분 버킷)이 추가되었으며, 버킷별 플로우 쿼리 팬아웃을 위한 제한 동시성 풀(K=40)이 이를 뒷받침합니다.
+- **토폴로지 가시성** — `/topology` force-directed 그래프에 노드 그룹화(namespace / AZ / cluster 기준, 접기/펼치기 + 집계 엣지), 클릭 시 ego-network 격리(1/2-hop) + 캔버스 검색·pan-to, 최소 트래픽 임계값 슬라이더 + 대화형 상태(health) 범례, 노드 종류 아이콘(`ResourceIcon`)과 cross-AZ / 높은 재전송 배지가 추가되었습니다(색상은 상태 전용으로 유지하고 추가 신호는 모양/아이콘/배지로 표현). 레이아웃은 결정적(id-hash 시드 + `fx`/`fy` 고정)이며 `localStorage` 위치 영속화(작업 집합 초과 시 제거)와 실시간 MiniMap을 제공합니다. 헬퍼: `graph-focus.ts`(neighbors/ego), `graph-layout.ts`(결정적 시드 + `graphSignature`).
+- **정렬 가능한 데이터 테이블 + 순위 리스트** — 모든 원시 데이터 테이블(플로우, 지연 tail, 신뢰성 위반, 네트워크 pair, 워크로드 기여자, 에이전트 커버리지, 동적 Athena history 테이블)이 공유 `useSortableRows` + `compareBy` 훅과 `SortableHeader` 컴포넌트로 정렬 가능합니다: 문자열·숫자·불리언에 대한 타입 인식 오름차순/내림차순, 포맷된 텍스트가 아닌 원시 값 기준 정렬(null은 마지막), 활성 열에 `aria-sort`. 순위 리스트는 `Toplist` 컴포넌트의 opt-in `sortable` prop을 통해 동일한 정렬을 공유하며(약 18개 리스트에 적용 — cost, DNS, hotspots, pareto, scorecard, movers, slowest, efficiency 등), 컴팩트 티저는 고정 top-N을 유지합니다.
 - **플로우 아카이브 + Athena 기반 History** — `nfm-dashboard-flows`의 DynamoDB Stream(NEW_IMAGE)이 transform Lambda → Kinesis Firehose(Glue 스키마 기반 Parquet 변환, 동적 `dt` 파티셔닝) → S3 아카이브 버킷으로 이어지며, Glue에 카탈로그(파티션 프로젝션, 크롤러 없음)되고 전용 Athena 워크그룹으로 조회됩니다. 이는 7일 DynamoDB TTL이 플로우를 삭제하기 전에 아카이브하여, History 페이지(`/history`)가 7일을 넘는 임의 기간을 온디맨드로 조회할 수 있게 합니다. DynamoDB는 핫 운영 저장소(버스트 쓰기, 키 기반 최근 구간 읽기, 7일 TTL)로 유지되고, S3 + Parquet + Athena는 콜드 장기 분석 계층입니다.
 - **이중 언어·테마·반응형** — ko/en i18n(SSE 상태 메시지 포함), SnowUI 디자인 토큰의 라이트/다크 테마, iPhone(Safari) 반응형 레이아웃.
 
@@ -495,8 +501,10 @@ nfm-dashboard/
                #    DynamoDB Stream -> transform Lambda -> Firehose -> S3/Parquet -> Glue + Athena)
   app/         # Next.js 16 풀스택 (App Router, Tailwind v4, React Flow 토폴로지,
                #   SnowUI 디자인 토큰, i18n ko/en, 모바일 반응형)
-               #   src/app/history (Athena 기반 history 페이지),
-               #   src/lib/athena.ts (buildHistorySql + runHistoryQuery)
+               #   src/app/history (Athena 기반 history 페이지 + history-sort.ts 열 감지),
+               #   src/lib/athena.ts (buildHistorySql + runHistoryQuery),
+               #   src/lib/graph-focus.ts + graph-layout.ts (토폴로지 ego/결정적 레이아웃),
+               #   src/lib/use-sortable.ts + src/components/SortableHeader.tsx (정렬 가능한 테이블/리스트)
   collector/   # Collector Lambda (TypeScript, esbuild -> dist/handler.mjs) —
                #   NFM 쿼리/정규화/저장/자동 온보딩;
                #   src/archive-transform.ts -> dist/archive-transform.mjs (DDB Stream -> Firehose 변환)
