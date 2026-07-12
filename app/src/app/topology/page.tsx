@@ -14,19 +14,19 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
 import { filterTopology, resolveEdge, type TierLevel } from '@/lib/topology';
-import { buildGraphModel } from '@/lib/topology-graph';
+import { buildGraphModel, DEFAULT_HEALTH_THRESHOLD, DEFAULT_HEALTH_WARN_THRESHOLD } from '@/lib/topology-graph';
 import type { HealthLevel } from '@/lib/analytics/edge-health';
 import { RETRANS_RATE_DANGER, RETRANS_RATE_WARN } from '@/lib/analytics/aggregate';
 import { CATEGORY_ORDER, STATUS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import NetworkGraph from '@/components/topology/NetworkGraph';
-import GraphLegend from '@/components/topology/GraphLegend';
+import GraphLegend, { type HealthStatus } from '@/components/topology/GraphLegend';
 import TagFilterPanel from '@/components/topology/TagFilterPanel';
 import AdjacencyMatrix from '@/components/topology/AdjacencyMatrix';
 import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
 import HopPath from '@/components/HopPath';
 import { CategoryChip } from '@/components/FlowTable';
-import { Card, Select } from '@/components/ui/Controls';
+import { Card, NumberInput, Select } from '@/components/ui/Controls';
 
 const METRICS: MetricName[] = ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS', 'ROUND_TRIP_TIME'];
 const LEVELS: { value: TierLevel; labelKey: string }[] = [
@@ -43,6 +43,19 @@ const HEALTH_LEVELS: { value: HealthLevel; labelKey: string }[] = [
   { value: 'vpc', labelKey: 'topology.levelVpc' },
 ];
 const HEALTH_STATUSES = ['ok', 'warn', 'danger'] as const;
+
+// Min-traffic slider (Phase 14 Task 1): a quadratic mapping between the
+// slider position and the cut value gives finer control near zero, where
+// most meaningful cuts on a long-tailed traffic distribution live.
+const MIN_TRAFFIC_SLIDER_STEPS = 1000;
+function sliderPosFromValue(value: number, max: number): number {
+  if (max <= 0) return 0;
+  return Math.round(Math.sqrt(Math.min(Math.max(value, 0), max) / max) * MIN_TRAFFIC_SLIDER_STEPS);
+}
+function valueFromSliderPos(pos: number, max: number): number {
+  const frac = pos / MIN_TRAFFIC_SLIDER_STEPS;
+  return Math.round(max * frac * frac);
+}
 
 /** n most-recent 5-minute grid buckets, newest first (mirrors collector formula).
  *  Duplicated from flows/page.tsx: ddb.ts is server-only (AWS SDK) and can't be
@@ -159,6 +172,20 @@ export default function TopologyPage() {
   // Kept as the edge object (not id) so a poll refresh can't blank the panel.
   const [selectedEdge, setSelectedEdge] = useState<TopoEdge | null>(null);
 
+  // Phase 14 Task 1 — min-traffic threshold (cuts low-value edges + orphaned
+  // nodes from the graph model) and tunable edge-health warn/danger
+  // thresholds (retransmissions per GB; defaults match today's values).
+  const [minEdgeValue, setMinEdgeValue] = useState(0);
+  const [healthWarn, setHealthWarn] = useState(DEFAULT_HEALTH_WARN_THRESHOLD);
+  const [healthDanger, setHealthDanger] = useState(DEFAULT_HEALTH_THRESHOLD);
+  // Interactive legend: clicking a health class isolates it (dims the rest);
+  // clicking the active one again clears back to "show all".
+  const [healthFilter, setHealthFilter] = useState<HealthStatus | null>(null);
+  const toggleHealthFilter = (h: HealthStatus) => setHealthFilter((cur) => (cur === h ? null : h));
+  // A metric switch changes the value scale entirely (bytes vs RTT vs
+  // counts) — a stale cut in the old unit would silently hide everything.
+  useEffect(() => setMinEdgeValue(0), [metric]);
+
   // Task 8 — matrix render mode: 'metric' (default, unchanged) or 'health'
   // (RED/AMBER/GREEN by connection health). healthLevel is independent of
   // `level` above: buildHealthMatrix keys directly off raw FlowEdge endpoint
@@ -212,6 +239,41 @@ export default function TopologyPage() {
     () => (data ? filterTopology(data, cluster, category) : null),
     [data, cluster, category],
   );
+
+  // Min-traffic slider range: 0..max selected-metric value over the
+  // currently-scoped (cluster/category) cross-node edges. Self-loops don't
+  // participate in the cut, so they're excluded from the max too.
+  const maxEdgeValue = useMemo(() => {
+    let max = 0;
+    for (const e of topology?.edges ?? []) {
+      if (e.source === e.target) continue;
+      const v = e.metrics[metric] ?? 0;
+      if (v > max) max = v;
+    }
+    return max;
+  }, [topology, metric]);
+  // hiddenEdgeCount for the "{n} hidden" label — mirrors exactly what
+  // NetworkGraph builds internally from the same inputs (pure function, so
+  // recomputing here is cheap and always stays in sync).
+  const hiddenEdgeCount = useMemo(
+    () =>
+      topology
+        ? buildGraphModel(topology, {
+            metric,
+            selectedIds,
+            minEdgeValue,
+            healthThreshold: healthDanger,
+            healthWarnThreshold: healthWarn,
+          }).hiddenEdgeCount
+        : 0,
+    [topology, metric, selectedIds, minEdgeValue, healthDanger, healthWarn],
+  );
+
+  // Clamp the min-traffic cut if a narrower cluster/category scope (or a
+  // metric switch) drops the max below the currently-set cut value.
+  useEffect(() => {
+    setMinEdgeValue((v) => Math.min(v, maxEdgeValue));
+  }, [maxEdgeValue]);
 
   const labelOf = useMemo(() => {
     const labels = new Map((data?.nodes ?? []).map((n) => [n.id, n.label]));
@@ -340,6 +402,49 @@ export default function TopologyPage() {
             allLabel={t('filter.all')}
             options={CATEGORY_ORDER.map((c) => ({ value: c, label: t(`category.${c}`) }))}
           />
+          {view === 'graph' ? (
+            <>
+              <div className="flex flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60">
+                <label htmlFor="topology-min-traffic-input">
+                  {t('topology.minTraffic')}: {formatMetricValue(metric, minEdgeValue)}
+                  {hiddenEdgeCount > 0 ? ` · ${t('topology.hiddenEdges', { n: hiddenEdgeCount })}` : ''}
+                </label>
+                <input
+                  id="topology-min-traffic-input"
+                  type="range"
+                  min={0}
+                  max={MIN_TRAFFIC_SLIDER_STEPS}
+                  step={1}
+                  value={sliderPosFromValue(minEdgeValue, maxEdgeValue)}
+                  onChange={(e) => setMinEdgeValue(valueFromSliderPos(Number(e.target.value), maxEdgeValue))}
+                  disabled={maxEdgeValue <= 0}
+                  data-testid="topology-min-traffic"
+                  className="h-9 w-36 accent-chartViolet disabled:opacity-40"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-ink/60 dark:text-white/60">
+                  {t('topology.threshold.retrans')}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <NumberInput
+                    label={t('graph.status.warn')}
+                    value={healthWarn}
+                    onChange={setHealthWarn}
+                    min={0}
+                    testId="topology-threshold-warn"
+                  />
+                  <NumberInput
+                    label={t('graph.status.danger')}
+                    value={healthDanger}
+                    onChange={setHealthDanger}
+                    min={0}
+                    testId="topology-threshold-danger"
+                  />
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -360,6 +465,10 @@ export default function TopologyPage() {
                   generatedAt={data?.generatedAt}
                   paused={paused}
                   onTogglePause={() => setPaused((p) => !p)}
+                  healthWarnThreshold={healthWarn}
+                  healthDangerThreshold={healthDanger}
+                  healthFilter={healthFilter}
+                  onHealthFilterToggle={toggleHealthFilter}
                 />
                 <NetworkGraph
                   topology={topology}
@@ -368,6 +477,10 @@ export default function TopologyPage() {
                   focusId={focusId}
                   onNodeSelect={setFocusId}
                   onLinkSelect={selectGraphLink}
+                  minEdgeValue={minEdgeValue}
+                  healthThreshold={healthDanger}
+                  healthWarnThreshold={healthWarn}
+                  healthFilter={healthFilter}
                 />
               </div>
             ) : (

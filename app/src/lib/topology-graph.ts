@@ -41,8 +41,10 @@ export interface GraphModel {
   links: GraphLink[];
   /** All nodes in the input snapshot (before tag selection). */
   total: number;
-  /** Nodes actually rendered (after tag selection). */
+  /** Nodes actually rendered (after tag selection + min-traffic cut). */
   selected: number;
+  /** Links cut by minEdgeValue (below the min-traffic threshold) — drives the "{n} hidden" UI. */
+  hiddenEdgeCount: number;
 }
 
 export interface BuildGraphOpts {
@@ -51,8 +53,10 @@ export interface BuildGraphOpts {
   windowSeconds?: number;
   /** Links whose DATA_TRANSFERRED bytes/s rate exceeds this are drawn dashed. */
   rateThreshold?: number;
-  /** Danger threshold for link health, in retransmissions per GB (warn at half). */
+  /** Danger threshold for link health, in retransmissions per GB. */
   healthThreshold?: number;
+  /** Warn threshold for link health, in retransmissions per GB. Defaults to healthThreshold/2 (today's derived formula) when omitted — set explicitly to tune it independently of the danger threshold. */
+  healthWarnThreshold?: number;
   /** Tag filter: non-empty set keeps only those nodes (+ links with both ends kept). */
   selectedIds?: Set<string> | null;
   /** Node ids in reliability breach → status danger. */
@@ -61,6 +65,14 @@ export interface BuildGraphOpts {
   warns?: Set<string>;
   /** [min, max] circle radius in px for the sqrt traffic scale. */
   radiusRange?: [number, number];
+  /**
+   * Min-traffic cut: links whose selected-metric VALUE is below this are
+   * dropped from the model; a node left with no remaining link AND no
+   * self-loop is dropped too (nodes that already had zero links before the
+   * cut are untouched). 0 (default) = no cut — byte-identical to before
+   * this option existed.
+   */
+  minEdgeValue?: number;
 }
 
 export const DEFAULT_RATE_THRESHOLD = 128;
@@ -68,6 +80,10 @@ export const DEFAULT_WINDOW_SECONDS = 300;
 export const DEFAULT_RADIUS_RANGE: [number, number] = [18, 56];
 /** Danger threshold in retransmissions per GB — matches network-analytics DEFAULT_RETRANS_THRESHOLD. */
 export const DEFAULT_HEALTH_THRESHOLD = 10;
+/** Default warn threshold — half of DEFAULT_HEALTH_THRESHOLD (today's formula, now independently tunable via healthWarnThreshold). */
+export const DEFAULT_HEALTH_WARN_THRESHOLD = DEFAULT_HEALTH_THRESHOLD / 2;
+/** Default min-traffic cut — 0 = no edges hidden (today's behavior). */
+export const DEFAULT_MIN_EDGE_VALUE = 0;
 
 /** Events per GB with 0-division guard: bytes=0 → 0 (no traffic ≠ infinitely bad) — same formula as analytics ratePerGb. */
 function ratePerGb(events: number, bytes: number): number {
@@ -79,6 +95,10 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
   const windowSeconds = opts.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
   const threshold = opts.rateThreshold ?? DEFAULT_RATE_THRESHOLD;
   const healthThreshold = opts.healthThreshold ?? DEFAULT_HEALTH_THRESHOLD;
+  // Independently tunable; defaults to half of healthThreshold only when
+  // healthWarnThreshold itself is omitted (preserves the original formula).
+  const healthWarnThreshold = opts.healthWarnThreshold ?? healthThreshold / 2;
+  const minEdgeValue = opts.minEdgeValue ?? DEFAULT_MIN_EDGE_VALUE;
   const [rMin, rMax] = opts.radiusRange ?? DEFAULT_RADIUS_RANGE;
 
   // Tag selection: an empty/absent set means "all nodes".
@@ -87,8 +107,7 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
   const keptIds = new Set(keptNodes.map((n) => n.id));
 
   const selfBytes = new Map<string, number>();
-  const traffic = new Map<string, number>();
-  const links: GraphLink[] = [];
+  const allLinks: GraphLink[] = [];
   for (const e of topo.edges) {
     const value = e.metrics[metric] ?? 0;
     if (e.source === e.target) {
@@ -105,7 +124,7 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
     // Health always encodes retransmissions per GB of DATA_TRANSFERRED,
     // independent of the selected sizing/label metric (Datadog-CNM style).
     const retransRate = ratePerGb(e.metrics.RETRANSMISSIONS ?? 0, bytes);
-    links.push({
+    allLinks.push({
       id: e.id,
       source: e.source,
       target: e.target,
@@ -113,19 +132,50 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
       rate,
       dashed: rate > threshold,
       health:
-        retransRate >= healthThreshold ? 'danger' : retransRate >= healthThreshold / 2 ? 'warn' : 'ok',
+        retransRate >= healthThreshold ? 'danger' : retransRate >= healthWarnThreshold ? 'warn' : 'ok',
       category: e.category,
     });
-    traffic.set(e.source, (traffic.get(e.source) ?? 0) + value);
-    traffic.set(e.target, (traffic.get(e.target) ?? 0) + value);
+  }
+
+  // Min-traffic cut: drop links whose selected-metric VALUE (never `rate`,
+  // which always stays DATA_TRANSFERRED throughput) is below minEdgeValue.
+  // minEdgeValue<=0 removes nothing, so `links` stays the same array/order as
+  // before this option existed — output is byte-identical by construction.
+  const links = minEdgeValue > 0 ? allLinks.filter((l) => l.value >= minEdgeValue) : allLinks;
+  const hiddenEdgeCount = allLinks.length - links.length;
+
+  // Nodes orphaned by the cut: had >=1 link before it, but neither a
+  // remaining link nor a self-loop after. Nodes with zero links from the
+  // start (already-idle floating nodes) are untouched either way.
+  let orphanedIds: Set<string> = new Set();
+  if (hiddenEdgeCount > 0) {
+    const linkedBefore = new Set<string>();
+    for (const l of allLinks) {
+      linkedBefore.add(l.source);
+      linkedBefore.add(l.target);
+    }
+    const incidentAfter = new Set<string>();
+    for (const l of links) {
+      incidentAfter.add(l.source);
+      incidentAfter.add(l.target);
+    }
+    for (const [id, v] of selfBytes) if (v > 0) incidentAfter.add(id);
+    orphanedIds = new Set([...linkedBefore].filter((id) => !incidentAfter.has(id)));
+  }
+  const renderedNodes = orphanedIds.size > 0 ? keptNodes.filter((n) => !orphanedIds.has(n.id)) : keptNodes;
+
+  const traffic = new Map<string, number>();
+  for (const l of links) {
+    traffic.set(l.source, (traffic.get(l.source) ?? 0) + l.value);
+    traffic.set(l.target, (traffic.get(l.target) ?? 0) + l.value);
   }
   for (const [id, v] of selfBytes) traffic.set(id, (traffic.get(id) ?? 0) + v);
 
-  const maxTraffic = Math.max(0, ...keptNodes.map((n) => traffic.get(n.id) ?? 0));
+  const maxTraffic = Math.max(0, ...renderedNodes.map((n) => traffic.get(n.id) ?? 0));
   const radiusOf = (v: number) =>
     maxTraffic <= 0 ? rMin : rMin + (rMax - rMin) * Math.sqrt(v / maxTraffic);
 
-  const nodes: GraphNode[] = keptNodes.map((n) => {
+  const nodes: GraphNode[] = renderedNodes.map((n) => {
     const nodeTraffic = traffic.get(n.id) ?? 0;
     const status: GraphNode['status'] = opts.breaches?.has(n.id)
       ? 'danger'
@@ -145,5 +195,5 @@ export function buildGraphModel(topo: TopologySnapshot, opts: BuildGraphOpts = {
     };
   });
 
-  return { nodes, links, total: topo.nodes.length, selected: nodes.length };
+  return { nodes, links, total: topo.nodes.length, selected: nodes.length, hiddenEdgeCount };
 }

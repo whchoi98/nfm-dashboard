@@ -44,6 +44,8 @@ interface CircleNodeData extends GraphNode {
   /** Active metric — the self-loop label must match the edge labels' unit. */
   metric: MetricName;
   selfLoopTitle: string;
+  /** Dimmed when a legend health-class filter is active and this node has no edge in that class (Phase 14 Task 1). */
+  muted: boolean;
 }
 
 // Both handles sit invisibly at the circle center so edges run center→center;
@@ -65,7 +67,11 @@ function CircleNodeView({ data }: NodeProps<CircleNodeData>) {
   const color = statusColor(data.status);
   const size = data.radius * 2;
   return (
-    <div className="relative" style={{ width: size, height: size }} title={data.label}>
+    <div
+      className="relative"
+      style={{ width: size, height: size, opacity: data.muted ? 0.25 : 1 }}
+      title={data.label}
+    >
       <Handle type="target" position={Position.Top} style={centerHandle} />
       <Handle type="source" position={Position.Bottom} style={centerHandle} />
       {/* translucent fill layer (keeps border + ring fully opaque) */}
@@ -210,6 +216,10 @@ function NetworkGraphInner({
   focusId = null,
   onNodeSelect,
   onLinkSelect,
+  minEdgeValue = 0,
+  healthThreshold,
+  healthWarnThreshold,
+  healthFilter = null,
 }: {
   topology: TopologySnapshot;
   metric: MetricName;
@@ -219,12 +229,28 @@ function NetworkGraphInner({
   focusId?: string | null;
   onNodeSelect?: (id: string) => void;
   onLinkSelect?: (source: string, target: string) => void;
+  /** Min-traffic threshold (Phase 14 Task 1) — links below this VALUE are cut. */
+  minEdgeValue?: number;
+  /** Tunable edge-health thresholds (retransmissions per GB); default to topology-graph's own defaults when omitted. */
+  healthThreshold?: number;
+  healthWarnThreshold?: number;
+  /** Active legend isolate filter — edges/nodes outside this health class are dimmed. */
+  healthFilter?: GraphLink['health'] | null;
 }) {
   const { t } = useLanguage();
 
   const model = useMemo(
-    () => buildGraphModel(topology, { metric, selectedIds, breaches, warns }),
-    [topology, metric, selectedIds, breaches, warns],
+    () =>
+      buildGraphModel(topology, {
+        metric,
+        selectedIds,
+        breaches,
+        warns,
+        minEdgeValue,
+        healthThreshold,
+        healthWarnThreshold,
+      }),
+    [topology, metric, selectedIds, breaches, warns, minEdgeValue, healthThreshold, healthWarnThreshold],
   );
 
   // Layout is keyed by the structural identity (sorted node + link id sets) so
@@ -243,6 +269,18 @@ function NetworkGraphInner({
   const focusPresent = focusId != null && model.nodes.some((n) => n.id === focusId);
   const activeFocusId = focusPresent ? focusId : null;
 
+  // Legend isolate filter (Phase 14 Task 1): nodes touching >=1 edge in the
+  // active health class stay full-opacity; everything else dims. A self-loop
+  // has no health classification, so a node with only a self-loop dims too
+  // when a filter is active — it isn't part of that edge-health class.
+  const nodesInHealthClass = useMemo(
+    () =>
+      healthFilter == null
+        ? null
+        : new Set(model.links.filter((l) => l.health === healthFilter).flatMap((l) => [l.source, l.target])),
+    [model, healthFilter],
+  );
+
   const { layoutNodes, rfEdges } = useMemo(() => {
     const radii = new Map(model.nodes.map((n) => [n.id, n.radius]));
     // Selected-metric value → stroke width (sqrt scale, like node radii).
@@ -257,7 +295,13 @@ function NetworkGraphInner({
         type: 'circle',
         // d3-force coordinates are circle centers; RF positions are top-left.
         position: { x: p.x - n.radius, y: p.y - n.radius },
-        data: { ...n, focused: n.id === activeFocusId, metric, selfLoopTitle: t('graph.selfLoop') },
+        data: {
+          ...n,
+          focused: n.id === activeFocusId,
+          metric,
+          selfLoopTitle: t('graph.selfLoop'),
+          muted: nodesInHealthClass != null && !nodesInHealthClass.has(n.id),
+        },
         connectable: false,
       };
     });
@@ -272,7 +316,9 @@ function NetworkGraphInner({
         dashed: l.dashed,
         health: l.health,
         width: widthOf(l.value),
-        muted: activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId,
+        muted:
+          (activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId) ||
+          (healthFilter != null && l.health !== healthFilter),
         sourceRadius: radii.get(l.source) ?? 0,
         targetRadius: radii.get(l.target) ?? 0,
       },
@@ -282,7 +328,7 @@ function NetworkGraphInner({
       interactionWidth: 16,
     }));
     return { layoutNodes, rfEdges };
-  }, [model, positions, activeFocusId, metric, t]);
+  }, [model, positions, activeFocusId, metric, t, nodesInHealthClass, healthFilter]);
 
   // Positions live in state so manual drags stick (onNodesChange applies RF's
   // drag deltas). Sync from layoutNodes during render (React's "adjust state

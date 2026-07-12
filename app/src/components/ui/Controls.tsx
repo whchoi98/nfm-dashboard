@@ -85,3 +85,43 @@ export function TextInput({
     </label>
   );
 }
+
+export function NumberInput({
+  label,
+  value,
+  onChange,
+  min = 0,
+  step = 1,
+  testId,
+  title,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  step?: number;
+  testId?: string;
+  title?: string;
+}) {
+  return (
+    <label
+      className="flex max-w-full flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60"
+      title={title}
+    >
+      {label}
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value}
+        min={min}
+        step={step}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (Number.isFinite(v)) onChange(v);
+        }}
+        data-testid={testId}
+        className={`${fieldCls} w-20`}
+      />
+    </label>
+  );
+}

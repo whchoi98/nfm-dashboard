@@ -239,5 +239,87 @@ describe('buildGraphModel', () => {
         expect(buildGraphModel(t, { metric }).links[0].health).toBe('danger');
       }
     });
+
+    // ── tunable warn/danger thresholds (Phase 14 Task 1) ──
+    it('reads the warn threshold from options independently of the danger threshold', () => {
+      const t = topo([
+        { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: GB, RETRANSMISSIONS: 6 }, category: 'INTRA_AZ' },
+      ]);
+      // default: healthThreshold=10 → warn boundary = 5 (half) → rate 6 ≥ 5 → warn.
+      expect(buildGraphModel(t).links[0].health).toBe('warn');
+      // explicit healthWarnThreshold overrides the derived half — 7 > 6 → ok.
+      expect(buildGraphModel(t, { healthWarnThreshold: 7 }).links[0].health).toBe('ok');
+      // explicit healthThreshold (danger) independent of warn — 6 ≥ 6 → danger,
+      // even though today's derived half(10)/2=5 boundary alone would say warn.
+      expect(buildGraphModel(t, { healthThreshold: 6 }).links[0].health).toBe('danger');
+    });
+  });
+});
+
+// ── min-traffic threshold (Phase 14 Task 1) ──────────────────────────────────
+describe('buildGraphModel — min-traffic cut (minEdgeValue)', () => {
+  it('minEdgeValue:0 (default) is byte-identical to omitting the option', () => {
+    const t = topo([
+      { id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 10 }, category: 'INTRA_AZ' },
+      { id: 'e2', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: 0 }, category: 'INTRA_AZ' },
+    ]);
+    const withOpt = buildGraphModel(t, { minEdgeValue: 0 });
+    const without = buildGraphModel(t);
+    expect(withOpt).toEqual(without);
+    expect(withOpt.hiddenEdgeCount).toBe(0);
+  });
+
+  it('drops edges whose selected-metric value is below minEdgeValue and reports hiddenEdgeCount', () => {
+    const t = topo([
+      { id: 'big', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 1000 }, category: 'INTRA_AZ' },
+      { id: 'small', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: 5 }, category: 'INTRA_AZ' },
+    ]);
+    const m = buildGraphModel(t, { minEdgeValue: 100 });
+    expect(m.links.map((l) => l.id)).toEqual(['big']);
+    expect(m.hiddenEdgeCount).toBe(1);
+  });
+
+  it('drops nodes orphaned by the cut (their only link fell below the threshold)', () => {
+    const t = topo([
+      { id: 'big', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 1000 }, category: 'INTRA_AZ' },
+      { id: 'small', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: 5 }, category: 'INTRA_AZ' },
+    ]);
+    const m = buildGraphModel(t, { minEdgeValue: 100 });
+    // c's only edge ('small') was cut → orphaned, dropped. a/b keep 'big'.
+    expect(m.nodes.map((n) => n.id).sort()).toEqual(['a', 'b']);
+    expect(m.selected).toBe(2);
+    expect(m.total).toBe(3); // full topo node count, unaffected by the cut
+  });
+
+  it('keeps a node whose only cross-node link is cut but which still carries a self-loop', () => {
+    const t = topo(
+      [
+        { id: 'self', source: 'c', target: 'c', metrics: { DATA_TRANSFERRED: 999 }, category: 'INTRA_AZ' },
+        { id: 'small', source: 'b', target: 'c', metrics: { DATA_TRANSFERRED: 5 }, category: 'INTRA_AZ' },
+      ],
+      [
+        { id: 'b', kind: 'pod', label: 'b' },
+        { id: 'c', kind: 'pod', label: 'c' },
+      ],
+    );
+    const m = buildGraphModel(t, { minEdgeValue: 100 });
+    expect(m.nodes.map((n) => n.id)).toContain('c');
+    expect(m.nodes.find((n) => n.id === 'c')!.selfBytes).toBe(999);
+  });
+
+  it('leaves nodes that already had zero links before the cut untouched (not newly "orphaned")', () => {
+    const t = topo(
+      [{ id: 'e1', source: 'a', target: 'b', metrics: { DATA_TRANSFERRED: 5 }, category: 'INTRA_AZ' }],
+      [
+        { id: 'a', kind: 'pod', label: 'a' },
+        { id: 'b', kind: 'pod', label: 'b' },
+        { id: 'z', kind: 'pod', label: 'z' }, // isolated from the start, no edges at all
+      ],
+    );
+    const m = buildGraphModel(t, { minEdgeValue: 100 }); // cuts e1 too
+    const ids = m.nodes.map((n) => n.id);
+    expect(ids).toContain('z'); // untouched — was never linked, cut or not
+    expect(ids).not.toContain('a'); // had a link that got cut → orphaned
+    expect(ids).not.toContain('b');
   });
 });
