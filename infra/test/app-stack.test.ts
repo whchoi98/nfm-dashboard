@@ -7,7 +7,7 @@ import { AppStack } from '../lib/app-stack';
 // `imageTag` is required context (deploys pin the immutable per-commit SHA tag).
 const template = () => Template.fromStack(new AppStack(
   new App({ context: { imageTag: 'test' } }), 'T',
-  { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } }));
+  { env: { account: '123456789012', region: 'ap-northeast-2' } }));
 
 it('ALB SG ingress is ONLY the CloudFront origin-facing prefix list on :80', () => {
   const t = template();
@@ -49,7 +49,7 @@ it('TaskDefinition is arm64 Fargate with prod env and no AUTH_DISABLED', () => {
 
 it('AppStack synth fails fast when the imageTag context is missing', () => {
   expect(() => Template.fromStack(new AppStack(new App(), 'T',
-    { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } })))
+    { env: { account: '123456789012', region: 'ap-northeast-2' } })))
     .toThrow(/imageTag/);
 });
 

@@ -13,7 +13,7 @@ import { TIME_RANGES, type TimeRange } from '@/lib/analytics/filters';
 import { DEFAULT_SETTINGS, useSettings } from '@/lib/settings';
 
 const SNS_SUBSCRIBE_CMD =
-  'aws sns subscribe --topic-arn arn:aws:sns:ap-northeast-2:<ACCOUNT_ID>:nfm-dashboard-alarms --protocol email --notification-endpoint you@example.com';
+  'aws sns subscribe --topic-arn arn:aws:sns:ap-northeast-2:<account-id>:nfm-dashboard-alarms --protocol email --notification-endpoint you@example.com';
 
 /** The four numeric settings rendered as validated number fields. */
 const NUMBER_FIELDS = ['retransThreshold', 'timeoutThreshold', 'costPerGb', 'anomalySigma'] as const;

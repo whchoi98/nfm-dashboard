@@ -64,9 +64,9 @@ export class DataStack extends cdk.Stack {
       'ec2:DescribeInstances', 'ec2:CreateTags'], resources: ['*'] }));
     this.collector.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:ListAttachedRolePolicies', 'iam:GetInstanceProfile'],
-      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*', 'arn:aws:iam::<ACCOUNT_ID>:instance-profile/*'] }));
+      resources: [`arn:aws:iam::${this.account}:role/*`, `arn:aws:iam::${this.account}:instance-profile/*`] }));
     this.collector.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['iam:AttachRolePolicy'], resources: ['arn:aws:iam::<ACCOUNT_ID>:role/*'],
+      actions: ['iam:AttachRolePolicy'], resources: [`arn:aws:iam::${this.account}:role/*`],
       conditions: { ArnEquals: { 'iam:PolicyARN':
         'arn:aws:iam::aws:policy/CloudWatchNetworkFlowMonitorAgentPublishPolicy' } } }));
     // DNS pass: Logs Insights over CoreDNS (Container Insights) + Resolver query log groups.
@@ -74,9 +74,9 @@ export class DataStack extends cdk.Stack {
     // (no resource type in the CWL service authorization reference), so they need '*'.
     this.collector.addToRolePolicy(new iam.PolicyStatement({ actions: ['logs:StartQuery'],
       resources: [
-        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/containerinsights/*',
-        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/nfm-dashboard/resolver-dns',
-        'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/nfm-dashboard/resolver-dns:*'] }));
+        `arn:aws:logs:ap-northeast-2:${this.account}:log-group:/aws/containerinsights/*`,
+        `arn:aws:logs:ap-northeast-2:${this.account}:log-group:/nfm-dashboard/resolver-dns`,
+        `arn:aws:logs:ap-northeast-2:${this.account}:log-group:/nfm-dashboard/resolver-dns:*`] }));
     this.collector.addToRolePolicy(new iam.PolicyStatement({
       actions: ['logs:GetQueryResults', 'logs:StopQuery'], resources: ['*'] }));
 
@@ -91,10 +91,10 @@ export class DataStack extends cdk.Stack {
     // DynamoDB Streams (NEW_IMAGE on flows) → transform Lambda → Firehose (Parquet
     // conversion via the Glue schema) → S3, catalogued in Glue + queryable via Athena.
     // Fixed resource names so app-stack can reference them by name/ARN (no cross-stack export).
-    const region = 'ap-northeast-2';
-    const account = '<ACCOUNT_ID>';
-    const ARCHIVE_BUCKET = 'nfm-dashboard-flow-archive-<ACCOUNT_ID>';
-    const RESULTS_BUCKET = 'nfm-dashboard-athena-results-<ACCOUNT_ID>';
+    const region = this.region;
+    const account = this.account;
+    const ARCHIVE_BUCKET = `nfm-dashboard-flow-archive-${account}`;
+    const RESULTS_BUCKET = `nfm-dashboard-athena-results-${account}`;
     const GLUE_DB = 'nfm_dashboard';
     const GLUE_TABLE = 'flows_archive';
     const ATHENA_WG = 'nfm-dashboard';

@@ -46,11 +46,11 @@ export class AgentCoreStack extends cdk.Stack {
       'networkflowmonitor:StopQueryWorkloadInsightsTopContributors',
       'cloudwatch:GetMetricData', 'cloudwatch:ListMetrics'], resources: ['*'] }));
     nfm.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:Query'],
-      resources: [`arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*`,
-        `arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*/index/*`] }));
+      resources: [`arn:aws:dynamodb:ap-northeast-2:${this.account}:table/nfm-dashboard-*`,
+        `arn:aws:dynamodb:ap-northeast-2:${this.account}:table/nfm-dashboard-*/index/*`] }));
     ddbF.addToRolePolicy(new iam.PolicyStatement({ actions: ['dynamodb:GetItem', 'dynamodb:Query'],
-      resources: [`arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*`,
-        `arn:aws:dynamodb:ap-northeast-2:<ACCOUNT_ID>:table/nfm-dashboard-*/index/*`] }));
+      resources: [`arn:aws:dynamodb:ap-northeast-2:${this.account}:table/nfm-dashboard-*`,
+        `arn:aws:dynamodb:ap-northeast-2:${this.account}:table/nfm-dashboard-*/index/*`] }));
     const gwRole = new iam.Role(this, 'GatewayRole', { roleName: 'nfm-dashboard-gateway-role',
       assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com') });
     gwRole.addToPolicy(new iam.PolicyStatement({ actions: ['lambda:InvokeFunction'],

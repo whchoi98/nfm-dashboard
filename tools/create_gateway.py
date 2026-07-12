@@ -18,13 +18,16 @@ rejects that, all targets and the gateway are deleted and recreated with AWS_IAM
 필요하다. 기존 게이트웨이의 authorizerType이 다르면 update_gateway로 in-place
 전환을 시도하고, 거부되면 타겟과 게이트웨이를 삭제 후 AWS_IAM으로 재생성한다.
 """
+import os
 import sys
 import time
 
 import boto3
 from botocore.exceptions import ClientError
 
-REGION, ACCOUNT = "ap-northeast-2", "<ACCOUNT_ID>"
+REGION = os.environ.get("AWS_REGION", "ap-northeast-2")
+# Account from AWS_ACCOUNT_ID, else resolved from the caller's credentials (STS).
+ACCOUNT = os.environ.get("AWS_ACCOUNT_ID") or boto3.client("sts").get_caller_identity()["Account"]
 GATEWAY_NAME = "nfm-gateway"
 DESIRED_AUTH = "AWS_IAM"  # accepted values: CUSTOM_JWT | AWS_IAM | NONE
 READY_POLL_MAX = 60  # max poll iterations (x5s = ~5 min) before giving up

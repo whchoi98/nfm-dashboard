@@ -8,7 +8,7 @@ import { OpsAlarmsStack } from '../lib/ops-alarms';
 // so synth both. `imageTag` is required context for AppStack.
 const template = () => {
   const app = new App({ context: { imageTag: 'test' } });
-  const env = { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' };
+  const env = { account: '123456789012', region: 'ap-northeast-2' };
   const appStack = new AppStack(app, 'TApp', { env });
   return Template.fromStack(new OpsAlarmsStack(app, 'TOps', {
     env, alb: appStack.alb, targetGroup: appStack.targetGroup }));

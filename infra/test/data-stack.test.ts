@@ -5,7 +5,7 @@ import { DataStack } from '../lib/data-stack';
 
 it('DataStack has 2 tables with TTL+GSIs, collector fn, 5min schedule', () => {
   const t = Template.fromStack(new DataStack(new App(), 'T',
-    { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } }));
+    { env: { account: '123456789012', region: 'ap-northeast-2' } }));
   t.hasResourceProperties('AWS::DynamoDB::Table', {
     TableName: 'nfm-dashboard-flows',
     TimeToLiveSpecification: { AttributeName: 'ttl', Enabled: true } });
@@ -18,7 +18,7 @@ it('DataStack has 2 tables with TTL+GSIs, collector fn, 5min schedule', () => {
 
 it('DataStack collector has DNS env + Logs Insights IAM', () => {
   const t = Template.fromStack(new DataStack(new App(), 'T',
-    { env: { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' } }));
+    { env: { account: '123456789012', region: 'ap-northeast-2' } }));
   t.hasResourceProperties('AWS::Lambda::Function', {
     FunctionName: 'nfm-dashboard-collector',
     Environment: { Variables: Match.objectLike({
@@ -28,7 +28,7 @@ it('DataStack collector has DNS env + Logs Insights IAM', () => {
         'containerinsights/ekscluster01-iptables/application.*eksworkshop/application') }) } });
   t.hasResourceProperties('AWS::IAM::Policy', { PolicyDocument: { Statement: Match.arrayWith([
     Match.objectLike({ Action: 'logs:StartQuery', Resource: Match.arrayWith([
-      'arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/containerinsights/*']) }),
+      'arn:aws:logs:ap-northeast-2:123456789012:log-group:/aws/containerinsights/*']) }),
     Match.objectLike({ Action: ['logs:GetQueryResults', 'logs:StopQuery'], Resource: '*' }),
   ]) } });
 });

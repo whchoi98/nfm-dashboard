@@ -104,7 +104,7 @@ export class AppStack extends cdk.Stack {
       // RETAIN: the pool holds the user store — never delete it with the stack.
       removalPolicy: cdk.RemovalPolicy.RETAIN });
     const domain = userPool.addDomain('Domain', {
-      cognitoDomain: { domainPrefix: 'nfm-dashboard-<ACCOUNT_ID>' } });
+      cognitoDomain: { domainPrefix: `nfm-dashboard-${this.account}` } });
     const client = userPool.addClient('Client', {
       userPoolClientName: 'nfm-dashboard-app',
       generateSecret: false, // PUBLIC client — PKCE, the callback never sends a secret
@@ -211,14 +211,14 @@ export class AppStack extends cdk.Stack {
     task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: read Parquet objects from the flow archive bucket
       actions: ['s3:GetObject', 's3:ListBucket', 's3:GetBucketLocation'],
       resources: [
-        'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>',
-        'arn:aws:s3:::nfm-dashboard-flow-archive-<ACCOUNT_ID>/*'] }));
+        `arn:aws:s3:::nfm-dashboard-flow-archive-${this.account}`,
+        `arn:aws:s3:::nfm-dashboard-flow-archive-${this.account}/*`] }));
     task.addToPrincipalPolicy(new iam.PolicyStatement({ // S3: Athena writes/reads query results in this bucket
       // GetBucketLocation is required for Athena to verify the query-output bucket.
       actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket', 's3:GetBucketLocation'],
       resources: [
-        'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>',
-        'arn:aws:s3:::nfm-dashboard-athena-results-<ACCOUNT_ID>/*'] }));
+        `arn:aws:s3:::nfm-dashboard-athena-results-${this.account}`,
+        `arn:aws:s3:::nfm-dashboard-athena-results-${this.account}/*`] }));
 
     const service = new ecs.FargateService(this, 'Service', {
       cluster, taskDefinition: taskDef, serviceName: 'nfm-dashboard-app',

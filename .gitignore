@@ -15,3 +15,6 @@ coverage/
 *.local
 .DS_Store
 .claude/settings.local.json
+
+# CDK context cache (account + VPC lookup values) — regenerated locally on synth
+infra/cdk.context.json

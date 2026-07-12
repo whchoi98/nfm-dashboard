@@ -1,8 +1,11 @@
 """NFM onboarding custom resource: scope, monitors, EKS add-ons, pod identity. Idempotent."""
-import json, time, urllib.request
+import json, os, time, urllib.request
 import boto3
 
-REGION, ACCOUNT = "ap-northeast-2", "<ACCOUNT_ID>"
+REGION = os.environ.get("AWS_REGION", "ap-northeast-2")
+# Account is supplied via AWS_ACCOUNT_ID (falls back to the AWS canonical example
+# account so the source carries no real account id). Set it for real onboarding runs.
+ACCOUNT = os.environ.get("AWS_ACCOUNT_ID", "123456789012")
 PUBLISH_POLICY = "arn:aws:iam::aws:policy/CloudWatchNetworkFlowMonitorAgentPublishPolicy"
 NFM_NS, NFM_SA = "amazon-network-flow-monitor", "aws-network-flow-monitor-agent-service-account"
 

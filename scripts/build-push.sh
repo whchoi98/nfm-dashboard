@@ -5,7 +5,8 @@
 # Deploys must pin the SHA tag: cdk deploy NfmDash-App -c imageTag=<sha>
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ACCOUNT=<ACCOUNT_ID>; REGION=ap-northeast-2; REPO=nfm-dashboard-app
+ACCOUNT="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
+REGION=ap-northeast-2; REPO=nfm-dashboard-app
 TAG=${1:-$(git rev-parse --short HEAD)}
 # New repos are created tag-IMMUTABLE (the live repo has also been switched to
 # IMMUTABLE). Re-pushing an existing SHA tag is rejected by design: a new

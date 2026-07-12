@@ -7,7 +7,10 @@ import { OpsAlarmsStack } from '../lib/ops-alarms';
 import { DnsStack } from '../lib/dns-stack';
 
 const app = new cdk.App();
-const env = { account: '<ACCOUNT_ID>', region: 'ap-northeast-2' };
+const env = {
+  account: process.env.CDK_DEFAULT_ACCOUNT,
+  region: process.env.CDK_DEFAULT_REGION ?? 'ap-northeast-2',
+};
 new DataStack(app, 'NfmDash-Data', { env });
 new NfmOnboardingStack(app, 'NfmDash-Onboarding', { env });
 new AgentCoreStack(app, 'NfmDash-AgentCore', { env });

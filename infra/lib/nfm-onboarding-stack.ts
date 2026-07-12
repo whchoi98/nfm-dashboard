@@ -23,10 +23,10 @@ export class NfmOnboardingStack extends cdk.Stack {
     // 2) Role writes scoped to the per-cluster agent roles this Lambda itself creates.
     fn.addToRolePolicy(new iam.PolicyStatement({ actions: [
       'iam:GetRole', 'iam:CreateRole', 'iam:PassRole'],
-      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/nfm-agent-*'] }));
+      resources: [`arn:aws:iam::${this.account}:role/nfm-agent-*`] }));
     // 3) Policy attachment scoped to both the role prefix and the single publish policy.
     fn.addToRolePolicy(new iam.PolicyStatement({ actions: ['iam:AttachRolePolicy'],
-      resources: ['arn:aws:iam::<ACCOUNT_ID>:role/nfm-agent-*'],
+      resources: [`arn:aws:iam::${this.account}:role/nfm-agent-*`],
       conditions: { ArnEquals: { 'iam:PolicyARN':
         'arn:aws:iam::aws:policy/CloudWatchNetworkFlowMonitorAgentPublishPolicy' } } }));
     const cr = new cdk.CustomResource(this, 'Onboarding', { serviceToken: fn.functionArn,
