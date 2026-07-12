@@ -155,7 +155,13 @@ export default function ScorecardTab({ filters }: TabProps) {
 
       <Widget title={t('insights.scorecard.worst')} testId="widget-scorecard-worst">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={worstRows} valueFormatter={rate} testId="toplist-scorecard-worst" />
+          <Toplist
+            rows={worstRows}
+            valueFormatter={rate}
+            testId="toplist-scorecard-worst"
+            sortable
+            valueHeader={t('insights.scorecard.retransRate')}
+          />
         </LensState>
       </Widget>
 

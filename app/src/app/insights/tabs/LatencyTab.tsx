@@ -167,7 +167,13 @@ export default function LatencyTab({ filters }: TabProps) {
 
       <Widget title={t('insights.latency.slowest')} testId="widget-latency-slowest">
         <LensState loading={firstLoad} error={error} empty={slowRows.length === 0} emptyLabel={emptyLabel}>
-          <Toplist rows={slowRows} valueFormatter={formatMicros} testId="toplist-latency-slowest" />
+          <Toplist
+            rows={slowRows}
+            valueFormatter={formatMicros}
+            testId="toplist-latency-slowest"
+            sortable
+            valueHeader={t('metric.ROUND_TRIP_TIME')}
+          />
         </LensState>
       </Widget>
 

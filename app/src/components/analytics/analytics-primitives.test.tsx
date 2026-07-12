@@ -104,6 +104,77 @@ describe('Toplist', () => {
     const root = screen.getByTestId('toplist');
     expect(root.textContent).toBe(ko['toplist.empty']);
   });
+
+  describe('sortable mode (Phase 16)', () => {
+    it('renders no sort header when sortable is off (default)', () => {
+      wrap(<Toplist rows={rows} />);
+      expect(screen.queryByTestId('toplist-sort-label')).toBeNull();
+      expect(screen.queryByTestId('toplist-sort-value')).toBeNull();
+    });
+
+    it('renders a Label/Value header with default i18n text when sortable', () => {
+      wrap(<Toplist rows={rows} sortable />);
+      expect(screen.getByTestId('toplist-sort-label').textContent).toContain(ko['common.name']);
+      expect(screen.getByTestId('toplist-sort-value').textContent).toContain(ko['common.value']);
+    });
+
+    it('preserves the caller-provided (value-desc) order before any click', () => {
+      wrap(<Toplist rows={rows} sortable testId="tl-order" />);
+      const root = screen.getByTestId('tl-order');
+      const labels = within(root)
+        .getAllByText(/^(api-gateway|web-frontend|db-writer)$/)
+        .map((el) => el.textContent);
+      expect(labels).toEqual(['api-gateway', 'web-frontend', 'db-writer']);
+    });
+
+    it('clicking the value header sorts numerically (not lexically) and toggles direction', () => {
+      // Values 200/100/50 sort lexically as "100" < "200" < "50" — a numeric
+      // sort must NOT reproduce that order.
+      wrap(<Toplist rows={rows} sortable testId="tl-value-sort" />);
+      const root = screen.getByTestId('tl-value-sort');
+      fireEvent.click(within(root).getByTestId('toplist-sort-value'));
+      // First click on a fresh column → desc (unchanged: 200, 100, 50).
+      let order = within(root)
+        .getAllByText(/^(api-gateway|web-frontend|db-writer)$/)
+        .map((el) => el.textContent);
+      expect(order).toEqual(['api-gateway', 'web-frontend', 'db-writer']);
+
+      fireEvent.click(within(root).getByTestId('toplist-sort-value'));
+      order = within(root)
+        .getAllByText(/^(api-gateway|web-frontend|db-writer)$/)
+        .map((el) => el.textContent);
+      expect(order).toEqual(['db-writer', 'web-frontend', 'api-gateway']);
+    });
+
+    it('clicking the label header sorts alphabetically', () => {
+      wrap(<Toplist rows={rows} sortable testId="tl-label-sort" />);
+      const root = screen.getByTestId('tl-label-sort');
+      fireEvent.click(within(root).getByTestId('toplist-sort-label'));
+      const order = within(root)
+        .getAllByText(/^(api-gateway|web-frontend|db-writer)$/)
+        .map((el) => el.textContent);
+      // 'db-writer' < 'web-frontend' < 'api-gateway' is NOT alphabetical desc;
+      // first click on a fresh column is desc: api-gateway, web-frontend, db-writer.
+      expect(order).toEqual(['web-frontend', 'db-writer', 'api-gateway']);
+    });
+
+    it('bar widths stay proportional to the ALL-rows max after sorting (no rescale)', () => {
+      wrap(<Toplist rows={rows} sortable testId="tl-bars" />);
+      const root = screen.getByTestId('tl-bars');
+      fireEvent.click(within(root).getByTestId('toplist-sort-label')); // reorder rows
+      const bars = within(root)
+        .getAllByTestId('toplist-bar')
+        .map((b) => parseFloat((b as HTMLElement).style.width));
+      // max value is still 200 (api-gateway) regardless of row order.
+      expect(Math.max(...bars)).toBe(100);
+    });
+
+    it('accepts custom labelHeader/valueHeader text', () => {
+      wrap(<Toplist rows={rows} sortable labelHeader="Port" valueHeader="Bytes" />);
+      expect(screen.getByTestId('toplist-sort-label').textContent).toContain('Port');
+      expect(screen.getByTestId('toplist-sort-value').textContent).toContain('Bytes');
+    });
+  });
 });
 
 describe('HoverSync', () => {

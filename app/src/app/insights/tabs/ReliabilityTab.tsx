@@ -131,7 +131,13 @@ export default function ReliabilityTab({ filters }: TabProps) {
 
       <Widget title={t('insights.reliability.hotspots')} testId="widget-reliability-hotspots">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={hotspotRows} valueFormatter={rate} testId="toplist-reliability-hotspots" />
+          <Toplist
+            rows={hotspotRows}
+            valueFormatter={rate}
+            testId="toplist-reliability-hotspots"
+            sortable
+            valueHeader={t('insights.reliability.colRetransRate')}
+          />
         </LensState>
       </Widget>
 

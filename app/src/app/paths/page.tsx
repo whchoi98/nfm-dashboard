@@ -115,7 +115,13 @@ function HopCompositionPanel() {
           {t('paths.hopsEmpty')}
         </p>
       ) : (
-        <Toplist rows={rows} valueFormatter={formatCount} testId="paths-hops-list" />
+        <Toplist
+          rows={rows}
+          valueFormatter={formatCount}
+          testId="paths-hops-list"
+          sortable
+          valueHeader={t('common.count')}
+        />
       )}
     </Card>
   );

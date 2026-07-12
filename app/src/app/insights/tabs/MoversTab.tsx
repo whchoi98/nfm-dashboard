@@ -97,6 +97,8 @@ export default function MoversTab({ filters }: TabProps) {
               rows={rowsBySection[i]}
               valueFormatter={format}
               testId={`toplist-movers-${testId}`}
+              sortable
+              valueHeader={t(`metric.${metric}`)}
             />
           </LensState>
         </Widget>
@@ -115,6 +117,8 @@ export default function MoversTab({ filters }: TabProps) {
             rows={silentRows}
             valueFormatter={formatCount}
             testId="toplist-movers-silent"
+            sortable
+            valueHeader={t('insights.movers.priorValue')}
           />
         </LensState>
       </Widget>

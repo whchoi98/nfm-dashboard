@@ -95,19 +95,37 @@ export default function CostExplorerPage() {
 
         <Widget title={t('cost.byCluster')} testId="widget-cost-cluster">
           <LensState loading={firstLoad} error={error}>
-            <Toplist rows={clusterRows} valueFormatter={formatUsd} testId="toplist-cost-cluster" />
+            <Toplist
+              rows={clusterRows}
+              valueFormatter={formatUsd}
+              testId="toplist-cost-cluster"
+              sortable
+              valueHeader={t('common.usd')}
+            />
           </LensState>
         </Widget>
 
         <Widget title={t('cost.byNamespace')} testId="widget-cost-namespace">
           <LensState loading={firstLoad} error={error}>
-            <Toplist rows={namespaceRows} valueFormatter={formatUsd} testId="toplist-cost-namespace" />
+            <Toplist
+              rows={namespaceRows}
+              valueFormatter={formatUsd}
+              testId="toplist-cost-namespace"
+              sortable
+              valueHeader={t('common.usd')}
+            />
           </LensState>
         </Widget>
 
         <Widget title={t('cost.byMonitor')} testId="widget-cost-monitor">
           <LensState loading={firstLoad} error={error}>
-            <Toplist rows={monitorRows} valueFormatter={formatUsd} testId="toplist-cost-monitor" />
+            <Toplist
+              rows={monitorRows}
+              valueFormatter={formatUsd}
+              testId="toplist-cost-monitor"
+              sortable
+              valueHeader={t('common.usd')}
+            />
           </LensState>
         </Widget>
 
@@ -119,7 +137,13 @@ export default function CostExplorerPage() {
 
         <Widget title={t('cost.savings')} testId="widget-cost-savings">
           <LensState loading={firstLoad} error={error}>
-            <Toplist rows={savingsRows} valueFormatter={formatUsd} testId="toplist-cost-savings" />
+            <Toplist
+              rows={savingsRows}
+              valueFormatter={formatUsd}
+              testId="toplist-cost-savings"
+              sortable
+              valueHeader={t('common.usd')}
+            />
           </LensState>
         </Widget>
 

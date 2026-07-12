@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-12
+
+### Added
+- **Sortable ranked lists**: the value-ranked lists (top talkers, target ports, DNS domains/query-types/failures/resolvers, cost by cluster/namespace/monitor, reliability hotspots, scorecard worst monitors, top movers, slowest paths, cross-AZ, hop composition) gain an opt-in click-to-sort header — sort by name or value, ascending/descending, keyed off raw values. Compact overview/flows/workload teasers keep their fixed top-N ranking.
+
 ## [0.9.0] - 2026-07-12
 
 ### Added
@@ -144,7 +149,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
@@ -170,6 +176,11 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [0.10.0] - 2026-07-12
+
+### Added
+- **정렬 가능한 랭킹 리스트**: 값 순위 리스트(top talker·타깃 포트·DNS 도메인/쿼리타입/실패/리졸버·비용(클러스터/네임스페이스/모니터)·신뢰성 hotspot·scorecard worst·top movers·slowest·cross-AZ·hop 구성)에 opt-in 클릭 정렬 헤더 추가 — 이름/값 기준 오름/내림차순, 원시값 기준. 개요/플로우/워크로드 컴팩트 티저는 고정 top-N 유지.
 
 ## [0.9.0] - 2026-07-12
 
@@ -298,7 +309,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0

@@ -91,7 +91,13 @@ export default function CostTab({ filters }: TabProps) {
 
       <Widget title={t('insights.cost.topContributors')} testId="widget-cost-top">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={topRows} valueFormatter={formatUsd} testId="toplist-cost-top" />
+          <Toplist
+            rows={topRows}
+            valueFormatter={formatUsd}
+            testId="toplist-cost-top"
+            sortable
+            valueHeader={t('common.usd')}
+          />
         </LensState>
       </Widget>
 
