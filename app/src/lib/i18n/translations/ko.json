@@ -74,6 +74,7 @@
   "filter.range.1h": "최근 1시간",
   "filter.range.3h": "최근 3시간",
   "filter.range.24h": "최근 24시간",
+  "filter.range.7d": "최근 7일",
   "facet.filters": "필터",
   "scope.service": "서비스",
   "scope.namespace": "네임스페이스",
