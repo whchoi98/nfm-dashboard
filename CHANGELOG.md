@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-12
+
+### Added
+- **7-day analytics range**: the time-range selector gains a `7d` option (analytics query window raised from 24h to 7 days, up to `MAX_BUCKETS` 2016 five-minute buckets). The per-bucket flow-query fan-out is now bounded (concurrency pool) so a wide window doesn't storm DynamoDB.
+- **Flow archive (S3 + Parquet)**: every flow write is streamed (DynamoDB Streams → transform Lambda → Kinesis Firehose with Parquet conversion) to a date-partitioned S3 archive before the 7-day DynamoDB TTL deletes it, catalogued in AWS Glue (`nfm_dashboard.flows_archive`, partition projection on `dt`) and queryable via an Athena workgroup.
+- **History page** (`/history`): an Athena-backed page to query the archive over an arbitrary date range (beyond the live 7-day hot path), with on-demand queries, monitor/namespace/metric filters, and a results table.
+
+### Changed
+- Grant the app task role least-privilege Athena/Glue/S3 permissions (for `/api/history`); add DynamoDB Streams to the flows table.
+
 ## [0.6.0] - 2026-07-11
 
 ### Added
@@ -117,7 +127,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.3.0...v0.4.0
@@ -140,6 +151,16 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-07-12
+
+### Added
+- **7일 분석 범위**: 기간 선택기에 `7d` 옵션 추가(분석 조회 창을 24시간 → 7일, 최대 `MAX_BUCKETS` 2016개 5분 버킷). 넓은 창이 DynamoDB를 폭주시키지 않도록 버킷별 플로우 쿼리 팬아웃에 동시성 풀(상한) 적용.
+- **플로우 아카이브(S3 + Parquet)**: 모든 플로우 쓰기를 스트리밍(DynamoDB Streams → 변환 Lambda → Kinesis Firehose Parquet 변환)해 7일 DynamoDB TTL 삭제 전에 날짜 파티션 S3 아카이브로 저장, AWS Glue(`nfm_dashboard.flows_archive`, `dt` 파티션 프로젝션)에 카탈로그화하고 Athena 워크그룹으로 조회 가능.
+- **히스토리 페이지**(`/history`): 아카이브를 임의 기간(라이브 7일 핫 경로를 넘어서)으로 조회하는 Athena 기반 페이지 — 온디맨드 쿼리, 모니터/네임스페이스/메트릭 필터, 결과 테이블.
+
+### Changed
+- 앱 태스크 역할에 최소 권한 Athena/Glue/S3 권한 부여(`/api/history`용); flows 테이블에 DynamoDB Streams 추가.
 
 ## [0.6.0] - 2026-07-11
 
@@ -241,7 +262,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.3.0...v0.4.0
