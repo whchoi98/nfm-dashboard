@@ -12,7 +12,7 @@
 // (useNodesState): manual drags persist across value-only polls and focus
 // changes; positions reset only when the structural layoutKey changes.
 // Replaces TierFlowMap in the /topology "graph" view.
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   BaseEdge,
   Background,
@@ -20,21 +20,26 @@ import ReactFlow, {
   EdgeLabelRenderer,
   Handle,
   MarkerType,
+  Panel,
   Position,
   useNodesState,
   type Edge as RFEdge,
   type EdgeProps,
   type Node as RFNode,
   type NodeProps,
+  type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3-force';
 import type { SimulationLinkDatum, SimulationNodeDatum } from 'd3-force';
 import type { MetricName, TopologySnapshot } from '@/lib/types';
 import { buildGraphModel, type GraphLink, type GraphModel, type GraphNode } from '@/lib/topology-graph';
+import { neighbors } from '@/lib/graph-focus';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+
+const HOPS: (1 | 2)[] = [1, 2];
 
 const statusColor = (s: GraphNode['status']) => (s === 'idle' ? TOKENS.chartGrey : STATUS[s]);
 
@@ -227,7 +232,8 @@ function NetworkGraphInner({
   breaches?: Set<string>;
   warns?: Set<string>;
   focusId?: string | null;
-  onNodeSelect?: (id: string) => void;
+  /** Also fired with `null` to clear focus (ESC / empty-canvas click / clear-focus button). */
+  onNodeSelect?: (id: string | null) => void;
   onLinkSelect?: (source: string, target: string) => void;
   /** Min-traffic threshold (Phase 14 Task 1) — links below this VALUE are cut. */
   minEdgeValue?: number;
@@ -265,9 +271,35 @@ function NetworkGraphInner({
 
   // Focus only counts while the focused node exists in the current model — a
   // stale focusId (node unchecked, filter narrowed, poll churn) would
-  // otherwise mute EVERY edge with no focus ring to recover from.
+  // otherwise isolate down to nothing with no focus ring to recover from.
   const focusPresent = focusId != null && model.nodes.some((n) => n.id === focusId);
   const activeFocusId = focusPresent ? focusId : null;
+
+  // Click-to-isolate ego-network (Phase 14 Task 2): 1 or 2 hop toggle,
+  // default 1. Resets to 1 whenever focus clears so re-focusing another node
+  // always starts from the tightest view.
+  const [hops, setHops] = useState<1 | 2>(1);
+  useEffect(() => {
+    if (activeFocusId == null) setHops(1);
+  }, [activeFocusId]);
+  const ego = useMemo(
+    () => (activeFocusId != null ? neighbors(model.links, activeFocusId, hops) : null),
+    [model, activeFocusId, hops],
+  );
+  // Memoized (not a plain .filter() on every render): the result feeds the
+  // layoutNodes memo below, whose array identity drives a state sync during
+  // render (see `synced` further down) — a fresh array reference every
+  // render there would re-trigger that sync every render, an infinite loop.
+  const { visibleNodes, visibleLinks } = useMemo(
+    () =>
+      ego == null
+        ? { visibleNodes: model.nodes, visibleLinks: model.links }
+        : {
+            visibleNodes: model.nodes.filter((n) => ego.nodeIds.has(n.id)),
+            visibleLinks: model.links.filter((l) => ego.edgeIds.has(l.id)),
+          },
+    [model, ego],
+  );
 
   // Legend isolate filter (Phase 14 Task 1): nodes touching >=1 edge in the
   // active health class stay full-opacity; everything else dims. A self-loop
@@ -277,18 +309,20 @@ function NetworkGraphInner({
     () =>
       healthFilter == null
         ? null
-        : new Set(model.links.filter((l) => l.health === healthFilter).flatMap((l) => [l.source, l.target])),
-    [model, healthFilter],
+        : new Set(visibleLinks.filter((l) => l.health === healthFilter).flatMap((l) => [l.source, l.target])),
+    [visibleLinks, healthFilter],
   );
 
   const { layoutNodes, rfEdges } = useMemo(() => {
+    // Radius/width scales stay keyed off the FULL model — isolating a node
+    // must not rescale the surviving nodes/edges relative to each other.
     const radii = new Map(model.nodes.map((n) => [n.id, n.radius]));
     // Selected-metric value → stroke width (sqrt scale, like node radii).
     const [wMin, wMax] = EDGE_WIDTH_RANGE;
     const maxValue = Math.max(0, ...model.links.map((l) => l.value));
     const widthOf = (v: number) =>
       maxValue <= 0 ? wMin : wMin + (wMax - wMin) * Math.sqrt(v / maxValue);
-    const layoutNodes: RFNode<CircleNodeData>[] = model.nodes.map((n) => {
+    const layoutNodes: RFNode<CircleNodeData>[] = visibleNodes.map((n) => {
       const p = positions.get(n.id) ?? { x: 0, y: 0 };
       return {
         id: n.id,
@@ -305,7 +339,10 @@ function NetworkGraphInner({
         connectable: false,
       };
     });
-    const rfEdges: RFEdge<CurvedEdgeData>[] = model.links.map((l) => ({
+    // Isolate mode already removes non-neighbor edges from `visibleLinks` —
+    // no separate focus-mute condition needed here, only the legend's
+    // health-class isolate filter (Phase 14 Task 1) still dims by opacity.
+    const rfEdges: RFEdge<CurvedEdgeData>[] = visibleLinks.map((l) => ({
       id: l.id,
       source: l.source,
       target: l.target,
@@ -316,9 +353,7 @@ function NetworkGraphInner({
         dashed: l.dashed,
         health: l.health,
         width: widthOf(l.value),
-        muted:
-          (activeFocusId != null && l.source !== activeFocusId && l.target !== activeFocusId) ||
-          (healthFilter != null && l.health !== healthFilter),
+        muted: healthFilter != null && l.health !== healthFilter,
         sourceRadius: radii.get(l.source) ?? 0,
         targetRadius: radii.get(l.target) ?? 0,
       },
@@ -328,7 +363,7 @@ function NetworkGraphInner({
       interactionWidth: 16,
     }));
     return { layoutNodes, rfEdges };
-  }, [model, positions, activeFocusId, metric, t, nodesInHealthClass, healthFilter]);
+  }, [model, visibleNodes, visibleLinks, positions, activeFocusId, metric, t, nodesInHealthClass, healthFilter]);
 
   // Positions live in state so manual drags stick (onNodesChange applies RF's
   // drag deltas). Sync from layoutNodes during render (React's "adjust state
@@ -362,6 +397,33 @@ function NetworkGraphInner({
     [onLinkSelect],
   );
 
+  // ESC clears focus (restores the full graph) — same pattern as
+  // EdgeHopPanel's dialog-close handler.
+  useEffect(() => {
+    if (activeFocusId == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onNodeSelect?.(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeFocusId, onNodeSelect]);
+
+  // Imperative pan/zoom to the current ego-network (click-to-isolate target
+  // or a canvas search match) — captured via onInit since `layoutKey` stays
+  // structural-change-free across focus/hop toggles (positions must NOT
+  // reset), so ReactFlow never remounts to re-trigger its own `fitView` prop.
+  const rfInstanceRef = useRef<ReactFlowInstance<CircleNodeData, CurvedEdgeData> | null>(null);
+  useEffect(() => {
+    const inst = rfInstanceRef.current;
+    if (!inst) return;
+    if (ego != null) {
+      inst.fitView({ nodes: [...ego.nodeIds].map((id) => ({ id })), padding: 0.35, duration: 300, maxZoom: 2 });
+    } else {
+      inst.fitView({ padding: 0.25, duration: 300 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ego` already captures activeFocusId+hops+model; layoutKey guards the remount-triggered initial fitView separately
+  }, [ego]);
+
   return (
     <div data-testid="network-graph" className="h-[560px] w-full">
       {model.nodes.length === 0 ? (
@@ -385,12 +447,60 @@ function NetworkGraphInner({
           // onNodesChange would otherwise honor Backspace node deletion.
           deleteKeyCode={null}
           elementsSelectable
+          onInit={(inst) => {
+            rfInstanceRef.current = inst;
+          }}
           onNodeClick={(_, node) => onNodeSelect?.(node.id)}
           onEdgeClick={handleEdgeClick}
+          // Empty-canvas click clears focus (restores the full graph).
+          onPaneClick={() => onNodeSelect?.(null)}
         >
           <Background gap={24} size={1} color="currentColor" style={{ opacity: 0.15 }} />
           {/* bottom-left: the fixed chat FAB sits over the graph's bottom-right corner */}
           <Controls showInteractive={false} position="bottom-left" />
+          {activeFocusId != null ? (
+            <Panel position="top-left">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white/95 px-2.5 py-1.5 text-[11px] font-medium shadow-sm dark:border-white/15 dark:bg-ink/90">
+                <span className="text-ink/70 dark:text-white/70">
+                  {t('topology.isolate')}:{' '}
+                  <span className="font-semibold text-ink dark:text-white">
+                    {model.nodes.find((n) => n.id === activeFocusId)?.label ?? activeFocusId}
+                  </span>
+                </span>
+                <div
+                  role="group"
+                  aria-label={t('topology.hops')}
+                  data-testid="topology-hop-toggle"
+                  className="flex items-center gap-0.5 rounded-md border border-black/10 p-0.5 dark:border-white/15"
+                >
+                  {HOPS.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      aria-pressed={hops === h}
+                      onClick={() => setHops(h)}
+                      data-testid={`topology-hop-toggle-${h}`}
+                      className={`h-6 min-w-6 rounded px-1.5 text-[11px] font-semibold ${
+                        hops === h
+                          ? 'bg-ink text-white dark:bg-white dark:text-ink'
+                          : 'text-ink/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNodeSelect?.(null)}
+                  data-testid="topology-clear-focus"
+                  className="h-6 rounded-md border border-black/10 px-2 text-[11px] font-medium text-ink/70 hover:bg-black/5 dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                >
+                  {t('topology.clearFocus')}
+                </button>
+              </div>
+            </Panel>
+          ) : null}
         </ReactFlow>
       )}
     </div>

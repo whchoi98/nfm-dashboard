@@ -9,7 +9,7 @@
 // dialog that fetches /api/paths for that edge and renders its HopPath.
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, X } from 'lucide-react';
+import { ArrowRight, Search, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { DestCategory, FlowEdge, MetricName, TopoEdge, TopologySnapshot } from '@/lib/types';
@@ -296,6 +296,26 @@ export default function TopologyPage() {
     [selectedIds, tagNodes],
   );
 
+  // Canvas search (Phase 14 Task 2): resolves typed text to a node id
+  // (label or id, case-insensitive; exact match preferred over substring)
+  // and focuses it — separate from TagFilterPanel's checkbox filter, which
+  // narrows the rendered node SET rather than jumping to one node.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchNoMatch, setSearchNoMatch] = useState(false);
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+    const exact = tagNodes.find((n) => n.id.toLowerCase() === q || n.label.toLowerCase() === q);
+    const match = exact ?? tagNodes.find((n) => n.id.toLowerCase().includes(q) || n.label.toLowerCase().includes(q));
+    if (match) {
+      setFocusId(match.id);
+      setSearchNoMatch(false);
+    } else {
+      setSearchNoMatch(true);
+    }
+  };
+
   // Top-edges rows carry a real TopoEdge id.
   const selectEdgeId = (id: string) => {
     const e = topology?.edges.find((x) => x.id === id);
@@ -404,6 +424,39 @@ export default function TopologyPage() {
           />
           {view === 'graph' ? (
             <>
+              <form onSubmit={handleSearchSubmit} className="flex flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60">
+                <label htmlFor="topology-search-input">{t('topology.search')}</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="topology-search-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setSearchNoMatch(false);
+                    }}
+                    placeholder={t('topology.search')}
+                    data-testid="topology-search"
+                    className="h-9 min-w-32 max-w-full rounded-lg border border-black/10 bg-white px-2.5 text-xs text-ink outline-none focus:border-chartViolet dark:border-white/15 dark:bg-ink dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    aria-label={t('topology.search')}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black/10 text-ink/70 hover:bg-black/5 dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                  >
+                    <Search size={14} strokeWidth={1.5} aria-hidden />
+                  </button>
+                </div>
+                {searchNoMatch ? (
+                  <span
+                    data-testid="topology-search-no-match"
+                    className="text-[11px] font-medium"
+                    style={{ color: STATUS.danger }}
+                  >
+                    {t('topology.noMatch')}
+                  </span>
+                ) : null}
+              </form>
               <div className="flex flex-col gap-1 text-[11px] font-medium text-ink/60 dark:text-white/60">
                 <label htmlFor="topology-min-traffic-input">
                   {t('topology.minTraffic')}: {formatMetricValue(metric, minEdgeValue)}
