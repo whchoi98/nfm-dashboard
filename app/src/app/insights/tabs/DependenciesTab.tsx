@@ -91,7 +91,14 @@ export default function DependenciesTab({ filters }: TabProps) {
 
       <Widget title={t('insights.deps.ports')} testId="widget-deps-ports">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={portRows} valueFormatter={formatBytes} testId="toplist-deps-ports" />
+          <Toplist
+            rows={portRows}
+            valueFormatter={formatBytes}
+            testId="toplist-deps-ports"
+            sortable
+            labelHeader={t('paths.port')}
+            valueHeader={t('metric.DATA_TRANSFERRED')}
+          />
         </LensState>
       </Widget>
 

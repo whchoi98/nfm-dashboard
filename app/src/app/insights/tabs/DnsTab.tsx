@@ -171,19 +171,37 @@ export default function DnsTab() {
 
       <Widget title={t('insights.dns.topDomains')} testId="widget-dns-domains">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={domainRows} valueFormatter={formatCount} testId="toplist-dns-domains" />
+          <Toplist
+            rows={domainRows}
+            valueFormatter={formatCount}
+            testId="toplist-dns-domains"
+            sortable
+            valueHeader={t('common.count')}
+          />
         </LensState>
       </Widget>
 
       <Widget title={t('insights.dns.queryTypes')} testId="widget-dns-query-types">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={typeRows} valueFormatter={formatCount} testId="toplist-dns-query-types" />
+          <Toplist
+            rows={typeRows}
+            valueFormatter={formatCount}
+            testId="toplist-dns-query-types"
+            sortable
+            valueHeader={t('common.count')}
+          />
         </LensState>
       </Widget>
 
       <Widget title={t('insights.dns.failures')} testId="widget-dns-failures">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={failureRows} valueFormatter={formatPct} testId="toplist-dns-failures" />
+          <Toplist
+            rows={failureRows}
+            valueFormatter={formatPct}
+            testId="toplist-dns-failures"
+            sortable
+            valueHeader={t('insights.dns.failRate')}
+          />
         </LensState>
       </Widget>
 
@@ -218,7 +236,13 @@ export default function DnsTab() {
 
       <Widget title={t('insights.dns.nxdomainSources')} testId="widget-dns-nxdomain">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={nxdomainRows} valueFormatter={formatCount} testId="toplist-dns-nxdomain" />
+          <Toplist
+            rows={nxdomainRows}
+            valueFormatter={formatCount}
+            testId="toplist-dns-nxdomain"
+            sortable
+            valueHeader={t('common.count')}
+          />
         </LensState>
       </Widget>
 
@@ -234,7 +258,13 @@ export default function DnsTab() {
 
       <Widget title={t('insights.dns.resolvers')} testId="widget-dns-resolvers">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={resolverRows} valueFormatter={formatCount} testId="toplist-dns-resolvers" />
+          <Toplist
+            rows={resolverRows}
+            valueFormatter={formatCount}
+            testId="toplist-dns-resolvers"
+            sortable
+            valueHeader={t('common.count')}
+          />
         </LensState>
       </Widget>
 

@@ -3,8 +3,10 @@
 // with label, optional sub text and a right-aligned formatted value. Status is
 // dual-encoded per the chart-tokens mandate: STATUS color + leading dot + an
 // sr-only text label — never color alone.
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { SERIES_COLORS, STATUS } from '@/lib/chart-tokens';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
 
 export type ToplistRow = {
   label: string;
@@ -16,18 +18,83 @@ export type ToplistRow = {
   display?: string;
 };
 
+// Sort on the RAW `label`/`value` fields — never the formatted `display` text.
+const TOPLIST_SORT_COLUMNS: SortColumn<ToplistRow>[] = [
+  { key: 'label', type: 'string', accessor: (r) => r.label },
+  { key: 'value', type: 'number', accessor: (r) => r.value },
+];
+
+/** A compact, `<ul>`-friendly sort toggle for the Toplist header row (Phase 16)
+ *  — `SortableHeader` is `<th>`-bound so doesn't fit here. `aria-pressed` +
+ *  `aria-label` stand in for `aria-sort` outside a table. */
+function ToplistSortButton({
+  label,
+  active,
+  dir,
+  onClick,
+  testId,
+  align = 'left',
+}: {
+  label: string;
+  active: boolean;
+  dir: 'asc' | 'desc';
+  onClick: () => void;
+  testId: string;
+  align?: 'left' | 'right';
+}) {
+  const { t } = useLanguage();
+  const ariaLabel = active
+    ? `${label} — ${t(dir === 'asc' ? 'common.sortAscending' : 'common.sortDescending')}`
+    : label;
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
+      className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink/50 hover:text-ink dark:text-white/50 dark:hover:text-white ${align === 'right' ? 'ml-auto' : ''}`}
+    >
+      {label}
+      {active ? (
+        dir === 'desc' ? (
+          <ArrowDown size={12} strokeWidth={1.5} aria-hidden />
+        ) : (
+          <ArrowUp size={12} strokeWidth={1.5} aria-hidden />
+        )
+      ) : null}
+    </button>
+  );
+}
+
 export default function Toplist({
   rows,
   valueFormatter = String,
   onSelect,
   testId = 'toplist',
+  sortable = false,
+  labelHeader,
+  valueHeader,
 }: {
   rows: ToplistRow[];
   valueFormatter?: (v: number) => string;
   onSelect?: (label: string) => void;
   testId?: string;
+  /** Opt-in click-to-sort header (Phase 16). Off by default: output is
+   *  byte-identical to the pre-Phase-16 component. */
+  sortable?: boolean;
+  labelHeader?: string;
+  valueHeader?: string;
 }) {
   const { t } = useLanguage();
+
+  // Always called (rules of hooks) but only rendered/used when `sortable` —
+  // `key: null` preserves the caller's incoming (value-desc) order until the
+  // user clicks a header, so behavior is unchanged before first interaction.
+  const { sorted, sort, onSort } = useSortableRows(rows, TOPLIST_SORT_COLUMNS, {
+    key: null,
+    dir: 'desc',
+  });
 
   if (rows.length === 0) {
     return (
@@ -37,11 +104,14 @@ export default function Toplist({
     );
   }
 
+  // Bar-width max computed over ALL rows regardless of sort order — sorting
+  // reorders rows but must never rescale bars.
   const max = Math.max(...rows.map((r) => r.value));
+  const displayRows = sortable ? sorted : rows;
 
-  return (
-    <ul data-testid={testId} className="flex flex-col gap-1.5">
-      {rows.map((r, i) => {
+  const list = (
+    <ul data-testid={sortable ? undefined : testId} className="flex flex-col gap-1.5">
+      {displayRows.map((r, i) => {
         const pct = max > 0 ? Math.max(0, (r.value / max) * 100) : 0;
         const barColor = r.status ? STATUS[r.status] : SERIES_COLORS[0];
         const rowCls =
@@ -90,5 +160,30 @@ export default function Toplist({
         );
       })}
     </ul>
+  );
+
+  if (!sortable) return list;
+
+  return (
+    <div data-testid={testId}>
+      <div className="mb-1 flex items-center justify-between gap-2 px-2">
+        <ToplistSortButton
+          label={labelHeader ?? t('common.name')}
+          active={sort.key === 'label'}
+          dir={sort.dir}
+          onClick={() => onSort('label')}
+          testId="toplist-sort-label"
+        />
+        <ToplistSortButton
+          label={valueHeader ?? t('common.value')}
+          active={sort.key === 'value'}
+          dir={sort.dir}
+          onClick={() => onSort('value')}
+          testId="toplist-sort-value"
+          align="right"
+        />
+      </div>
+      {list}
+    </div>
   );
 }

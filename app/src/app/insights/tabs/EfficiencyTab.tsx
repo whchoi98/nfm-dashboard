@@ -96,7 +96,13 @@ export default function EfficiencyTab({ filters }: TabProps) {
 
       <Widget title={t('insights.efficiency.topCrossAz')} testId="widget-efficiency-top">
         <LensState loading={firstLoad} error={error}>
-          <Toplist rows={topRows} valueFormatter={formatUsd} testId="toplist-efficiency-top" />
+          <Toplist
+            rows={topRows}
+            valueFormatter={formatUsd}
+            testId="toplist-efficiency-top"
+            sortable
+            valueHeader={t('common.usd')}
+          />
         </LensState>
       </Widget>
 
