@@ -1,17 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUp, Download, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowRight, Download, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { EndpointInfo, FlowEdge } from '@/lib/types';
 import { CATEGORY_COLORS, type DestCategory } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
 import { downloadText, toCsv } from '@/lib/csv';
+import { useSortableRows, type SortColumn } from '@/lib/use-sortable';
+import { SortableHeader } from '@/components/SortableHeader';
 
 export function endpointLabel(e: EndpointInfo): string {
   if (e.podName) return e.podNamespace ? `${e.podNamespace}/${e.podName}` : e.podName;
   return e.serviceName ?? e.instanceId ?? e.ip ?? '—';
 }
+
+// Sort on the RAW field (e.g. `f.value`, `f.targetPort`), never the formatted
+// display text (`formatMetricValue`, translated metric label, etc).
+const FLOW_COLUMNS: SortColumn<FlowEdge>[] = [
+  { key: 'colA', type: 'string', accessor: (f) => endpointLabel(f.a) },
+  { key: 'colB', type: 'string', accessor: (f) => endpointLabel(f.b) },
+  { key: 'category', type: 'string', accessor: (f) => f.category },
+  { key: 'metric', type: 'string', accessor: (f) => f.metric },
+  { key: 'port', type: 'number', accessor: (f) => f.targetPort },
+  { key: 'value', type: 'number', accessor: (f) => f.value },
+];
 
 export function CategoryChip({ category }: { category: string }) {
   const { t } = useLanguage();
@@ -140,8 +153,6 @@ export function FlowDrawer({ flow, onClose }: { flow: FlowEdge; onClose: () => v
   );
 }
 
-type SortKey = 'value' | 'category' | 'metric' | 'port';
-
 /** Sortable flow table (desktop) with a card-list fallback on mobile.
  *  Row click opens the built-in FlowDrawer unless `onSelect` is given, in
  *  which case the caller owns the selection UI (e.g. a HopPath panel). */
@@ -153,48 +164,11 @@ export default function FlowTable({
   onSelect?: (f: FlowEdge) => void;
 }) {
   const { t } = useLanguage();
-  const [sortKey, setSortKey] = useState<SortKey>('value');
-  const [desc, setDesc] = useState(true);
   const [selected, setSelected] = useState<FlowEdge | null>(null);
   const select = (f: FlowEdge) => (onSelect ? onSelect(f) : setSelected(f));
 
-  const sorted = useMemo(() => {
-    const cmp: Record<SortKey, (a: FlowEdge, b: FlowEdge) => number> = {
-      value: (a, b) => a.value - b.value,
-      category: (a, b) => a.category.localeCompare(b.category),
-      metric: (a, b) => a.metric.localeCompare(b.metric),
-      port: (a, b) => (a.targetPort ?? -1) - (b.targetPort ?? -1),
-    };
-    return [...flows].sort((a, b) => (desc ? -cmp[sortKey](a, b) : cmp[sortKey](a, b)));
-  }, [flows, sortKey, desc]);
-
-  const onSort = (k: SortKey) => {
-    if (k === sortKey) setDesc((d) => !d);
-    else {
-      setSortKey(k);
-      setDesc(true);
-    }
-  };
-
-  // Dense header typography (Phase 9 polish) shared by sortable + plain <th>s.
-  const headCls = 'text-[11px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50';
-
-  const SortHeader = ({ k, label }: { k: SortKey; label: string }) => (
-    <button
-      type="button"
-      onClick={() => onSort(k)}
-      className={`flex items-center gap-1 ${headCls} hover:text-ink dark:hover:text-white`}
-    >
-      {label}
-      {sortKey === k ? (
-        desc ? (
-          <ArrowDown size={12} strokeWidth={1.5} aria-hidden />
-        ) : (
-          <ArrowUp size={12} strokeWidth={1.5} aria-hidden />
-        )
-      ) : null}
-    </button>
-  );
+  // Default sort = value desc (unchanged first render vs. the pre-Phase-15 table).
+  const { sorted, sort, onSort } = useSortableRows(flows, FLOW_COLUMNS, { key: 'value', dir: 'desc' });
 
   if (flows.length === 0) {
     return (
@@ -240,12 +214,12 @@ export default function FlowTable({
         <table className="ui-table-dense w-full border-collapse text-sm">
           <thead>
             <tr className="text-left">
-              <th className={`py-1.5 pr-3 ${headCls}`}>{t('flow.colA')}</th>
-              <th className={`py-1.5 pr-3 ${headCls}`}>{t('flow.colB')}</th>
-              <th className="py-1.5 pr-3"><SortHeader k="category" label={t('flow.colCategory')} /></th>
-              <th className="py-1.5 pr-3"><SortHeader k="metric" label={t('flow.colMetric')} /></th>
-              <th className="py-1.5 pr-3"><SortHeader k="port" label={t('flow.colPort')} /></th>
-              <th className="py-1.5"><SortHeader k="value" label={t('flow.colValue')} /></th>
+              <SortableHeader label={t('flow.colA')} columnKey="colA" sort={sort} onSort={onSort} className="pr-3" />
+              <SortableHeader label={t('flow.colB')} columnKey="colB" sort={sort} onSort={onSort} className="pr-3" />
+              <SortableHeader label={t('flow.colCategory')} columnKey="category" sort={sort} onSort={onSort} className="pr-3" />
+              <SortableHeader label={t('flow.colMetric')} columnKey="metric" sort={sort} onSort={onSort} className="pr-3" />
+              <SortableHeader label={t('flow.colPort')} columnKey="port" sort={sort} onSort={onSort} className="pr-3" />
+              <SortableHeader label={t('flow.colValue')} columnKey="value" sort={sort} onSort={onSort} />
             </tr>
           </thead>
           <tbody>
