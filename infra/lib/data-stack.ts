@@ -113,6 +113,7 @@ export class DataStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       versioned: false,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
       lifecycleRules: [{ expiration: cdk.Duration.days(30) }] });
 
     // Glue catalog: database + external Parquet table with partition projection on `dt`.
@@ -220,6 +221,8 @@ export class DataStack extends cdk.Stack {
         bufferingHints: { sizeInMBs: 128, intervalInSeconds: 300 },
         compressionFormat: 'UNCOMPRESSED', // Parquet handles its own compression.
         dynamicPartitioningConfiguration: { enabled: true },
+        cloudWatchLoggingOptions: { enabled: true,
+          logGroupName: '/aws/kinesisfirehose/nfm-dashboard-flow-archive', logStreamName: 'S3Delivery' },
         processingConfiguration: {
           enabled: true,
           processors: [{
