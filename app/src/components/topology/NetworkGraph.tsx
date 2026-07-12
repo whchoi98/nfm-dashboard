@@ -13,7 +13,8 @@
 // `@/lib/graph-layout`) rather than d3-force's own array-index-based default,
 // so the SAME node id always starts from the SAME point and the layout is
 // reproducible across reloads. A ref-backed position cache (mirrored to
-// localStorage) remembers every node's last computed/dragged position; a
+// localStorage, pruned to the live node-id working set on every merge)
+// remembers each node's last computed/dragged position; a
 // structural change (filter/level/groupBy) reseeds persisting node ids from
 // that cache instead of the id hash, so the layout settles back near where it
 // was instead of fully reshuffling. Node positions then live in local state
@@ -327,23 +328,24 @@ function computeLayout(
 
 // ── position persistence (Phase 14 Task 5) ──────────────────────────────────
 // Manual drags + computed layouts persist to localStorage so spatial memory
-// survives a reload, keyed by a signature of the FULL topology's node-id set
-// (not the currently-filtered view) — so flipping a filter/metric/groupBy
-// never invalidates positions for nodes outside today's view. Restore is
-// opportunistic PER-ID rather than gated on an exact signature match: a pod
-// cycling to a new suffix between polls is normal topology drift, not "a
-// different graph", so every surviving id simply keeps reusing its last known
-// spot regardless of whether the overall set matches byte-for-byte.
+// survives a reload. Restore is opportunistic PER-ID (no gating on an exact
+// node-set match): a pod cycling to a new suffix between polls is normal
+// topology drift, not "a different graph", so every surviving id simply keeps
+// reusing its last known spot. The cache is pruned to the LIVE node-id
+// working set on every merge (see `evictStalePositions`) — ids covering the
+// FULL topology (a filtered-out node is still live, so flipping a
+// filter/metric/groupBy never drops positions outside today's view) plus the
+// current model's synthetic group nodes.
 const POSITIONS_STORAGE_KEY = 'nfm-topology-positions';
-/** Skip persisting past this many entries — a pathological topology shouldn't grow localStorage unbounded. */
-const MAX_PERSISTED_NODES = 3000;
+/** Skip persisting past this many entries — a pathological topology shouldn't grow localStorage unbounded. Exported for tests. */
+export const MAX_PERSISTED_NODES = 3000;
 
 interface StoredLayout {
-  signature: string;
   positions: Record<string, { x: number; y: number }>;
 }
 
-function loadStoredPositions(): Map<string, { x: number; y: number }> {
+/** Exported for tests. */
+export function loadStoredPositions(): Map<string, { x: number; y: number }> {
   if (typeof window === 'undefined') return new Map();
   try {
     const raw = window.localStorage.getItem(POSITIONS_STORAGE_KEY);
@@ -361,14 +363,35 @@ function loadStoredPositions(): Map<string, { x: number; y: number }> {
   }
 }
 
-function persistPositions(signature: string, cache: ReadonlyMap<string, { x: number; y: number }>) {
+/** Exported for tests. */
+export function persistPositions(cache: ReadonlyMap<string, { x: number; y: number }>) {
   if (typeof window === 'undefined' || cache.size === 0 || cache.size > MAX_PERSISTED_NODES) return;
   try {
     const positions: Record<string, { x: number; y: number }> = {};
     for (const [id, p] of cache) positions[id] = p;
-    window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify({ signature, positions }));
+    const stored: StoredLayout = { positions };
+    window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(stored));
   } catch {
     // Storage full / unavailable (private mode) — position memory degrades to session-only, no crash.
+  }
+}
+
+/**
+ * Working-set eviction — the cache must track what's currently ON the graph,
+ * not everything EVER seen. Without this, pod churn on a long-lived dashboard
+ * (NOC screen) grows the map unbounded, and once its size ever crossed
+ * MAX_PERSISTED_NODES, `persistPositions` stopped writing PERMANENTLY (the
+ * size only grew), silently ending drag persistence with no recovery.
+ * Dropping ids absent from the live set bounds the cache by the live node
+ * set, so persistence always resumes once the working set is back under the
+ * cap. Exported for tests.
+ */
+export function evictStalePositions(
+  cache: Map<string, { x: number; y: number }>,
+  liveIds: ReadonlySet<string>,
+) {
+  for (const id of cache.keys()) {
+    if (!liveIds.has(id)) cache.delete(id);
   }
 }
 
@@ -448,9 +471,22 @@ function NetworkGraphInner({
   if (positionCacheRef.current == null) {
     positionCacheRef.current = loadStoredPositions();
   }
-  // Keyed on the FULL topology's node-id set (not the filtered view) so a
-  // filter/metric/groupBy change never rewrites the storage key.
+  // Order-independent identity of the FULL topology's node-id set — a stable
+  // string key, so the `liveIds` memo below only re-derives (and the merge
+  // effect only re-fires) when the id set actually changes, not on every
+  // value-only poll's fresh topology object.
   const topologySignature = useMemo(() => graphSignature(topology.nodes.map((n) => n.id)), [topology]);
+
+  // Live node-id working set for cache eviction: the FULL topology's ids (a
+  // node hidden by a filter is still live — its position must survive the
+  // filter round-trip) plus the current model's ids (covers groupBy's
+  // synthetic group nodes, which never appear in topology.nodes).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the stable id-set identities by design
+  const liveIds = useMemo(() => {
+    const ids = new Set(topology.nodes.map((n) => n.id));
+    for (const n of model.nodes) ids.add(n.id);
+    return ids;
+  }, [topologySignature, layoutKey]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on layoutKey by design
   const positions = useMemo(() => computeLayout(model, positionCacheRef.current!), [layoutKey]);
@@ -459,12 +495,16 @@ function NetworkGraphInner({
   // mount) feeds back into the durable cache + localStorage, so the NEXT
   // structural change — and the next reload — seeds persisting node ids from
   // here instead of `seedPosition`, which is what keeps them from reshuffling.
+  // Merging then PRUNES to the live working set: without eviction the cache
+  // grew one-way with pod churn until it latched past MAX_PERSISTED_NODES and
+  // persistence silently died forever.
   useEffect(() => {
     const cache = positionCacheRef.current;
     if (!cache) return;
     for (const [id, p] of positions) cache.set(id, p);
-    persistPositions(topologySignature, cache);
-  }, [positions, topologySignature]);
+    evictStalePositions(cache, liveIds);
+    persistPositions(cache);
+  }, [positions, liveIds]);
 
   // Focus only counts while the focused node exists in the current model — a
   // stale focusId (node unchecked, filter narrowed, poll churn) would
@@ -622,15 +662,12 @@ function NetworkGraphInner({
   // into the durable cache + localStorage (not just RF's own node state), so
   // the drop point survives the NEXT structural change (filter/groupBy) and
   // a page reload, not only value-only polls.
-  const handleNodeDragStop = useCallback(
-    (_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
-      const cache = positionCacheRef.current;
-      if (!cache) return;
-      cache.set(node.id, { x: node.position.x + node.data.radius, y: node.position.y + node.data.radius });
-      persistPositions(topologySignature, cache);
-    },
-    [topologySignature],
-  );
+  const handleNodeDragStop = useCallback((_: React.MouseEvent, node: RFNode<CircleNodeData>) => {
+    const cache = positionCacheRef.current;
+    if (!cache) return;
+    cache.set(node.id, { x: node.position.x + node.data.radius, y: node.position.y + node.data.radius });
+    persistPositions(cache);
+  }, []);
 
   // ESC clears focus (restores the full graph) — same pattern as
   // EdgeHopPanel's dialog-close handler.
