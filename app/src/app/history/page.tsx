@@ -6,7 +6,7 @@
 // the archive's start (~2 years of retention). Athena queries are async and
 // billed per byte scanned, so this is strictly on-demand: nothing fires until
 // the user clicks "Run query" (no polling, no query-on-keystroke).
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { History as HistoryIcon, TriangleAlert } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
@@ -36,8 +36,11 @@ function isoDaysAgo(days: number): string {
 
 export default function HistoryPage() {
   const { t } = useLanguage();
-  const [from, setFrom] = useState(() => isoDaysAgo(7));
-  const [to, setTo] = useState(() => isoDaysAgo(0));
+  // Start empty so SSR and the first client render agree (isoDaysAgo() reads
+  // Date.now(), which differs between the static prerender and the client and
+  // would trip a hydration mismatch — React #418); populated on mount below.
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [monitor, setMonitor] = useState('');
   const [namespace, setNamespace] = useState('');
   const [metric, setMetric] = useState('');
@@ -45,6 +48,12 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<HistoryResult | null>(null);
   const [queriedRange, setQueriedRange] = useState<{ from: string; to: string } | null>(null);
+
+  useEffect(() => {
+    // Client-only initial fill of the last-7d default (avoids SSR hydration mismatch).
+    setFrom(isoDaysAgo(7));
+    setTo(isoDaysAgo(0));
+  }, []);
 
   const run = async () => {
     if (!from || !to || from > to) {
