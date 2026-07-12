@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { NAV_GROUPS, NAV_ITEMS } from './nav';
 
 describe('nav', () => {
-  it('NAV_ITEMS is the flattened groups with no dup hrefs and 16 items', () => {
+  it('NAV_ITEMS is the flattened groups with no dup hrefs and 17 items', () => {
     expect(NAV_ITEMS).toEqual(NAV_GROUPS.flatMap((g) => g.items));
     const hrefs = NAV_ITEMS.map((i) => i.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
     expect(hrefs).toContain('/');
     expect(hrefs).toContain('/settings');
-    expect(hrefs.length).toBe(16);
+    expect(hrefs).toContain('/history');
+    expect(hrefs.length).toBe(17);
   });
 
   it('has exactly 6 groups with unique keys and labelKeys', () => {

@@ -6,6 +6,7 @@
   "nav.insights": "인사이트",
   "nav.workload": "워크로드",
   "nav.monitors": "모니터",
+  "nav.history": "히스토리",
   "nav.diagnose": "진단",
   "nav.agents": "에이전트",
   "nav.alerts": "알림",
@@ -509,5 +510,19 @@
   "report.breaches": "임계값 위반",
   "report.cost": "비용 요약",
   "report.costTotal": "기간 내 예상 비용",
-  "report.none": "없음"
+  "report.none": "없음",
+  "history.title": "히스토리",
+  "history.hint": "히스토리는 S3 아카이브(Athena, 최대 약 2년 보관)를 조회합니다 — 라이브 7일 대시보드와 달리 임의의 날짜 범위를 조회할 수 있으며, 실행 시 과금되는 온디맨드 쿼리입니다.",
+  "history.prompt": "조회 범위를 선택하고 조회를 실행하세요",
+  "history.from": "시작일",
+  "history.to": "종료일",
+  "history.monitor": "모니터",
+  "history.namespace": "네임스페이스",
+  "history.metric": "지표",
+  "history.run": "조회 실행",
+  "history.loading": "조회 중…",
+  "history.results": "조회 결과",
+  "history.rowsCount": "{n}건 / {bytes} 스캔",
+  "history.empty": "해당 기간에 조회된 행이 없습니다",
+  "history.invalidRange": "날짜 범위가 올바르지 않습니다. 시작일과 종료일을 모두 입력하고 시작일이 종료일보다 앞서야 합니다."
 }

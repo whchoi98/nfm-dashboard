@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   FileText,
+  History,
   Layers,
   LayoutDashboard,
   Lightbulb,
@@ -53,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/insights', key: 'nav.insights', icon: Lightbulb },
       { href: '/workload', key: 'nav.workload', icon: Layers },
       { href: '/monitors', key: 'nav.monitors', icon: Activity },
+      { href: '/history', key: 'nav.history', icon: History },
     ],
   },
   {

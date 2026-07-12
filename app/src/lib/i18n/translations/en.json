@@ -6,6 +6,7 @@
   "nav.insights": "Insights",
   "nav.workload": "Workload",
   "nav.monitors": "Monitors",
+  "nav.history": "History",
   "nav.diagnose": "Diagnose",
   "nav.agents": "Agents",
   "nav.alerts": "Alerts",
@@ -509,5 +510,19 @@
   "report.breaches": "Threshold breaches",
   "report.cost": "Cost summary",
   "report.costTotal": "Estimated window cost",
-  "report.none": "None"
+  "report.none": "None",
+  "history.title": "History",
+  "history.hint": "History queries the S3 archive (Athena, retained up to ~2 years) — unlike the live 7-day dashboard, it accepts arbitrary date ranges, and each run is an on-demand, billed query.",
+  "history.prompt": "Choose a date range and run the query",
+  "history.from": "From",
+  "history.to": "To",
+  "history.monitor": "Monitor",
+  "history.namespace": "Namespace",
+  "history.metric": "Metric",
+  "history.run": "Run query",
+  "history.loading": "Running query…",
+  "history.results": "Query results",
+  "history.rowsCount": "{n} rows / {bytes} scanned",
+  "history.empty": "No rows in range",
+  "history.invalidRange": "Invalid date range — both from/to are required and from must not be after to."
 }

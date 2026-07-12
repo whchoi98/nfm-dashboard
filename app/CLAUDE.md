@@ -4,7 +4,7 @@
 Next.js 16 (App Router) + React 19 dashboard workspace. Serves the UI pages, the entire API surface (`src/app/api/*` route handlers), and all server-side data access for the NFM dashboard. Shipped as a standalone container (see `Dockerfile`) to ECS Fargate.
 
 ## Key Files
-- `src/app/` — App Router pages: flows, topology, paths, workload, monitors, insights, diagnose, agents, chat-popup, login
+- `src/app/` — App Router pages: flows, topology, paths, workload, monitors, history, insights, diagnose, agents, chat-popup, login
 - `src/app/api/` — route handlers (see `src/app/api/CLAUDE.md`)
 - `src/lib/` — data access, Bedrock/MCP clients, i18n, tokens (see `src/lib/CLAUDE.md`)
 - `src/components/` — presentational components (see `src/components/CLAUDE.md`)
