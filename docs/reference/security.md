@@ -9,7 +9,7 @@
 ### 1. Overview
 Defense in depth: CloudFront is the only public entry (ALB ingress limited to CloudFront origin-facing IPs + `x-origin-verify` shared secret), users authenticate via Cognito Hosted UI (PKCE) with a session cookie enforced by Next.js middleware, and server-to-gateway calls are SigV4-signed (AWS_IAM).
 
-> **Current state (ADR-005):** the Cognito session gate is TEMPORARILY DISABLED via the `authDisabled` CDK context (`infra/cdk.json`) → task env `AUTH_DISABLED=1`. The `x-origin-verify` perimeter and all Cognito resources remain active; removing the context and redeploying `NfmDash-App` re-enables login.
+> **Auth toggle (ADR-005):** the Cognito session gate can be temporarily disabled via the `authDisabled` CDK context (`infra/cdk.json`) → task env `AUTH_DISABLED=1`; the `x-origin-verify` perimeter and all Cognito resources stay active either way. **Currently the toggle is OFF — login is enforced.**
 
 ### 2. Components
 | Component | Path | Purpose |
@@ -42,7 +42,7 @@ Defense in depth: CloudFront is the only public entry (ALB ingress limited to Cl
 ### 1. 개요
 심층 방어: 공개 진입점은 CloudFront뿐이며(ALB 인그레스는 CloudFront origin-facing IP + `x-origin-verify` 공유 시크릿으로 제한), 사용자는 Cognito Hosted UI(PKCE)로 인증하고 Next.js 미들웨어가 세션 쿠키를 강제한다. 서버→게이트웨이 호출은 SigV4 서명(AWS_IAM)으로 보호된다.
 
-> **현재 상태 (ADR-005):** Cognito 세션 게이트는 `authDisabled` CDK 컨텍스트(`infra/cdk.json`) → 태스크 env `AUTH_DISABLED=1`로 **임시 비활성화**되어 있다. `x-origin-verify` 경계와 Cognito 리소스는 그대로 활성 상태이며, 컨텍스트를 제거하고 `NfmDash-App`을 재배포하면 로그인이 원복된다.
+> **인증 토글 (ADR-005):** Cognito 세션 게이트는 `authDisabled` CDK 컨텍스트(`infra/cdk.json`) → 태스크 env `AUTH_DISABLED=1`로 임시 비활성화할 수 있다(`x-origin-verify` 경계와 Cognito 리소스는 어느 경우든 유지). **현재 토글은 OFF — 로그인 강제 상태.**
 
 ### 2. 구성요소
 | 구성요소 | 경로 | 목적 |

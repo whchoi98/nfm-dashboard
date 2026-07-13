@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real User Monitoring via aws-rum-pipeline: `RumProvider` loads the self-hosted RUM SDK and stamps every event with `appName: nfm-dashboard` (page views, SPA route dwell time, Core Web Vitals, JS errors). Enabled only when `NEXT_PUBLIC_RUM_ENDPOINT`/`NEXT_PUBLIC_RUM_API_KEY` are exported before `scripts/build-push.sh` (Docker build args).
 
 ### Changed
-- The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (currently ON — login temporarily disabled). Only the Cognito session gate is skipped; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay, so removing the context re-enables login (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
+- The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (default OFF — login enforced). Only the Cognito session gate is skipped when set; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay either way (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
 
 ## [0.10.0] - 2026-07-12
 
@@ -187,7 +187,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 - aws-rum-pipeline 연동 RUM(Real User Monitoring): `RumProvider`가 자체 호스팅 SDK를 로드해 모든 이벤트에 `appName: nfm-dashboard`를 스탬핑 (페이지뷰·SPA 체류시간·Core Web Vitals·JS 에러). `scripts/build-push.sh` 실행 전 `NEXT_PUBLIC_RUM_*` export 시에만 활성화 (Docker build args).
 
 ### Changed
-- 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (현재 ON — 로그인 임시 비활성). Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 유지되므로 컨텍스트 제거로 즉시 원복 가능 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.
+- 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (기본 OFF — 로그인 강제). 설정 시 Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 어느 경우든 유지 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.
 
 ## [0.10.0] - 2026-07-12
 
