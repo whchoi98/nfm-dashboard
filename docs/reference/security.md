@@ -27,6 +27,7 @@ Defense in depth: CloudFront is the only public entry (ALB ingress limited to Cl
 ### 4. Code Pointers
 <!-- TODO: 3-7 entries; paths must be valid (checked by /sync-docs) -->
 - `app/src/middleware.ts` — public paths: `/login`, `/api/health`, `/favicon.ico`, `/api/auth/*`, `/_next/*`, static assets (never for `/api/*`); origin-verify compare is digest-based to avoid timing leaks
+- `app/src/app/api/auth/callback/route.ts` — transient/CSRF failures (state/pkce/nonce/code) auto-restart the login once (via `nfm_auth_retry` marker) so a concurrent `/api/auth/login` clobbering the one-shot cookies (stale tabs / double-click) doesn't surface a spurious error; token-exchange / id_token-verification failures are not retried. The failing step is logged (step name only, no secret values)
 - `app/src/lib/auth.ts` — token verification consumed by middleware and auth routes
 - `app/src/lib/mcp-client.ts` — SigV4 signing with `@smithy/signature-v4` + `defaultProvider` credentials
 
@@ -60,6 +61,7 @@ Defense in depth: CloudFront is the only public entry (ALB ingress limited to Cl
 ### 4. 코드 포인터
 <!-- TODO: 3-7개 항목; 경로는 실재해야 함 (/sync-docs가 점검) -->
 - `app/src/middleware.ts` — 공개 경로: `/login`, `/api/health`, `/favicon.ico`, `/api/auth/*`, `/_next/*`, 정적 자산(`/api/*`에는 미적용); origin-verify 비교는 타이밍 누출 방지를 위해 다이제스트 기반
+- `app/src/app/api/auth/callback/route.ts` — transient/CSRF 실패(state/pkce/nonce/code)는 로그인을 1회 자동 재시작(`nfm_auth_retry` 마커)하여, 동시 `/api/auth/login`이 1회성 쿠키를 덮어써도(stale 탭·중복 클릭) 잘못된 에러가 표시되지 않게 한다; 토큰 교환·id_token 검증 실패는 재시도하지 않는다. 실패 단계는 로그로 남긴다(단계명만, 시크릿 값 없음)
 - `app/src/lib/auth.ts` — 미들웨어·인증 라우트가 사용하는 토큰 검증
 - `app/src/lib/mcp-client.ts` — `@smithy/signature-v4` + `defaultProvider` 자격증명으로 SigV4 서명
 

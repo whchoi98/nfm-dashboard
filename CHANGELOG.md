@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (default OFF — login enforced). Only the Cognito session gate is skipped when set; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay either way (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
 
+### Fixed
+- Intermittent login failure ("first attempt fails, retry works"): concurrent `/api/auth/login` calls (stale tabs after re-enabling auth, or a double button press) overwrote the one-shot `state`/`pkce`/`nonce` cookies, so the first callback failed CSRF `state` validation. The callback now transparently auto-restarts the login once on a transient/CSRF failure (guarded by an `nfm_auth_retry` marker against loops); token-exchange / id_token-verification failures are not retried. The failing step is now logged (step name only, no secret values).
+
 ## [0.10.0] - 2026-07-12
 
 ### Added
@@ -188,6 +191,9 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 
 ### Changed
 - 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (기본 OFF — 로그인 강제). 설정 시 Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 어느 경우든 유지 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.
+
+### Fixed
+- 간헐적 로그인 실패("첫 시도 실패, 재시도 성공"): 동시 `/api/auth/login` 호출(인증 재활성화 후 남은 stale 탭, 또는 버튼 중복 클릭)이 1회성 `state`/`pkce`/`nonce` 쿠키를 덮어써 첫 콜백이 CSRF `state` 검증에 실패하던 문제. 이제 콜백이 transient/CSRF 실패 시 로그인을 1회 투명하게 자동 재시작(`nfm_auth_retry` 마커로 루프 방지)하며, 토큰 교환·id_token 검증 실패는 재시도하지 않는다. 실패 단계는 로그로 남긴다(단계명만, 시크릿 값 없음).
 
 ## [0.10.0] - 2026-07-12
 
