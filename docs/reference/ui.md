@@ -18,6 +18,7 @@ Presentational component layer built on Tailwind CSS v4 with SnowUI design token
 | App shell | `app/src/components/layout/` | `AppShell`, `Sidebar`, `Topbar`, `MobileTabs`, `nav.ts` |
 | Page widgets | `app/src/components/{cards,analytics,monitors}/` | Overview cards, analytics views, monitor widgets |
 | Shared pieces | `app/src/components/{FlowTable,SortableHeader,HopPath,Markdown,CodeBlock}.tsx`, `app/src/components/ui/Controls.tsx` (sortable tables via `SortableHeader` + `lib/use-sortable.ts`) | Tables, hop paths, markdown rendering, controls |
+| Anomaly detail panel | `app/src/components/analytics/AnomalyDetailPanel.tsx` | Right-hand slide-over on `/anomalies` opened by selecting a row; basic detail + topology/network deep-link buttons; `role=dialog`/`aria-modal`, closes on Escape/backdrop |
 | Design tokens | `app/src/lib/chart-tokens.ts`, `app/tailwind.config.ts` | SnowUI palette — the two files must stay in sync |
 
 ### 3. Key Decisions
@@ -50,6 +51,7 @@ Tailwind CSS v4 + SnowUI 디자인 토큰 기반 프레젠테이션 컴포넌트
 | 앱 셸 | `app/src/components/layout/` | `AppShell`, `Sidebar`, `Topbar`, `MobileTabs`, `nav.ts` |
 | 페이지 위젯 | `app/src/components/{cards,analytics,monitors}/` | 오버뷰 카드, 분석 뷰, 모니터 위젯 |
 | 공용 컴포넌트 | `app/src/components/{FlowTable,SortableHeader,HopPath,Markdown,CodeBlock}.tsx`, `app/src/components/ui/Controls.tsx` (sortable tables via `SortableHeader` + `lib/use-sortable.ts`) | 테이블, hop 경로, 마크다운 렌더링, 컨트롤 |
+| 이상 탐지 상세 패널 | `app/src/components/analytics/AnomalyDetailPanel.tsx` | `/anomalies`에서 행 선택 시 열리는 우측 슬라이드 오버; 기본 상세 정보 + 토폴로지/네트워크 딥링크 버튼; `role=dialog`/`aria-modal`, Escape/배경 클릭으로 닫힘 |
 | 디자인 토큰 | `app/src/lib/chart-tokens.ts`, `app/tailwind.config.ts` | SnowUI 팔레트 — 두 파일은 항상 동기화 유지 |
 
 ### 3. 주요 결정
