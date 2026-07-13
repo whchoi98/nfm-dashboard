@@ -4,8 +4,8 @@
 // category → lensQuery params) on the left, and a dense health-colored pair
 // table with inline sparklines. Row click drills down to /flows (namespace
 // source scope) or /topology.
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { MoveRight } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
@@ -32,6 +32,7 @@ import FacetRail, { type FacetGroup } from '@/components/analytics/FacetRail';
 import Sparkline from '@/components/charts/Sparkline';
 import { SortableHeader } from '@/components/SortableHeader';
 import { LensState } from '@/app/insights/tabs/shared';
+import { initialFacetSel } from './ns-param';
 
 /** Selected-metric cell, formatted per metric unit. */
 function metricValue(metric: NetMetric, p: NetPair): string {
@@ -63,18 +64,18 @@ function metricRawValue(metric: NetMetric, p: NetPair): number | null {
   }
 }
 
-export default function NetworkPage() {
+function NetworkPageInner() {
   const { t } = useLanguage();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [src, setSrc] = useState<Scope>('service');
   const [dst, setDst] = useState<Scope>('service');
   const [metric, setMetric] = useState<NetMetric>('volume');
   const [range, setRange] = useState<TimeRange>('1h');
-  const [facetSel, setFacetSel] = useState<Record<string, string>>({
-    namespace: 'all',
-    category: 'all',
-  });
+  const [facetSel, setFacetSel] = useState<Record<string, string>>(
+    () => initialFacetSel(searchParams.get('ns')),
+  );
 
   // Facet selections map onto the standard lens params (namespace/category),
   // applied server-side by applyFlowFilters — same semantics as the hub.
@@ -305,5 +306,15 @@ export default function NetworkPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary — this wrapper is the page's
+// actual default export; NetworkPageInner holds all the existing behavior.
+export default function NetworkPage() {
+  return (
+    <Suspense>
+      <NetworkPageInner />
+    </Suspense>
   );
 }

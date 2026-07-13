@@ -7,8 +7,9 @@
 // Selects pre-filter the snapshot before it reaches any view (filterTopology).
 // Selecting an edge (graph edge, matrix cell, or top-edges row) opens a
 // dialog that fetches /api/paths for that edge and renders its HopPath.
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Search, X } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
@@ -27,6 +28,7 @@ import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
 import HopPath from '@/components/HopPath';
 import { CategoryChip } from '@/components/FlowTable';
 import { Card, NumberInput, Select } from '@/components/ui/Controls';
+import { resolveFocusNode } from './focus-param';
 
 const METRICS: MetricName[] = ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS', 'ROUND_TRIP_TIME'];
 const LEVELS: { value: TierLevel; labelKey: string }[] = [
@@ -162,7 +164,7 @@ function EdgeHopPanel({
   );
 }
 
-export default function TopologyPage() {
+function TopologyPageInner() {
   const { t } = useLanguage();
   // LIVE/pause toggle: paused stops the poll while keeping the last snapshot.
   const [paused, setPaused] = useState(false);
@@ -328,13 +330,41 @@ export default function TopologyPage() {
   // and focuses it — separate from TagFilterPanel's checkbox filter, which
   // narrows the rendered node SET rather than jumping to one node.
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Task 3 — ?focus=<id-or-label> deep-link: one-shot effect that focuses
+  // the matching node once tagNodes (async-loaded topology data) populates.
+  // focusParamDone guards it from re-running on later polls/renders so it
+  // never fights subsequent user interaction (search, tag filter, clicks).
+  //
+  // Granularity note: the anomaly deep-link (AnomalyDetailPanel) passes a
+  // SERVICE-granular key (`namespace/serviceName`), but topology nodes are
+  // POD-granular (`id = pod:ns/podName`, `label = podName`) — so this usually
+  // matches via resolveFocusNode's substring branch, since pods are
+  // conventionally name-prefixed by their owning service. When it genuinely
+  // doesn't match (e.g. the service has no live pods), surface the same
+  // "no match" feedback handleSearchSubmit gives typed searches instead of
+  // silently doing nothing.
+  const searchParams = useSearchParams();
+  const focusParam = searchParams.get('focus');
+  const [focusParamDone, setFocusParamDone] = useState(false);
+  useEffect(() => {
+    if (focusParamDone || !focusParam || tagNodes.length === 0) return;
+    const match = resolveFocusNode(tagNodes, focusParam);
+    if (match) {
+      setSelectedIds(null); // ensure the node isn't hidden by an active tag filter
+      setFocusId(match.id);
+    } else {
+      setSearchQuery(focusParam); // show what was attempted in the search box
+      setSearchNoMatch(true); // render the existing no-match message
+    }
+    setFocusParamDone(true); // one-shot: don't fight later user interaction
+  }, [focusParam, focusParamDone, tagNodes]);
+
   const [searchNoMatch, setSearchNoMatch] = useState(false);
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return;
-    const exact = tagNodes.find((n) => n.id.toLowerCase() === q || n.label.toLowerCase() === q);
-    const match = exact ?? tagNodes.find((n) => n.id.toLowerCase().includes(q) || n.label.toLowerCase().includes(q));
+    if (!searchQuery.trim()) return;
+    const match = resolveFocusNode(tagNodes, searchQuery);
     if (match) {
       // tagNodes is the PRE-tag-selection node set, so a match may be excluded
       // by the applied tag filter — NetworkGraph's focusPresent guard would
@@ -650,5 +680,15 @@ export default function TopologyPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary — this wrapper is the page's
+// actual default export; TopologyPageInner holds all the existing behavior.
+export default function TopologyPage() {
+  return (
+    <Suspense>
+      <TopologyPageInner />
+    </Suspense>
   );
 }

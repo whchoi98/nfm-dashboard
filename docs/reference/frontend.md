@@ -27,6 +27,7 @@ Next.js 16 App Router frontend (React 19): one page per dashboard view under `ap
 - `app/src/app/layout.tsx` — root layout; new pages register navigation in `app/src/components/layout/nav.ts`
 - `app/src/lib/i18n/LanguageContext.tsx` — language state + `t()`; add keys to BOTH `translations/ko.json` and `translations/en.json`
 - `app/src/lib/use-sse.ts` — client consumption of SSE endpoints (AI chat)
+- `app/src/app/topology/focus-param.ts`, `app/src/app/network/ns-param.ts` — additive deep-link params: `/topology?focus=<ns/name>` focuses a node, `/network?ns=<namespace>` presets the namespace facet; both are no-ops when the param is absent
 
 ### 5. Cross-references
 <!-- TODO -->
@@ -58,6 +59,7 @@ Next.js 16 App Router 프론트엔드(React 19): `app/src/app/` 아래 대시보
 - `app/src/app/layout.tsx` — 루트 레이아웃; 새 페이지는 `app/src/components/layout/nav.ts`에 내비게이션 등록
 - `app/src/lib/i18n/LanguageContext.tsx` — 언어 상태 + `t()`; 키는 `translations/ko.json`과 `translations/en.json` 양쪽에 추가
 - `app/src/lib/use-sse.ts` — SSE 엔드포인트(AI 채팅)의 클라이언트 소비
+- `app/src/app/topology/focus-param.ts`, `app/src/app/network/ns-param.ts` — 추가형(additive) 딥링크 파라미터: `/topology?focus=<ns/name>`은 노드를 포커스, `/network?ns=<namespace>`는 네임스페이스 facet을 프리셋; 파라미터가 없으면 둘 다 아무 동작도 하지 않음(no-op)
 
 ### 5. 상호 참조
 <!-- TODO -->
