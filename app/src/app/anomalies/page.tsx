@@ -5,17 +5,19 @@
 // spikes (current > σ × prior). Thresholds and σ come from useSettings()
 // (Settings page, localStorage) and are passed to /api/anomalies as query
 // params; the route falls back to the reliability lens defaults when absent.
+import { useState } from 'react';
 import Link from 'next/link';
 import { Clock, Repeat, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { useSettings } from '@/lib/settings';
 import { rangeToBuckets } from '@/lib/analytics/filters';
-import type { Anomaly, AnomalyKind, AnomalySeverity } from '@/lib/analytics/anomalies';
+import { formatAnomalyValue, type Anomaly, type AnomalyKind, type AnomalySeverity } from '@/lib/analytics/anomalies';
 import { STATUS } from '@/lib/chart-tokens';
-import { formatCount, formatMetricValue } from '@/lib/format';
+import { formatCount } from '@/lib/format';
 import StatDelta from '@/components/charts/StatDelta';
 import Widget from '@/components/analytics/Widget';
+import AnomalyDetailPanel from '@/components/analytics/AnomalyDetailPanel';
 import { LensState } from '@/app/insights/tabs/shared';
 
 interface AnomaliesResponse {
@@ -35,49 +37,53 @@ const KIND_ICON: Record<AnomalyKind, LucideIcon> = {
   spike: TrendingUp,
 };
 
-/** Threshold kinds carry events/GB rates; spikes carry raw metric totals. */
-function formatValue(a: Anomaly, v: number): string {
-  return a.kind === 'spike' ? formatMetricValue(a.metric, v) : `${v.toFixed(1)}/GB`;
-}
-
-function AnomalyRow({ anomaly }: { anomaly: Anomaly }) {
+function AnomalyRow({
+  anomaly,
+  onSelect,
+  selected,
+}: {
+  anomaly: Anomaly;
+  onSelect: () => void;
+  selected: boolean;
+}) {
   const { t } = useLanguage();
   const Icon = KIND_ICON[anomaly.kind];
   return (
-    <li className="flex items-start gap-3 rounded-lg bg-black/5 px-3 py-2 dark:bg-white/5">
-      <span
-        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-        style={{ backgroundColor: SEVERITY_COLOR[anomaly.severity] }}
-        aria-hidden
-      />
-      <Icon
-        size={16}
-        strokeWidth={1.75}
-        className="mt-0.5 shrink-0 text-ink/60 dark:text-white/60"
-        aria-hidden
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <p className="truncate text-sm font-medium" title={anomaly.label}>
-            {anomaly.label}
-          </p>
-          <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/70 dark:bg-white/10 dark:text-white/70">
-            {t(`anomalies.kind.${anomaly.kind}`)}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50">
-            {t(`anomalies.severity.${anomaly.severity}`)}
-          </span>
+    <li>
+      <button
+        type="button"
+        data-testid={`anomaly-row-${anomaly.key}`}
+        onClick={onSelect}
+        aria-pressed={selected}
+        className={`flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+          selected ? 'bg-black/10 dark:bg-white/10' : 'bg-black/5 hover:bg-black/[.08] dark:bg-white/5 dark:hover:bg-white/[.08]'
+        }`}
+      >
+        <span
+          className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: SEVERITY_COLOR[anomaly.severity] }}
+          aria-hidden
+        />
+        <Icon size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-ink/60 dark:text-white/60" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className="truncate text-sm font-medium" title={anomaly.label}>{anomaly.label}</p>
+            <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/70 dark:bg-white/10 dark:text-white/70">
+              {t(`anomalies.kind.${anomaly.kind}`)}
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50">
+              {t(`anomalies.severity.${anomaly.severity}`)}
+            </span>
+          </div>
+          <p className="truncate text-xs text-ink/60 dark:text-white/60" title={anomaly.detail}>{anomaly.detail}</p>
         </div>
-        <p className="truncate text-xs text-ink/60 dark:text-white/60" title={anomaly.detail}>
-          {anomaly.detail}
-        </p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold tabular-nums">{formatValue(anomaly, anomaly.value)}</p>
-        <p className="text-[11px] tabular-nums text-ink/50 dark:text-white/50">
-          {t('anomalies.vsBaseline', { baseline: formatValue(anomaly, anomaly.baseline) })}
-        </p>
-      </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-semibold tabular-nums">{formatAnomalyValue(anomaly, anomaly.value)}</p>
+          <p className="text-[11px] tabular-nums text-ink/50 dark:text-white/50">
+            {t('anomalies.vsBaseline', { baseline: formatAnomalyValue(anomaly, anomaly.baseline) })}
+          </p>
+        </div>
+      </button>
     </li>
   );
 }
@@ -92,6 +98,7 @@ export default function AnomaliesPage() {
   const { data, error, loading } = usePolling<AnomaliesResponse>(`/api/anomalies${query}`);
   const firstLoad = loading && !data;
   const anomalies = data?.anomalies ?? [];
+  const [selected, setSelected] = useState<Anomaly | null>(null);
 
   const counts: Record<AnomalyKind, number> = { retrans: 0, timeout: 0, spike: 0 };
   for (const a of anomalies) counts[a.kind] += 1;
@@ -135,12 +142,24 @@ export default function AnomaliesPage() {
           emptyLabel={t('anomalies.empty')}
         >
           <ul className="flex flex-col gap-2">
-            {anomalies.map((a) => (
-              <AnomalyRow key={`${a.kind}:${a.metric}:${a.key}`} anomaly={a} />
-            ))}
+            {anomalies.map((a) => {
+              const id = `${a.kind}:${a.metric}:${a.key}`;
+              return (
+                <AnomalyRow
+                  key={id}
+                  anomaly={a}
+                  selected={selected != null && `${selected.kind}:${selected.metric}:${selected.key}` === id}
+                  onSelect={() => setSelected(a)}
+                />
+              );
+            })}
           </ul>
         </LensState>
       </Widget>
+
+      {selected && (
+        <AnomalyDetailPanel anomaly={selected} onClose={() => setSelected(null)} />
+      )}
     </div>
   );
 }
