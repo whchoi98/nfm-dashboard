@@ -24,6 +24,7 @@
 // Consumed by /api/anomalies — the route exposes {anomalies} as JSON verbatim.
 import type { FlowEdge, MetricName } from '../types';
 import { entityKey } from './aggregate';
+import { formatMetricValue } from '../format';
 import { ratePer } from './reliability';
 
 /** Default spike sensitivity (σ) — mirrors DEFAULT_SETTINGS.anomalySigma. */
@@ -57,6 +58,11 @@ export interface Anomaly {
   severity: AnomalySeverity;
   /** Data payload (rates/factors), rendered verbatim — no locale-bound prose. */
   detail: string;
+}
+
+/** Threshold kinds carry events/GB rates; spikes carry raw metric totals. */
+export function formatAnomalyValue(a: Anomaly, v: number): string {
+  return a.kind === 'spike' ? formatMetricValue(a.metric, v) : `${v.toFixed(1)}/GB`;
 }
 
 export interface AnomalyOpts {
