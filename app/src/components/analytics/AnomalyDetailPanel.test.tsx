@@ -28,7 +28,10 @@ describe('AnomalyDetailPanel', () => {
     renderPanel(retrans);
     expect(screen.getByTestId('anomaly-detail')).toBeTruthy();
     expect(screen.getByText('ecommerce/cart-svc')).toBeTruthy();
-    expect(screen.getByText('RETRANSMISSIONS')).toBeTruthy();
+    // Metric renders TRANSLATED (ko). Scope to the metric row's value <dd> via
+    // its "지표" <dt> label — the kind badge also renders "재전송"
+    // (anomalies.kind.retrans), so a bare getByText('재전송') is ambiguous.
+    expect(screen.getByText('지표').nextElementSibling?.textContent).toBe('재전송'); // metric.RETRANSMISSIONS (ko)
     expect(screen.getByText('12.3/GB')).toBeTruthy(); // current
     expect(screen.getByText('10.0/GB')).toBeTruthy(); // baseline
     expect(screen.getByText('×1.2')).toBeTruthy();    // overshoot value/baseline

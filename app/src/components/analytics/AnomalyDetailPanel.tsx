@@ -48,6 +48,7 @@ export default function AnomalyDetailPanel({
       />
       <aside
         role="dialog"
+        aria-modal="true"
         aria-label={anomaly.label}
         data-testid="anomaly-detail"
         className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col gap-4 overflow-y-auto bg-surface p-5 shadow-xl dark:bg-ink sm:w-96"
@@ -82,7 +83,7 @@ export default function AnomalyDetailPanel({
 
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
           <dt className="text-ink/50 dark:text-white/50">{t('anomalies.detail.metric')}</dt>
-          <dd className="text-right font-medium">{anomaly.metric}</dd>
+          <dd className="text-right font-medium">{t(`metric.${anomaly.metric}`)}</dd>
           <dt className="text-ink/50 dark:text-white/50">{t('anomalies.detail.current')}</dt>
           <dd className="text-right font-semibold tabular-nums">{formatAnomalyValue(anomaly, anomaly.value)}</dd>
           <dt className="text-ink/50 dark:text-white/50">{t('anomalies.detail.baseline')}</dt>
