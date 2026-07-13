@@ -119,7 +119,7 @@ fire. If targets are healthy, the 5xx is coming from the app — read the app
 container logs for the failing route/stack trace. Verify the edge directly:
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/login   # expect 200
-curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # expect 302 (-> Cognito)
+curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # expect 302 (-> Cognito) — or 200 when the `authDisabled` toggle is on (ADR-005)
 ```
 
 ### 5. Finding logs
@@ -142,7 +142,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/  
 - [ ] The firing alarm has returned to `OK` (an `OK` SNS notice is sent on recovery).
 - [ ] (collector) A subsequent collector run logged no errors / new buckets appear.
 - [ ] (no-healthy-hosts) `HealthyHostCount >= 1` and ECS `runningCount == desiredCount`.
-- [ ] (5xx) CloudFront `/login` → `200`, `/` → `302`; `bash scripts/smoke.sh` → 3/3.
+- [ ] (5xx) CloudFront `/login` → `200`, `/` → `302` (auth on) / `200` (`authDisabled`); `bash scripts/smoke.sh` → 3/3.
 
 ## Rollback
 - If a bad deploy caused `no-healthy-hosts` or `alb-5xx`, roll back the app to the
@@ -274,7 +274,7 @@ aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
 직접 검증한다:
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/login   # 200 기대
-curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 기대 (-> Cognito)
+curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 기대 (-> Cognito) — `authDisabled` 토글 ON이면 200 (ADR-005)
 ```
 
 ### 5. 로그 찾기
@@ -296,7 +296,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/  
 - [ ] 발생한 알람이 `OK`로 복귀(복구 시 `OK` SNS 알림 전송).
 - [ ] (컬렉터) 이후 컬렉터 실행에 오류 없음 / 새 버킷 생성 확인.
 - [ ] (no-healthy-hosts) `HealthyHostCount >= 1` 및 ECS `runningCount == desiredCount`.
-- [ ] (5xx) CloudFront `/login` → `200`, `/` → `302`; `bash scripts/smoke.sh` → 3/3.
+- [ ] (5xx) CloudFront `/login` → `200`, `/` → `302`(인증 ON) / `200`(`authDisabled`); `bash scripts/smoke.sh` → 3/3.
 
 ## 롤백
 - 잘못된 배포가 `no-healthy-hosts` 또는 `alb-5xx`를 유발했다면, `docs/runbooks/deploy.md`

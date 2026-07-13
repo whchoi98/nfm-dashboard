@@ -91,7 +91,7 @@ aws ecs describe-services --cluster nfm-dashboard --services nfm-dashboard-app \
 
 # d) CloudFront edge serving:
 curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/login   # 200
-curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 (-> Cognito login)
+curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 (-> Cognito login) — or 200 when the `authDisabled` toggle is on (ADR-005)
 ```
 
 ### 4. Smoke
@@ -105,7 +105,7 @@ Cognito admin password from Secrets Manager at runtime (never on disk).
 - [ ] Target stack status is `UPDATE_COMPLETE` / `CREATE_COMPLETE`.
 - [ ] (App) ECS rollout state is `COMPLETED`.
 - [ ] ALB `HealthyHostCount >= 1`.
-- [ ] CloudFront `/login` → `200` and `/` → `302`.
+- [ ] CloudFront `/login` → `200` and `/` → `302` (auth on) / `200` (`authDisabled` toggle).
 - [ ] `bash scripts/smoke.sh` → 3/3 passing.
 - [ ] No new `NfmDash-Ops` alarm (collector-errors / no-healthy-hosts / alb-5xx) in ALARM.
 
@@ -219,7 +219,7 @@ aws ecs describe-services --cluster nfm-dashboard --services nfm-dashboard-app \
 
 # d) CloudFront 엣지 서빙:
 curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/login   # 200
-curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 (-> Cognito 로그인)
+curl -s -o /dev/null -w "%{http_code}\n" https://dv4r4bnlhlpcx.cloudfront.net/        # 302 (-> Cognito 로그인) — `authDisabled` 토글 ON이면 200 (ADR-005)
 ```
 
 ### 4. 스모크
@@ -233,7 +233,7 @@ Manager에서 Cognito 관리자 비밀번호를 가져온다(디스크에 저장
 - [ ] 대상 스택 상태가 `UPDATE_COMPLETE` / `CREATE_COMPLETE`.
 - [ ] (앱) ECS 롤아웃 상태가 `COMPLETED`.
 - [ ] ALB `HealthyHostCount >= 1`.
-- [ ] CloudFront `/login` → `200`, `/` → `302`.
+- [ ] CloudFront `/login` → `200`, `/` → `302`(인증 ON) / `200`(`authDisabled` 토글).
 - [ ] `bash scripts/smoke.sh` → 3/3 통과.
 - [ ] `NfmDash-Ops` 알람(collector-errors / no-healthy-hosts / alb-5xx) 신규 ALARM 없음.
 

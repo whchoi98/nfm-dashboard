@@ -4,27 +4,44 @@ import * as path from 'node:path';
 // Auth session captured by spec 1, reused by specs 2-3 (gitignored).
 const authFile = path.join(__dirname, '.auth.json');
 
-for (const name of ['APP_URL', 'E2E_EMAIL', 'E2E_PASSWORD'] as const) {
+// Explicit flag from scripts/smoke.sh (mirrors the deployed `authDisabled` CDK
+// context). Deliberately NOT auto-detected from the landing URL: if auth should
+// be ON but the middleware breaks, auto-detection would pass a broken deploy.
+const authDisabled = process.env.E2E_AUTH_DISABLED === '1';
+
+// Cognito credentials are only required when the login flow is exercised.
+const required = authDisabled
+  ? (['APP_URL'] as const)
+  : (['APP_URL', 'E2E_EMAIL', 'E2E_PASSWORD'] as const);
+for (const name of required) {
   if (!process.env[name]) throw new Error(`${name} is not set — run via scripts/smoke.sh`);
 }
 
 // Serial: the login spec must succeed first (it writes the storageState);
 // on its failure the dependent specs are skipped instead of failing noisily.
 test.describe.serial('NFM Dashboard smoke', () => {
-  test('login → overview KPI renders', async ({ page }) => {
-    await page.goto('/'); // unauthenticated → middleware redirects to /login
-    await page.locator('a[href="/api/auth/login"]').click(); // → Cognito Hosted UI
-    await page.waitForURL(/amazoncognito\.com/, { timeout: 30_000 });
-    // Classic Hosted UI renders duplicate desktop/mobile forms — target the visible one.
-    await page.locator('input[name="username"]:visible').fill(process.env.E2E_EMAIL!);
-    await page.locator('input[name="password"]:visible').fill(process.env.E2E_PASSWORD!);
-    await page
-      .locator('input[name="signInSubmitButton"]:visible, button[type="submit"]:visible')
-      .first()
-      .click();
-    // PKCE callback → session cookie → overview. KPI card must render
-    // (an empty/collecting value still renders the card).
+  test('login (auth on) / direct entry (auth off) → overview KPI renders', async ({ page }) => {
+    await page.goto('/');
+    if (authDisabled) {
+      // AUTH_DISABLED deploy: '/' must render the overview directly — no /login redirect.
+      await expect(page).not.toHaveURL(/\/login/);
+    } else {
+      // unauthenticated → middleware redirected to /login
+      await page.locator('a[href="/api/auth/login"]').click(); // → Cognito Hosted UI
+      await page.waitForURL(/amazoncognito\.com/, { timeout: 30_000 });
+      // Classic Hosted UI renders duplicate desktop/mobile forms — target the visible one.
+      await page.locator('input[name="username"]:visible').fill(process.env.E2E_EMAIL!);
+      await page.locator('input[name="password"]:visible').fill(process.env.E2E_PASSWORD!);
+      await page
+        .locator('input[name="signInSubmitButton"]:visible, button[type="submit"]:visible')
+        .first()
+        .click();
+      // PKCE callback → session cookie → overview.
+    }
+    // KPI card must render (an empty/collecting value still renders the card).
     await expect(page.getByTestId('kpi-dataTransferred')).toBeVisible({ timeout: 30_000 });
+    // Always write the storageState — specs 2-3 consume it in both modes
+    // (an anonymous state is fine when auth is disabled).
     await page.context().storageState({ path: authFile });
   });
 

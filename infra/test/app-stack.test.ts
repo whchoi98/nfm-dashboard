@@ -5,8 +5,9 @@ import { AppStack } from '../lib/app-stack';
 
 // Vpc.fromLookup falls back to a dummy VPC when no cdk.context.json is present.
 // `imageTag` is required context (deploys pin the immutable per-commit SHA tag).
-const template = () => Template.fromStack(new AppStack(
-  new App({ context: { imageTag: 'test' } }), 'T',
+// NOTE: unit tests never read cdk.json — context here is exactly what's passed.
+const template = (ctx: Record<string, unknown> = {}) => Template.fromStack(new AppStack(
+  new App({ context: { imageTag: 'test', ...ctx } }), 'T',
   { env: { account: '123456789012', region: 'ap-northeast-2' } }));
 
 it('ALB SG ingress is ONLY the CloudFront origin-facing prefix list on :80', () => {
@@ -45,6 +46,21 @@ it('TaskDefinition is arm64 Fargate with prod env and no AUTH_DISABLED', () => {
   const image = JSON.stringify(td.Properties.ContainerDefinitions[0].Image);
   expect(image).toContain(':test');
   expect(image).not.toContain(':latest');
+});
+
+it('authDisabled context injects AUTH_DISABLED=1 but keeps perimeter + Cognito intact', () => {
+  // Both context shapes: cdk.json gives a boolean, `-c authDisabled=true` a string.
+  for (const authDisabled of [true, 'true'] as const) {
+    const t = template({ authDisabled });
+    const td = Object.values(t.findResources('AWS::ECS::TaskDefinition'))[0];
+    const env: Array<{ Name: string; Value?: string }> =
+      td.Properties.ContainerDefinitions[0].Environment;
+    expect(env.find((e) => e.Name === 'AUTH_DISABLED')?.Value).toBe('1');
+    // The toggle must never touch the perimeter or the login infrastructure.
+    const secrets: Array<{ Name: string }> = td.Properties.ContainerDefinitions[0].Secrets;
+    expect(secrets.map((s) => s.Name)).toContain('ORIGIN_VERIFY_SECRET');
+    t.hasResourceProperties('AWS::Cognito::UserPoolClient', { GenerateSecret: false });
+  }
 });
 
 it('AppStack synth fails fast when the imageTag context is missing', () => {

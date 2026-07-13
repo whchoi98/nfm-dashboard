@@ -13,7 +13,7 @@ Runtime infrastructure for the dashboard: a Next.js container image (linux/arm64
 | Component | Path | Purpose |
 |---|---|---|
 | App container image | `app/Dockerfile` | Next.js standalone build; linux/arm64 image consumed by `NfmDash-App` |
-| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront, Cognito Hosted UI (PKCE) |
+| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront, Cognito Hosted UI (PKCE); login temporarily disabled via `authDisabled` context (ADR-005) |
 | Ops alarms stack | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: CloudWatch alarms on the ALB / target group from AppStack |
 | Image build script | `scripts/build-push.sh` | Builds and pushes the app image to ECR (tag = git sha) |
 | Smoke test | `scripts/smoke.sh`, `e2e/smoke.spec.ts` | Playwright e2e smoke against the live CloudFront URL |

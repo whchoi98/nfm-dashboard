@@ -16,7 +16,7 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 | Data stack | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB tables + collector Lambda + schedule + flow-archive pipeline (DDB Streams → transform Lambda → Firehose Parquet → S3 + Glue/Athena) |
 | Onboarding stack | `infra/lib/nfm-onboarding-stack.ts` | `NfmDash-Onboarding`: NFM monitor onboarding resources |
 | AgentCore stack | `infra/lib/agentcore-stack.ts` | `NfmDash-AgentCore`: MCP tool Lambdas (Python 3.13, arm64) + gateway IAM role |
-| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito runtime |
+| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito runtime; `authDisabled` context → task env `AUTH_DISABLED=1` (temporary login off, ADR-005) |
 | Ops stack | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: CloudWatch alarms |
 | DNS stack | `infra/lib/dns-stack.ts` | `NfmDash-Dns`: DNS resources |
 | Config / tests | `infra/cdk.json`, `infra/cdk.context.json`, `infra/test/` | CDK config, cached context, stack tests (vitest) |
