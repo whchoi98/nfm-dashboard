@@ -335,6 +335,15 @@ function TopologyPageInner() {
   // the matching node once tagNodes (async-loaded topology data) populates.
   // focusParamDone guards it from re-running on later polls/renders so it
   // never fights subsequent user interaction (search, tag filter, clicks).
+  //
+  // Granularity note: the anomaly deep-link (AnomalyDetailPanel) passes a
+  // SERVICE-granular key (`namespace/serviceName`), but topology nodes are
+  // POD-granular (`id = pod:ns/podName`, `label = podName`) — so this usually
+  // matches via resolveFocusNode's substring branch, since pods are
+  // conventionally name-prefixed by their owning service. When it genuinely
+  // doesn't match (e.g. the service has no live pods), surface the same
+  // "no match" feedback handleSearchSubmit gives typed searches instead of
+  // silently doing nothing.
   const searchParams = useSearchParams();
   const focusParam = searchParams.get('focus');
   const [focusParamDone, setFocusParamDone] = useState(false);
@@ -344,6 +353,9 @@ function TopologyPageInner() {
     if (match) {
       setSelectedIds(null); // ensure the node isn't hidden by an active tag filter
       setFocusId(match.id);
+    } else {
+      setSearchQuery(focusParam); // show what was attempted in the search box
+      setSearchNoMatch(true); // render the existing no-match message
     }
     setFocusParamDone(true); // one-shot: don't fight later user interaction
   }, [focusParam, focusParamDone, tagNodes]);

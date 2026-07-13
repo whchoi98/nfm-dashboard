@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Clock, Repeat, TrendingUp, X, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -28,6 +28,7 @@ export default function AnomalyDetailPanel({
   const Icon = KIND_ICON[anomaly.kind];
   const namespace = anomaly.label.split('/')[0];
   const overshoot = anomaly.value / Math.max(anomaly.baseline, 1e-9);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Escape closes the panel (dialog convention).
   useEffect(() => {
@@ -37,6 +38,12 @@ export default function AnomalyDetailPanel({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Move focus into the dialog on open (minimal focus management — not a
+  // full focus-trap; the close button is the first interactive control).
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
 
   return (
     <>
@@ -61,6 +68,7 @@ export default function AnomalyDetailPanel({
             </h2>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             data-testid="anomaly-detail-close"
             aria-label={t('anomalies.detail.close')}

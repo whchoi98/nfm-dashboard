@@ -27,6 +27,9 @@ describe('AnomalyDetailPanel', () => {
   it('renders the entity, metric, current-vs-baseline, overshoot and detail', () => {
     renderPanel(retrans);
     expect(screen.getByTestId('anomaly-detail')).toBeTruthy();
+    // Focus management: opening the dialog moves focus to the close button
+    // so keyboard/screen-reader focus enters the panel.
+    expect(document.activeElement).toBe(screen.getByTestId('anomaly-detail-close'));
     expect(screen.getByText('ecommerce/cart-svc')).toBeTruthy();
     // Metric renders TRANSLATED (ko). Scope to the metric row's value <dd> via
     // its "지표" <dt> label — the kind badge also renders "재전송"

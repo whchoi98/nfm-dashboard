@@ -477,7 +477,6 @@
   "anomalies.severity.critical": "Critical",
   "anomalies.severity.warn": "Warning",
   "anomalies.vsBaseline": "vs {baseline}",
-  "anomalies.detail.title": "Anomaly detail",
   "anomalies.detail.metric": "Metric",
   "anomalies.detail.current": "Current",
   "anomalies.detail.baseline": "Baseline",

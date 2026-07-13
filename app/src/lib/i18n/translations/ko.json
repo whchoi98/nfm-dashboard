@@ -477,7 +477,6 @@
   "anomalies.severity.critical": "심각",
   "anomalies.severity.warn": "경고",
   "anomalies.vsBaseline": "기준 {baseline}",
-  "anomalies.detail.title": "이상 징후 상세",
   "anomalies.detail.metric": "지표",
   "anomalies.detail.current": "현재값",
   "anomalies.detail.baseline": "기준값",
