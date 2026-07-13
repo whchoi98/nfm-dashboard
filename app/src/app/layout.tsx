@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import AppShell from '@/components/layout/AppShell';
+import RumProvider from '@/components/RumProvider';
 import './globals.css';
 
 const inter = Inter({
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-white text-ink dark:bg-ink dark:text-white">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <AppShell>{children}</AppShell>
+        <RumProvider />
       </body>
     </html>
   );

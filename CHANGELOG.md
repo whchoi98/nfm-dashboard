@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Real User Monitoring via aws-rum-pipeline: `RumProvider` loads the self-hosted RUM SDK and stamps every event with `appName: nfm-dashboard` (page views, SPA route dwell time, Core Web Vitals, JS errors). Enabled only when `NEXT_PUBLIC_RUM_ENDPOINT`/`NEXT_PUBLIC_RUM_API_KEY` are exported before `scripts/build-push.sh` (Docker build args).
+
 ## [0.10.0] - 2026-07-12
 
 ### Added
@@ -176,6 +179,9 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 > 앱 UI에 표시되는 버전은 `app/src/lib/version.ts`의 `APP_VERSION`을 읽습니다 — 이 값과 `app/package.json`을 이 파일의 최상단 항목과 동기화하여 유지합니다.
 
 ## [Unreleased]
+
+### Added
+- aws-rum-pipeline 연동 RUM(Real User Monitoring): `RumProvider`가 자체 호스팅 SDK를 로드해 모든 이벤트에 `appName: nfm-dashboard`를 스탬핑 (페이지뷰·SPA 체류시간·Core Web Vitals·JS 에러). `scripts/build-push.sh` 실행 전 `NEXT_PUBLIC_RUM_*` export 시에만 활성화 (Docker build args).
 
 ## [0.10.0] - 2026-07-12
 

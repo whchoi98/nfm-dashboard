@@ -17,6 +17,12 @@ COPY app ./app
 # Workspace-nested deps (version conflicts get placed under app/node_modules).
 COPY --from=deps /repo/app/node_modules ./app/node_modules
 COPY collector/src/types.ts ./collector/src/types.ts
+# RUM (aws-rum-pipeline): NEXT_PUBLIC_* are inlined into the bundle at build
+# time; unset args disable collection (RumProvider renders nothing).
+ARG NEXT_PUBLIC_RUM_ENDPOINT
+ARG NEXT_PUBLIC_RUM_API_KEY
+ENV NEXT_PUBLIC_RUM_ENDPOINT=$NEXT_PUBLIC_RUM_ENDPOINT \
+    NEXT_PUBLIC_RUM_API_KEY=$NEXT_PUBLIC_RUM_API_KEY
 RUN cd app && npx next build
 
 FROM public.ecr.aws/docker/library/node:22-alpine

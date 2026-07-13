@@ -17,7 +17,12 @@ aws ecr describe-repositories --repository-names $REPO --region $REGION >/dev/nu
     --image-scanning-configuration scanOnPush=true >/dev/null
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin \
   $ACCOUNT.dkr.ecr.$REGION.amazonaws.com
-docker build --platform linux/arm64 -f app/Dockerfile -t $REPO:$TAG .
+# RUM build args are passed through only when set in the caller's environment
+# (see .env.example). Unset args produce a bundle with RUM collection disabled.
+RUM_ARGS=()
+[ -n "${NEXT_PUBLIC_RUM_ENDPOINT:-}" ] && RUM_ARGS+=(--build-arg "NEXT_PUBLIC_RUM_ENDPOINT=$NEXT_PUBLIC_RUM_ENDPOINT")
+[ -n "${NEXT_PUBLIC_RUM_API_KEY:-}" ] && RUM_ARGS+=(--build-arg "NEXT_PUBLIC_RUM_API_KEY=$NEXT_PUBLIC_RUM_API_KEY")
+docker build --platform linux/arm64 -f app/Dockerfile "${RUM_ARGS[@]}" -t $REPO:$TAG .
 docker tag $REPO:$TAG $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG
 docker push $ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG
 # Convenience alias only — never referenced by the stack. On an IMMUTABLE repo
