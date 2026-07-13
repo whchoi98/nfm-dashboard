@@ -667,13 +667,13 @@
     <ol class="hiw">
       <li class="reveal">
         <div class="hl">수집 <em>· Collect</em></div>
-        <p class="hd">EKS 노드와 독립 워크로드에 배치된 NFM 에이전트가 커널 레벨 eBPF로 Pod-to-Pod 플로우를 애플리케이션 변경 없이 수집합니다.</p>
-        <div class="hc"><span>eBPF Agent</span><span>AWS Network Flow Monitor</span><span>47 AGENTS</span></div>
+        <p class="hd">EKS 노드와 독립 워크로드의 NFM 에이전트가 커널 레벨 eBPF로 Pod-to-Pod 플로우를 확보하고, AWS Network Flow Monitor가 이를 top-contributor 플로우 · Workload Insights(11개 흐름 범주) · CloudWatch 지표 · Route53/CoreDNS DNS 로그로 노출합니다.</p>
+        <div class="hc"><span>eBPF Agent</span><span>AWS NFM · WI 11 categories</span><span>CloudWatch · DNS</span><span>47 AGENTS</span></div>
       </li>
       <li class="reveal">
         <div class="hl">집계 &amp; 저장 <em>· Aggregate &amp; Store</em></div>
-        <p class="hd">AWS NFM이 전송량·재전송·타임아웃·RTT로 집계하고, 5분 주기 Collector Lambda가 이를 읽어 DynamoDB 핫 스토어(7일 TTL)에 기록합니다. DynamoDB Stream이 이를 Kinesis Firehose로 흘려 S3 Parquet 아카이브(Athena 조회)에 장기 보관합니다.</p>
-        <div class="hc"><span>Collector Lambda · 5min</span><span>DynamoDB · 7d TTL</span><span>DDB Stream · Firehose</span><span>S3 Parquet · Athena</span></div>
+        <p class="hd">EventBridge Scheduler가 5분마다 Collector Lambda를 돌려 이 지표를 DynamoDB 핫 스토어(7일 TTL)에 기록합니다. DynamoDB Stream → archive-transform Lambda → Kinesis Firehose(Parquet)가 TTL 삭제 전에 모든 플로우를 S3로 아카이브하고, Glue·Athena로 카탈로그화해 /history 페이지가 임의 날짜 범위를 조회합니다.</p>
+        <div class="hc"><span>EventBridge · 5min</span><span>DynamoDB · 7d TTL</span><span>Firehose · S3 Parquet</span><span>Glue · Athena · /history</span></div>
       </li>
       <li class="reveal">
         <div class="hl">시각화 <em>· Visualize</em></div>
@@ -682,8 +682,8 @@
       </li>
       <li class="reveal">
         <div class="hl">진단 &amp; 알림 <em>· Diagnose &amp; Alert</em></div>
-        <p class="hd">Amazon Bedrock과 AgentCore MCP 게이트웨이가 이상 징후를 종합해 근본 원인 후보를 제시하고, CloudWatch 경보로 통지합니다.</p>
-        <div class="hc"><span>Amazon Bedrock</span><span>AgentCore MCP</span><span>CloudWatch</span></div>
+        <p class="hd">Amazon Bedrock ConverseStream과 AgentCore MCP 게이트웨이(SigV4, 27개 도구)가 이상 징후를 종합해 근본 원인 후보를 제시하고, CloudWatch 경보를 SNS로 통지합니다.</p>
+        <div class="hc"><span>Bedrock ConverseStream</span><span>AgentCore · 27 tools</span><span>CloudWatch · SNS</span></div>
       </li>
     </ol>
 
@@ -742,7 +742,7 @@
           <line x1="840" y1="288" x2="840" y2="304" stroke="#3B76E0" stroke-width="1.6" marker-end="url(#da)"/>
         </g>
       </svg>
-      <figcaption>수집: Collector Lambda(5분) → AWS Network Flow Monitor · CloudWatch → DynamoDB · S3 아카이브 &nbsp;·&nbsp; 관측 전용 — 인프라 변경 권한 없음</figcaption>
+      <figcaption>수집 Collector Lambda(EventBridge 5분) → NFM · CloudWatch · DNS → DynamoDB &nbsp;·&nbsp; 아카이브 DynamoDB Stream → Firehose(Parquet) → S3 → Glue/Athena → /history &nbsp;·&nbsp; 관측 전용 — 인프라 변경 권한 없음</figcaption>
     </figure>
 
     <div class="arch-note reveal">
