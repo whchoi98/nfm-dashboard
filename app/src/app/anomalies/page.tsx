@@ -98,7 +98,13 @@ export default function AnomaliesPage() {
   const { data, error, loading } = usePolling<AnomaliesResponse>(`/api/anomalies${query}`);
   const firstLoad = loading && !data;
   const anomalies = data?.anomalies ?? [];
-  const [selected, setSelected] = useState<Anomaly | null>(null);
+  // Track the selection by its composite id, not the object, so the panel
+  // follows the 30s poll: `selected` is re-derived from the LIVE array each
+  // render — it picks up updated value/baseline and drops to null (panel
+  // auto-closes) once the anomaly resolves and leaves the list.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected =
+    anomalies.find((a) => `${a.kind}:${a.metric}:${a.key}` === selectedId) ?? null;
 
   const counts: Record<AnomalyKind, number> = { retrans: 0, timeout: 0, spike: 0 };
   for (const a of anomalies) counts[a.kind] += 1;
@@ -148,8 +154,8 @@ export default function AnomaliesPage() {
                 <AnomalyRow
                   key={id}
                   anomaly={a}
-                  selected={selected != null && `${selected.kind}:${selected.metric}:${selected.key}` === id}
-                  onSelect={() => setSelected(a)}
+                  selected={selectedId === id}
+                  onSelect={() => setSelectedId(id)}
                 />
               );
             })}
@@ -158,7 +164,7 @@ export default function AnomaliesPage() {
       </Widget>
 
       {selected && (
-        <AnomalyDetailPanel anomaly={selected} onClose={() => setSelected(null)} />
+        <AnomalyDetailPanel anomaly={selected} onClose={() => setSelectedId(null)} />
       )}
     </div>
   );
