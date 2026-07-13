@@ -10,7 +10,9 @@
 # English
 
 ## Status
-Accepted — 2026-07-13 (toggle currently **ON**: login disabled)
+Accepted — 2026-07-13. The mechanism is permanent; the toggle was briefly ON
+(login disabled) on 2026-07-13 and turned **OFF the same day — login is
+currently enforced**. The `demo@whchoi.net` user was added at re-enable time.
 
 ## Context
 The dashboard is gated by Cognito Hosted UI (PKCE) enforced in
@@ -71,7 +73,9 @@ cd infra && npx cdk deploy NfmDash-App --require-approval never -c imageTag=<cur
 # 한국어
 
 ## 상태
-승인 — 2026-07-13 (토글 현재 **ON**: 로그인 비활성)
+승인 — 2026-07-13. 메커니즘은 영구적이며, 토글은 2026-07-13 잠시 ON(로그인
+비활성)이었다가 **같은 날 OFF로 전환 — 현재 로그인 강제** 상태다. 재활성화
+시점에 `demo@whchoi.net` 사용자를 추가했다.
 
 ## 배경
 대시보드는 `app/src/middleware.ts`가 강제하는 Cognito Hosted UI(PKCE)로
