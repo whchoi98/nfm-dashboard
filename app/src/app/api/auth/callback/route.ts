@@ -63,7 +63,15 @@ export async function GET(req: NextRequest) {
     const redirect = NextResponse.redirect(new URL('/', base), 302);
     redirect.headers.set('Set-Cookie', sessionCookie(idToken));
     return clearTransients(redirect);
-  } catch {
+  } catch (err) {
+    // Diagnostic: the thrown messages name the failing STEP (missing code /
+    // state mismatch / missing pkce verifier / missing nonce cookie / token
+    // endpoint returned N / missing id_token / id_token verification failed).
+    // No token, code, or cookie VALUES are logged — only the step.
+    console.warn(
+      '[auth/callback] login failed:',
+      err instanceof Error ? err.message : String(err),
+    );
     return clearTransients(NextResponse.redirect(new URL('/login?error=1', base), 302));
   }
 }

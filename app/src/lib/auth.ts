@@ -147,7 +147,16 @@ export async function verifyIdToken(
             },
           });
     return { email: String(payload.email ?? '') };
-  } catch {
+  } catch (err) {
+    // Only log the callback path (nonce present). The middleware calls this on
+    // every request to re-check the session cookie; an expired/invalid cookie
+    // there is normal (→ redirect to /login) and would be pure log noise.
+    if (opts?.nonce !== undefined) {
+      console.warn(
+        '[auth/verify] callback id_token rejected:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
     return null;
   }
 }
