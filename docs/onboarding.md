@@ -71,9 +71,9 @@ npm run deploy:data   # = collector build + cdk deploy NfmDash-Data -c imageTag=
 #### Local development
 
 ```bash
-# Run the Next.js dashboard locally without Cognito (dev only — the middleware
-# ignores AUTH_DISABLED in production builds). AWS creds are still required for
-# DynamoDB/CloudWatch/Bedrock reads.
+# Run the Next.js dashboard locally without Cognito. In production the same
+# flag is honored only when set deliberately via the `authDisabled` CDK context
+# (ADR-005). AWS creds are still required for DynamoDB/CloudWatch/Bedrock reads.
 AUTH_DISABLED=1 npm -w app run dev
 # → http://localhost:3000
 ```

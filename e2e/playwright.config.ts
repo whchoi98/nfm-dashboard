@@ -3,10 +3,11 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Live smoke suite against the deployed CloudFront URL.
  *
- * Required env (scripts/smoke.sh sets all three):
- *   APP_URL      — e.g. https://dv4r4bnlhlpcx.cloudfront.net
- *   E2E_EMAIL    — Cognito admin email
- *   E2E_PASSWORD — from Secrets Manager `nfm-dashboard/cognito-admin` (never committed)
+ * Required env (scripts/smoke.sh sets them):
+ *   APP_URL           — e.g. https://dv4r4bnlhlpcx.cloudfront.net (always)
+ *   E2E_AUTH_DISABLED — '1' when the deployed `authDisabled` CDK context is on
+ *   E2E_EMAIL / E2E_PASSWORD — Cognito admin creds, auth-on mode only
+ *                       (from Secrets Manager `nfm-dashboard/cognito-admin`)
  *
  * Browser: the ms-playwright cache in this environment already contains
  * chromium_headless_shell-1228 (matches @playwright/test 1.61.x) — no
@@ -18,7 +19,7 @@ export default defineConfig({
   timeout: 120_000, // chat SSE can take a while on a cold Bedrock path
   expect: { timeout: 15_000 },
   fullyParallel: false,
-  workers: 1, // spec 1 performs the login and saves storageState for specs 2-3
+  workers: 1, // spec 1 logs in (or enters directly when auth is off) and saves storageState for specs 2-3
   retries: 0,
   reporter: [['list']],
   use: {

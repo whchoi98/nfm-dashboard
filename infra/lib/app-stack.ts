@@ -18,7 +18,8 @@ const ADMIN_SECRET_NAME = 'nfm-dashboard/cognito-admin'; // created out-of-band 
 
 /**
  * AppStack: ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront,
- * auth via Cognito Hosted UI (public client + PKCE).
+ * auth via Cognito Hosted UI (public client + PKCE). The Cognito session gate
+ * can be temporarily disabled via the `authDisabled` context (ADR-005).
  *
  * Circular-dependency resolution (APP_URL ↔ CloudFront ↔ Cognito ↔ container env):
  *   1. ALB is created first (no listener targets yet) — CloudFront only needs its DNS name.
@@ -152,13 +153,20 @@ export class AppStack extends cdk.Stack {
         "`cdk deploy NfmDash-App -c imageTag=$(git rev-parse --short HEAD)` " +
         '(scripts/build-push.sh pushes that tag).');
     }
+    // Temporary operator toggle (ADR-005): `authDisabled` context (cdk.json or
+    // `-c authDisabled=true`) ships AUTH_DISABLED=1 to the middleware, turning
+    // off ONLY the Cognito session gate. The x-origin-verify perimeter and all
+    // Cognito resources stay — reverting the context re-enables login as-is.
+    // String() handles both cdk.json booleans and `-c` string values.
+    const authDisabled = String(this.node.tryGetContext('authDisabled') ?? '') === 'true';
     taskDef.addContainer('app', {
       containerName: 'app',
       image: ecs.ContainerImage.fromEcrRepository(repo, imageTag),
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'app', logRetention: logs.RetentionDays.ONE_MONTH }),
       portMappings: [{ containerPort: 3000 }],
       environment: {
-        NODE_ENV: 'production', // AUTH_DISABLED can never bypass (middleware fail-open guard)
+        NODE_ENV: 'production',
+        ...(authDisabled ? { AUTH_DISABLED: '1' } : {}), // session gate off (ADR-005)
         AWS_REGION: region,
         APP_URL: appUrl,
         COGNITO_USER_POOL_ID: userPool.userPoolId,

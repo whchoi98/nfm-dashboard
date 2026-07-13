@@ -167,7 +167,8 @@ Container (ECS Task) environment variables — **injected automatically by the N
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NODE_ENV` | Blocks the dev-only `AUTH_DISABLED` bypass (fail-open guard) | `production` |
+| `NODE_ENV` | Production build mode | `production` |
+| `AUTH_DISABLED` | Present only when the `authDisabled` CDK context is on — disables the Cognito session gate (origin-verify stays; ADR-005) | absent (auth enforced) |
 | `AWS_REGION` | AWS SDK region | `ap-northeast-2` |
 | `APP_URL` | OAuth redirect_uri and absolute URL assembly | CloudFront distribution URL |
 | `COGNITO_USER_POOL_ID` | JWT verification (`aws-jwt-verify`) | `ap-northeast-2_xJEbOZ95O` |
@@ -186,7 +187,7 @@ Other runtime settings (not env vars):
 | Gateway MCP URL | SSM SecureString `/nfm-dashboard/gateway-url` (written by `setup-gateway.sh`, read with caching by the app) | `nfm-gateway` MCP endpoint |
 | LLM model ID | Constant in `app/src/lib/bedrock.ts` | `global.anthropic.claude-sonnet-5` (+ fallback) |
 | Collector Lambda env | Injected by the NfmDash-Data stack | `TABLE_FLOWS` `TABLE_META` `MONITORS` `CONCURRENCY=5` |
-| Local dev auth skip | `AUTH_DISABLED=1` (dev only — ignored in production) | `AUTH_DISABLED=1 npm -w app run dev` |
+| Local dev auth skip | `AUTH_DISABLED=1` (in production only via the `authDisabled` CDK context — ADR-005) | `AUTH_DISABLED=1 npm -w app run dev` |
 | E2E | `APP_URL` `E2E_EMAIL` `E2E_PASSWORD` | injected automatically by `scripts/smoke.sh` |
 
 ## Project Structure
@@ -467,7 +468,8 @@ bash scripts/smoke.sh
 
 | 변수 | 설명 | 기본값 |
 |----------|-------------|---------|
-| `NODE_ENV` | 개발 전용 `AUTH_DISABLED` 우회 차단(fail-open 가드) | `production` |
+| `NODE_ENV` | 프로덕션 빌드 모드 | `production` |
+| `AUTH_DISABLED` | `authDisabled` CDK 컨텍스트가 켜진 경우에만 존재 — Cognito 세션 게이트 비활성(origin-verify는 유지; ADR-005) | 없음(인증 강제) |
 | `AWS_REGION` | AWS SDK 리전 | `ap-northeast-2` |
 | `APP_URL` | OAuth redirect_uri 및 절대 URL 구성 | CloudFront 배포 URL |
 | `COGNITO_USER_POOL_ID` | JWT 검증(`aws-jwt-verify`) | `ap-northeast-2_xJEbOZ95O` |
@@ -486,7 +488,7 @@ bash scripts/smoke.sh
 | Gateway MCP URL | SSM SecureString `/nfm-dashboard/gateway-url`(`setup-gateway.sh`가 기록, 앱이 캐싱하여 읽음) | `nfm-gateway` MCP 엔드포인트 |
 | LLM 모델 ID | `app/src/lib/bedrock.ts`의 상수 | `global.anthropic.claude-sonnet-5`(+ 폴백) |
 | Collector Lambda 환경 | NfmDash-Data 스택이 주입 | `TABLE_FLOWS` `TABLE_META` `MONITORS` `CONCURRENCY=5` |
-| 로컬 개발 인증 스킵 | `AUTH_DISABLED=1`(개발 전용 — 프로덕션에서 무시) | `AUTH_DISABLED=1 npm -w app run dev` |
+| 로컬 개발 인증 스킵 | `AUTH_DISABLED=1`(프로덕션에서는 `authDisabled` CDK 컨텍스트로만 — ADR-005) | `AUTH_DISABLED=1 npm -w app run dev` |
 | E2E | `APP_URL` `E2E_EMAIL` `E2E_PASSWORD` | `scripts/smoke.sh`가 자동 주입 |
 
 ## 프로젝트 구조

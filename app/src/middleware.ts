@@ -16,13 +16,6 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function middleware(req: NextRequest) {
-  // Dev bypass: Cognito is provisioned later (Task 18 AppStack).
-  // Fail-open guard: the bypass is never honored in production builds.
-  if (process.env.AUTH_DISABLED === '1') {
-    if (process.env.NODE_ENV !== 'production') return NextResponse.next();
-    console.error('AUTH_DISABLED=1 ignored in production build — enforcing auth');
-  }
-
   const { pathname } = req.nextUrl;
 
   // ALB target-group healthcheck hits the container directly (no CloudFront header).
@@ -30,12 +23,19 @@ export async function middleware(req: NextRequest) {
 
   // CloudFront → ALB origin verification (skipped when unset, e.g. local dev).
   // Constant-time (digest-based) compare: header timing must not leak the secret.
+  // Runs BEFORE the AUTH_DISABLED bypass below: the toggle relaxes only the
+  // user-session gate, never the CloudFront-origin perimeter.
   const originSecret = process.env.ORIGIN_VERIFY_SECRET;
   if (originSecret && !(await safeEqual(req.headers.get('x-origin-verify') ?? '', originSecret))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   if (isPublicPath(pathname)) return NextResponse.next();
+
+  // Session-gate toggle: local dev without Cognito, or a deliberate operator
+  // decision in production (infra `authDisabled` CDK context → task-def env,
+  // ADR-005). Cognito stays provisioned — flipping the flag re-enables auth.
+  if (process.env.AUTH_DISABLED === '1') return NextResponse.next();
 
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   const user = token ? await verifyIdToken(token) : null;

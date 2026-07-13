@@ -1,7 +1,7 @@
 # app/src/app/api — API Module
 
 ## Role
-Next.js route handlers — the dashboard's entire API surface. All routes are protected by `app/src/middleware.ts` (Cognito session cookie + CloudFront origin-verify) except `/api/health` and `/api/auth/*`.
+Next.js route handlers — the dashboard's entire API surface. All routes are protected by `app/src/middleware.ts` (Cognito session cookie + CloudFront origin-verify) except `/api/health` and `/api/auth/*`. The session-cookie half can be temporarily disabled via `AUTH_DISABLED=1` (infra `authDisabled` context, ADR-005); origin-verify always applies.
 
 ## Endpoints
 - `ai/route.ts` — AI chat: SSE stream, Bedrock Converse loop with AgentCore MCP tools (`maxDuration = 300`)
