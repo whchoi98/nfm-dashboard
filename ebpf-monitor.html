@@ -232,6 +232,29 @@
   .arch-note{margin-top:24px; font-size:13px; color:var(--text-3); display:flex; flex-wrap:wrap; gap:18px}
   .arch-note b{color:var(--text-2); font-weight:600}
 
+  /* ---------- how it works (동작 원리 · runtime steps) ---------- */
+  .arch-figure{margin:0 0 34px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .arch-figure svg{width:100%; min-width:560px; height:auto; display:block}
+  .arch-figure figcaption{margin-top:12px; font-family:var(--mono); font-size:11.5px; color:var(--text-3); text-align:center; letter-spacing:.02em}
+  .hiw-head{margin-top:52px; margin-bottom:8px}
+  .hiw-head .kicker{margin-bottom:10px}
+  .hiw-head h3{font-family:var(--serif); font-weight:600; font-size:clamp(20px,2.4vw,26px); letter-spacing:-.02em; margin:0}
+  .hiw{margin-top:22px; display:flex; flex-direction:column; counter-reset:hiw; list-style:none; padding:0}
+  .hiw li{position:relative; padding:22px 4px 22px 68px; border-top:1px solid var(--line)}
+  .hiw li:last-child{border-bottom:1px solid var(--line)}
+  .hiw li::before{
+    counter-increment:hiw; content:counter(hiw,decimal-leading-zero);
+    position:absolute; left:0; top:22px; width:44px; height:44px; display:grid; place-items:center;
+    font-family:var(--serif); font-weight:600; font-size:16px; color:var(--brand-ink);
+    background:var(--acc-50); border:1px solid var(--acc-100); border-radius:99px;
+  }
+  .hiw .hl{font-weight:700; font-size:16.5px; letter-spacing:-.01em; margin-bottom:6px}
+  .hiw .hl em{font-family:var(--serif); font-style:italic; font-weight:500; color:var(--brand-ink)}
+  .hiw .hd{font-size:14.5px; color:var(--text-2); line-height:1.55; margin:0}
+  .hiw .hc{display:flex; flex-wrap:wrap; gap:7px; margin-top:11px}
+  .hiw .hc span{font-family:var(--mono); font-size:10.5px; letter-spacing:.01em; color:var(--brand-ink);
+    background:var(--acc-50); border:1px solid var(--acc-100); padding:3px 9px; border-radius:99px}
+
   /* ---------- security / stack ---------- */
   .split{display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:start}
   .checklist{list-style:none; padding:0; margin:0}
@@ -298,6 +321,8 @@
     .lane:not(:last-child)::after{content:"↓"; display:block; text-align:center; color:var(--brand); font-size:20px; margin-top:2px}
     .hero .hero-actions .btn{flex:1 1 100%; text-align:center}
     .cta-box{border-radius:20px}
+    .hiw li{padding-left:56px; padding-top:18px; padding-bottom:18px}
+    .hiw li::before{width:40px; height:40px; font-size:15px; top:18px}
   }
   @media (max-width:380px){ .metric{flex:1 1 100%} }
 </style>
@@ -566,6 +591,39 @@
       <p>EKS 노드와 독립 워크로드에 배치된 NFM 에이전트가 커널 레벨 eBPF로 플로우를 수집하고, AWS Network Flow Monitor가 이를 집계 · 지표화합니다. NFM Dashboard는 그 데이터를 토폴로지 · 분석 · 비용 · SLO · AI 진단으로 재구성해 보여줍니다.</p>
     </div>
 
+    <figure class="arch-figure reveal">
+      <svg viewBox="0 0 960 118" role="img" xmlns="http://www.w3.org/2000/svg"
+           aria-label="데이터 흐름: 01 수집 — eBPF 에이전트 → 02 집계 및 저장 — AWS Network Flow Monitor에서 DynamoDB·S3로 → 03 시각화 — Next.js 대시보드 → 04 진단 및 알림 — Amazon Bedrock·CloudWatch">
+        <defs>
+          <marker id="pa" markerWidth="10" markerHeight="10" refX="7" refY="4" orient="auto">
+            <path d="M1 1 L7 4 L1 7" fill="none" stroke="#3B76E0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="0" y="17" width="210" height="84" rx="13" fill="#EEF4FF" stroke="#B9D3FF"/>
+          <text x="105" y="51" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="11" letter-spacing="1.2" fill="#204A96">01 · 수집</text>
+          <text x="105" y="76" text-anchor="middle" font-family="Pretendard,sans-serif" font-weight="700" font-size="14.5" fill="#1D2030">eBPF Agent</text>
+
+          <rect x="250" y="17" width="210" height="84" rx="13" fill="#EEF4FF" stroke="#B9D3FF"/>
+          <text x="355" y="51" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="11" letter-spacing="1.2" fill="#204A96">02 · 집계 &amp; 저장</text>
+          <text x="355" y="76" text-anchor="middle" font-family="Pretendard,sans-serif" font-weight="700" font-size="14.5" fill="#1D2030">NFM → DDB · S3</text>
+
+          <rect x="500" y="17" width="210" height="84" rx="13" fill="#EEF4FF" stroke="#B9D3FF"/>
+          <text x="605" y="51" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="11" letter-spacing="1.2" fill="#204A96">03 · 시각화</text>
+          <text x="605" y="76" text-anchor="middle" font-family="Pretendard,sans-serif" font-weight="700" font-size="14.5" fill="#1D2030">Next.js 대시보드</text>
+
+          <rect x="750" y="17" width="210" height="84" rx="13" fill="#EEF4FF" stroke="#B9D3FF"/>
+          <text x="855" y="51" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="11" letter-spacing="1.2" fill="#204A96">04 · 진단 &amp; 알림</text>
+          <text x="855" y="76" text-anchor="middle" font-family="Pretendard,sans-serif" font-weight="700" font-size="14.5" fill="#1D2030">Bedrock · CloudWatch</text>
+
+          <line x1="212" y1="59" x2="248" y2="59" stroke="#3B76E0" stroke-width="1.6" marker-end="url(#pa)"/>
+          <line x1="462" y1="59" x2="498" y2="59" stroke="#3B76E0" stroke-width="1.6" marker-end="url(#pa)"/>
+          <line x1="712" y1="59" x2="748" y2="59" stroke="#3B76E0" stroke-width="1.6" marker-end="url(#pa)"/>
+        </g>
+      </svg>
+      <figcaption>EKS 노드 · 독립 워크로드 → NFM 에이전트(eBPF) → AWS Network Flow Monitor → 대시보드 → AI 진단</figcaption>
+    </figure>
+
     <div class="diagram">
       <div class="lane">
         <div class="lane-title">수집</div>
@@ -576,10 +634,10 @@
         </div>
       </div>
       <div class="lane">
-        <div class="lane-title">집계</div>
+        <div class="lane-title">집계 &amp; 저장</div>
         <div class="node compute reveal">
           <div class="nt">AWS Network Flow Monitor</div>
-          <div class="nd">전송량·재전송·타임아웃·RTT로 집계하고 모니터 단위로 지표화.</div>
+          <div class="nd">전송량·재전송·타임아웃·RTT로 집계·지표화하고, Collector가 DynamoDB(7일 TTL)·S3에 보관.</div>
           <div class="meta">60/60 CYCLE SUCCESS</div>
         </div>
       </div>
@@ -592,14 +650,41 @@
         </div>
       </div>
       <div class="lane">
-        <div class="lane-title">진단 & 알림</div>
+        <div class="lane-title">진단 &amp; 알림</div>
         <div class="node ai reveal">
-          <div class="nt">AI 진단 & CloudWatch 알림</div>
+          <div class="nt">AI 진단 &amp; CloudWatch 알림</div>
           <div class="nd">이상 징후를 종합 분석해 근본 원인 후보를 제시하고, 경보로 통지.</div>
           <div class="meta">1-CLICK DIAGNOSIS</div>
         </div>
       </div>
     </div>
+
+    <div class="hiw-head reveal">
+      <div class="kicker">런타임 흐름</div>
+      <h3>수집에서 진단까지, <em>네 단계</em>로.</h3>
+    </div>
+    <ol class="hiw">
+      <li class="reveal">
+        <div class="hl">수집 <em>· Collect</em></div>
+        <p class="hd">EKS 노드와 독립 워크로드에 배치된 NFM 에이전트가 커널 레벨 eBPF로 Pod-to-Pod 플로우를 애플리케이션 변경 없이 수집합니다.</p>
+        <div class="hc"><span>eBPF Agent</span><span>AWS Network Flow Monitor</span><span>47 AGENTS</span></div>
+      </li>
+      <li class="reveal">
+        <div class="hl">집계 &amp; 저장 <em>· Aggregate &amp; Store</em></div>
+        <p class="hd">AWS NFM이 전송량·재전송·타임아웃·RTT로 집계하고, 5분 주기 Collector Lambda가 이를 읽어 DynamoDB 핫 스토어(7일 TTL)에 기록합니다. DynamoDB Stream이 이를 Kinesis Firehose로 흘려 S3 Parquet 아카이브(Athena 조회)에 장기 보관합니다.</p>
+        <div class="hc"><span>Collector Lambda · 5min</span><span>DynamoDB · 7d TTL</span><span>DDB Stream · Firehose</span><span>S3 Parquet · Athena</span></div>
+      </li>
+      <li class="reveal">
+        <div class="hl">시각화 <em>· Visualize</em></div>
+        <p class="hd">Next.js 대시보드가 지표를 라이브 토폴로지 그래프, 네트워크 분석 테이블, 비용·SLO 인사이트로 재구성해 한 화면에 보여줍니다.</p>
+        <div class="hc"><span>Next.js</span><span>130 NODES · 218 EDGES</span><span>토폴로지 · 인사이트</span></div>
+      </li>
+      <li class="reveal">
+        <div class="hl">진단 &amp; 알림 <em>· Diagnose &amp; Alert</em></div>
+        <p class="hd">Amazon Bedrock과 AgentCore MCP 게이트웨이가 이상 징후를 종합해 근본 원인 후보를 제시하고, CloudWatch 경보로 통지합니다.</p>
+        <div class="hc"><span>Amazon Bedrock</span><span>AgentCore MCP</span><span>CloudWatch</span></div>
+      </li>
+    </ol>
 
     <div class="arch-note reveal">
       <span><b>흐름</b> EKS 노드 · 독립 워크로드 → NFM 에이전트(eBPF) → AWS Network Flow Monitor → NFM Dashboard → AI 진단 / CloudWatch 알림</span>
