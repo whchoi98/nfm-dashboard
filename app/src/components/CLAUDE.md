@@ -9,6 +9,7 @@ Presentational React components for the dashboard: chart primitives, topology gr
 - `chat/` — `FloatingChat.tsx`, `ChatPanel.tsx`, `ChatMessages.tsx` (AI chatbot UI)
 - `layout/` — `AppShell.tsx`, `Sidebar.tsx`, `Topbar.tsx`, `MobileTabs.tsx`, `nav.ts`
 - `cards/`, `analytics/`, `monitors/` — page-level widgets
+- `analytics/AnomalyDetailPanel.tsx` — /anomalies row-select right slide-over (`role=dialog`/`aria-modal`, Escape/backdrop close, focus-on-open) with topology (`?focus=`) / network (`?ns=`) deep-link buttons
 - `ui/Controls.tsx` — shared controls
 - Root: `FlowTable.tsx`, `HopPath.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `SortableHeader.tsx`
 

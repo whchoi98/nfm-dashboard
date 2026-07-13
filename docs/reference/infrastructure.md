@@ -13,7 +13,7 @@ Runtime infrastructure for the dashboard: a Next.js container image (linux/arm64
 | Component | Path | Purpose |
 |---|---|---|
 | App container image | `app/Dockerfile` | Next.js standalone build; linux/arm64 image consumed by `NfmDash-App` |
-| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront, Cognito Hosted UI (PKCE); login temporarily disabled via `authDisabled` context (ADR-005) |
+| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR image → ECS Fargate (arm64) behind ALB, fronted by CloudFront, Cognito Hosted UI (PKCE); login can be temporarily disabled via the `authDisabled` context but is currently OFF — login enforced (ADR-005) |
 | Ops alarms stack | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: CloudWatch alarms on the ALB / target group from AppStack |
 | Image build script | `scripts/build-push.sh` | Builds and pushes the app image to ECR (tag = git sha) |
 | Smoke test | `scripts/smoke.sh`, `e2e/smoke.spec.ts` | Playwright e2e smoke against the live CloudFront URL |
@@ -44,7 +44,7 @@ Runtime infrastructure for the dashboard: a Next.js container image (linux/arm64
 | 구성요소 | 경로 | 목적 |
 |---|---|---|
 | 앱 컨테이너 이미지 | `app/Dockerfile` | Next.js standalone 빌드; `NfmDash-App`이 사용하는 linux/arm64 이미지 |
-| App 스택 | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR 이미지 → ALB 뒤 ECS Fargate(arm64), CloudFront 프론팅, Cognito Hosted UI(PKCE) |
+| App 스택 | `infra/lib/app-stack.ts` | `NfmDash-App`: ECR 이미지 → ALB 뒤 ECS Fargate(arm64), CloudFront 프론팅, Cognito Hosted UI(PKCE); 로그인은 `authDisabled` 컨텍스트로 임시 비활성화할 수 있으나 현재는 OFF — 로그인 강제 상태(ADR-005) |
 | Ops 알람 스택 | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: AppStack의 ALB/타깃그룹에 대한 CloudWatch 알람 |
 | 이미지 빌드 스크립트 | `scripts/build-push.sh` | 앱 이미지를 ECR에 빌드/푸시 (태그 = git sha) |
 | 스모크 테스트 | `scripts/smoke.sh`, `e2e/smoke.spec.ts` | 라이브 CloudFront URL 대상 Playwright e2e 스모크 |

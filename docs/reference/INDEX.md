@@ -16,4 +16,4 @@ NFM Dashboard의 계층별 구현 상세 문서 목록.
 | Agent · LLM | [agent-llm.md](agent-llm.md) | Bedrock Converse + AgentCore gateway (MCP) chatbot |
 <!-- /AUTO-MANAGED:reference-index -->
 
-Last updated: 2026-07-10
+Last updated: 2026-07-13

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Real User Monitoring via aws-rum-pipeline: `RumProvider` loads the self-hosted RUM SDK and stamps every event with `appName: nfm-dashboard` (page views, SPA route dwell time, Core Web Vitals, JS errors). Enabled only when `NEXT_PUBLIC_RUM_ENDPOINT`/`NEXT_PUBLIC_RUM_API_KEY` are exported before `scripts/build-push.sh` (Docker build args).
+- Anomaly detail panel: selecting a row on `/anomalies` opens a right-hand slide-over with entity detail (metric, current-vs-baseline, overshoot, severity) and working deep-links — `/topology?focus=<ns/name>` focuses the node, `/network?ns=<namespace>` presets the namespace facet; the panel live-updates with polling and auto-closes when the anomaly resolves.
 
 ### Changed
 - The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (default OFF — login enforced). Only the Cognito session gate is skipped when set; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay either way (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
@@ -188,6 +189,7 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 
 ### Added
 - aws-rum-pipeline 연동 RUM(Real User Monitoring): `RumProvider`가 자체 호스팅 SDK를 로드해 모든 이벤트에 `appName: nfm-dashboard`를 스탬핑 (페이지뷰·SPA 체류시간·Core Web Vitals·JS 에러). `scripts/build-push.sh` 실행 전 `NEXT_PUBLIC_RUM_*` export 시에만 활성화 (Docker build args).
+- 이상 징후 상세 패널: `/anomalies`에서 행을 선택하면 엔티티 상세(지표, 현재값 대비 베이스라인, 초과분, 심각도)와 동작하는 딥링크를 갖춘 우측 슬라이드오버 표시 — `/topology?focus=<ns/name>`은 해당 노드를 포커스, `/network?ns=<namespace>`는 네임스페이스 facet을 프리셋; 패널은 폴링으로 실시간 갱신되며 이상 징후 해소 시 자동 닫힘 기능 추가.
 
 ### Changed
 - 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (기본 OFF — 로그인 강제). 설정 시 Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 어느 경우든 유지 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.

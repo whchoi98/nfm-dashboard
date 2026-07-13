@@ -17,7 +17,7 @@ Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUN
 
 ## Project Structure
 ```
-app/          - Next.js 16 dashboard (src/app pages incl. /history (+ history-sort.ts col sniffing) & /topology force graph, src/app/api incl. history/, src/lib incl. athena.ts + use-sortable.ts (sortable tables) + graph-focus.ts/graph-layout.ts (topology ego-network + deterministic layout), src/components incl. layout/ left Sidebar+Topbar nav, SortableHeader.tsx & topology/NetworkGraph.tsx)
+app/          - Next.js 16 dashboard (src/app pages incl. /history (+ history-sort.ts col sniffing) & /topology force graph (+ focus-param.ts ?focus= deep-link) & /network (+ ns-param.ts ?ns= deep-link), src/app/api incl. history/, src/lib incl. athena.ts + use-sortable.ts (sortable tables) + graph-focus.ts/graph-layout.ts (topology ego-network + deterministic layout), src/components incl. layout/ left Sidebar+Topbar nav, SortableHeader.tsx, analytics/AnomalyDetailPanel.tsx (row-select slide-over) & topology/NetworkGraph.tsx)
 collector/    - NFM data-collector Lambda (5-min cycle → dist/handler.mjs) + archive-transform.ts (DDB Stream → Firehose, → dist/archive-transform.mjs)
 infra/        - CDK stacks: NfmDash-Data (incl. flow-archive pipeline: DDB Stream → Firehose → S3 Parquet → Glue/Athena) / Onboarding / AgentCore / App / Ops / Dns
 scripts/      - build-push.sh (ECR image), smoke.sh (e2e), setup-gateway.sh

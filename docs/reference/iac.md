@@ -16,7 +16,7 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 | Data stack | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB tables + collector Lambda + schedule + flow-archive pipeline (DDB Streams → transform Lambda → Firehose Parquet → S3 + Glue/Athena) |
 | Onboarding stack | `infra/lib/nfm-onboarding-stack.ts` | `NfmDash-Onboarding`: NFM monitor onboarding resources |
 | AgentCore stack | `infra/lib/agentcore-stack.ts` | `NfmDash-AgentCore`: MCP tool Lambdas (Python 3.13, arm64) + gateway IAM role |
-| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito runtime; `authDisabled` context → task env `AUTH_DISABLED=1` (temporary login off, ADR-005) |
+| App stack | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito runtime; `authDisabled` context toggles the login gate; currently OFF (login enforced), ADR-005 |
 | Ops stack | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: CloudWatch alarms |
 | DNS stack | `infra/lib/dns-stack.ts` | `NfmDash-Dns`: DNS resources |
 | Config / tests | `infra/cdk.json`, `infra/cdk.context.json`, `infra/test/` | CDK config, cached context, stack tests (vitest) |
@@ -51,7 +51,7 @@ All AWS resources are defined in the `infra` workspace with AWS CDK v2 (TypeScri
 | Data 스택 | `infra/lib/data-stack.ts` | `NfmDash-Data`: DynamoDB 테이블 + collector Lambda + 스케줄 + flow 아카이브 파이프라인(DDB Streams → transform Lambda → Firehose Parquet → S3 + Glue/Athena) |
 | Onboarding 스택 | `infra/lib/nfm-onboarding-stack.ts` | `NfmDash-Onboarding`: NFM 모니터 온보딩 리소스 |
 | AgentCore 스택 | `infra/lib/agentcore-stack.ts` | `NfmDash-AgentCore`: MCP 툴 Lambda(Python 3.13, arm64) + 게이트웨이 IAM 롤 |
-| App 스택 | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito 런타임 |
+| App 스택 | `infra/lib/app-stack.ts` | `NfmDash-App`: Fargate + ALB + CloudFront + Cognito 런타임; `authDisabled` 컨텍스트가 로그인 게이트를 토글; 현재는 OFF(로그인 강제), ADR-005 |
 | Ops 스택 | `infra/lib/ops-alarms.ts` | `NfmDash-Ops`: CloudWatch 알람 |
 | DNS 스택 | `infra/lib/dns-stack.ts` | `NfmDash-Dns`: DNS 리소스 |
 | 설정/테스트 | `infra/cdk.json`, `infra/cdk.context.json`, `infra/test/` | CDK 설정, 컨텍스트 캐시, 스택 테스트(vitest) |
