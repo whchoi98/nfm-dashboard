@@ -10,7 +10,7 @@ export interface DnsAggregate { enabled: boolean;
   nameFlow: { ip: string; name: string }[];
   bySource: { coredns: DnsSourceStat; resolver: DnsSourceStat }; }
 
-const EMPTY_SOURCE_STAT: DnsSourceStat = { latencyP50: 0, latencyP95: 0, latencySampleCount: 0, failRate: 0, count: 0 };
+const emptySourceStat = (): DnsSourceStat => ({ latencyP50: 0, latencyP95: 0, latencySampleCount: 0, failRate: 0, count: 0 });
 
 const internalName = (n: string) => n.endsWith('.cluster.local') || n.endsWith('.internal');
 const nsOf = (n: string) => { const m = /^[^.]+\.([^.]+)\.svc\.cluster\.local$/.exec(n); return m ? m[1] : null; };
@@ -20,7 +20,7 @@ function pct(sorted: number[], p: number) { if (!sorted.length) return 0;
 export function aggregateDns(records: DnsRecord[], flows: FlowEdge[] = []): DnsAggregate {
   if (!records.length) return { enabled: false, topDomains: [], failures: [], queryTypes: [],
     latency: { p50: 0, p90: 0, p95: 0, max: 0, count: 0 }, resolution: { nodes: [], links: [] }, nameFlow: [],
-    bySource: { coredns: EMPTY_SOURCE_STAT, resolver: EMPTY_SOURCE_STAT } };
+    bySource: { coredns: emptySourceStat(), resolver: emptySourceStat() } };
   const byName = new Map<string, number>(), byType = new Map<string, number>();
   const fail = new Map<string, { nxdomain: number; servfail: number; total: number }>();
   const durs: number[] = []; const resNodes = new Map<string, number>(); const links = new Map<string, number>();
