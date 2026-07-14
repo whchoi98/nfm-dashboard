@@ -600,7 +600,7 @@
   "pageintro.paths.what": "Pod 간 개별 경로의 홉 단위 추적 도구",
   "pageintro.paths.features": "Pod 쌍/딥링크로 경로 선택 · 홉 단계별 지연·재전송 시각화 · 인기 경로(트래픽 상위 엣지) 추천 · 최근 조회 경로 기록 · 전체 RTT 분포 및 홉 유형 구성 Toplist",
   "pageintro.insights.what": "비용·안정성·지연·의존성·DNS를 한곳에서 살펴보는 탭형 네트워크 인사이트 허브",
-  "pageintro.insights.features": "비용 분석 · 재전송·지연 이상 징후 탐지 · 서비스 의존성 매핑 · DNS 해석 현황 · SLO 스코어카드 및 Top Movers",
+  "pageintro.insights.features": "비용·효율 분석 · 재전송·지연 이상 징후 탐지 · 서비스 의존성 매핑 · DNS 해석 현황 · SLO 스코어카드 및 Top Movers",
   "pageintro.workload.what": "CloudWatch NFM 콘솔의 Workload Insights를 재현한 상위 기여자(Top Contributors) 랭킹 대시보드",
   "pageintro.workload.features": "플로우 카테고리 필터 · 지표별(전송량·재전송·타임아웃) Top 8 랭킹 리스트 · 정렬 가능한 전체 기여자 테이블 · 텍스트 검색 필터 · 스냅샷 기준 시각 표시",
   "pageintro.monitors.what": "모니터별 상태·트래픽 요약 카드 목록",
@@ -622,5 +622,5 @@
   "pageintro.search.what": "Pod·서비스·노드·IP·도메인을 아우르는 통합 엔티티 검색",
   "pageintro.search.features": "디바운스 검색어 입력 · 토폴로지/플로우/DNS 소스 통합 검색 · 타입별 결과 그룹핑(Pod·서비스·노드·서브넷·IP·도메인) · 관련 페이지로 딥링크 이동",
   "pageintro.settings.what": "대시보드 기본값과 알림 임곗값을 조정하는 개인화 설정 페이지",
-  "pageintro.settings.features": "기본 시간 범위 · 모니터 스코프 · 재전송/타임아웃 임곗값 · 이상 탐지 민감도(σ) · SNS 알람 구독 명령 복사"
+  "pageintro.settings.features": "기본 시간 범위 · 모니터 스코프 · 재전송/타임아웃 임곗값 · GB당 비용 · 이상 탐지 민감도(σ) · SNS 알람 구독 명령 복사"
 }

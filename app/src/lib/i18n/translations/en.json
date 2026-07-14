@@ -600,7 +600,7 @@
   "pageintro.paths.what": "Hop-by-hop path inspector between a chosen pod pair",
   "pageintro.paths.features": "Pod-pair or deep-link path selection · per-hop latency & retransmit breakdown (HopPath) · popular-paths suggestions from top traffic edges · session-scoped recent-lookups history · overall RTT distribution & sortable hop-type composition list",
   "pageintro.insights.what": "Tabbed hub for network cost, reliability, latency, dependency, and DNS insights",
-  "pageintro.insights.features": "Cost breakdown · Retransmission & latency anomaly detection · Service dependency mapping · DNS resolution insights · SLO scorecard & top movers",
+  "pageintro.insights.features": "Cost & efficiency breakdown · Retransmission & latency anomaly detection · Service dependency mapping · DNS resolution insights · SLO scorecard & top movers",
   "pageintro.workload.what": "A workload-insights dashboard reproducing the NFM console's top-contributors rankings",
   "pageintro.workload.features": "flow-category filter · per-metric (data transferred · retransmissions · timeouts) top-8 ranked lists · sortable full contributors table · text search filter · snapshot as-of timestamp",
   "pageintro.monitors.what": "Per-monitor status and traffic summary card list",
@@ -622,5 +622,5 @@
   "pageintro.search.what": "Unified entity search across pods, services, nodes, IPs, and domains",
   "pageintro.search.features": "Debounced query input · unified search across topology, flow, and DNS sources · results grouped by entity type (pod, service, node, subnet, IP, domain) · deep links to the relevant page",
   "pageintro.settings.what": "Personalization page for tuning dashboard defaults and alert thresholds",
-  "pageintro.settings.features": "Default time range · monitor scope · retransmission/timeout thresholds · anomaly sensitivity (σ) · SNS alarm subscribe command copy"
+  "pageintro.settings.features": "Default time range · monitor scope · retransmission/timeout thresholds · cost per GB · anomaly sensitivity (σ) · SNS alarm subscribe command copy"
 }
