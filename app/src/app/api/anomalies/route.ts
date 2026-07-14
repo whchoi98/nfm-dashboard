@@ -1,4 +1,4 @@
-import { getFlowsWindowPair } from '@/lib/ddb';
+import { cachedLens, getFlowsWindowPair, lensCacheKey } from '@/lib/ddb';
 import { applyFlowFilters, parseLensParams } from '@/lib/analytics/filters';
 import { DEFAULT_SIGMA, detectAnomalies } from '@/lib/analytics/anomalies';
 import { DEFAULT_RETRANS_RATE, DEFAULT_TIMEOUT_RATE } from '@/lib/analytics/reliability';
@@ -22,15 +22,16 @@ export async function GET(req: Request) {
       timeoutThreshold: numParam(url, 'timeout', DEFAULT_TIMEOUT_RATE),
       sigma: numParam(url, 'sigma', DEFAULT_SIGMA),
     };
-    // Two adjacent windows of `buckets` each; namespace/category apply to BOTH.
-    const { current, prior } = await getFlowsWindowPair(buckets);
-    return Response.json({
-      anomalies: detectAnomalies(
+    const anomalies = await cachedLens(lensCacheKey('anomalies', req.url), async () => {
+      // Two adjacent windows of `buckets` each; namespace/category apply to BOTH.
+      const { current, prior } = await getFlowsWindowPair(buckets);
+      return detectAnomalies(
         applyFlowFilters(current, { namespace, category }),
         applyFlowFilters(prior, { namespace, category }),
         opts,
-      ),
+      );
     });
+    return Response.json({ anomalies });
   } catch (e) {
     console.error('[api/anomalies]', e);
     return Response.json({ error: 'internal error' }, { status: 500 });
