@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Play, RefreshCw } from 'lucide-react';
 import Markdown from '@/components/Markdown';
+import PageIntro from '@/components/PageIntro';
 import { Card } from '@/components/ui/Controls';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { sendSse, sseErrorKey, type SseDone, type SseRequest } from '@/lib/use-sse';
@@ -80,6 +81,8 @@ export default function DiagnosePage() {
           )}
         </div>
       </div>
+
+      <PageIntro page="diagnose" />
 
       {error && (
         <Card className="text-sm text-red-600 dark:text-red-400">

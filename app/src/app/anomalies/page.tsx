@@ -18,6 +18,7 @@ import { formatCount } from '@/lib/format';
 import StatDelta from '@/components/charts/StatDelta';
 import Widget from '@/components/analytics/Widget';
 import AnomalyDetailPanel from '@/components/analytics/AnomalyDetailPanel';
+import PageIntro from '@/components/PageIntro';
 import { LensState } from '@/app/insights/tabs/shared';
 
 interface AnomaliesResponse {
@@ -120,6 +121,7 @@ export default function AnomaliesPage() {
           {t('nav.settings')} →
         </Link>
       </div>
+      <PageIntro page="anomalies" />
       <p className="text-xs text-ink/60 dark:text-white/60">
         {t('anomalies.hint', {
           retrans: settings.retransThreshold,

@@ -24,6 +24,7 @@ import TopEdgesPanel from '@/components/topology/TopEdgesPanel';
 import Distribution from '@/components/charts/Distribution';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import { Card, Select } from '@/components/ui/Controls';
+import PageIntro from '@/components/PageIntro';
 
 // Mounted only when an edge is chosen, so the poll only runs with a real hash.
 function PathResult({ edgeId }: { edgeId: string }) {
@@ -205,6 +206,7 @@ function PathsContent() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.paths')}</h1>
+      <PageIntro page="paths" />
 
       <Card>
         <div className="flex flex-wrap items-end gap-2">

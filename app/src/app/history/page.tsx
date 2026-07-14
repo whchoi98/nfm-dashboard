@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { History as HistoryIcon, TriangleAlert } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import PageIntro from '@/components/PageIntro';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
 import Widget from '@/components/analytics/Widget';
 import { SortableHeader } from '@/components/SortableHeader';
@@ -125,6 +126,8 @@ export default function HistoryPage() {
         </h1>
         <p className="mt-1 max-w-2xl text-xs text-ink/50 dark:text-white/50">{t('history.hint')}</p>
       </div>
+
+      <PageIntro page="history" />
 
       <Card>
         <div className="flex flex-wrap items-end gap-3">

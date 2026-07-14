@@ -9,6 +9,7 @@ import { flowAggregates } from '@/lib/flow-aggregates';
 import { CATEGORY_ORDER } from '@/lib/chart-tokens';
 import { formatBytes } from '@/lib/format';
 import FlowTable from '@/components/FlowTable';
+import PageIntro from '@/components/PageIntro';
 import Widget from '@/components/analytics/Widget';
 import Toplist from '@/components/analytics/Toplist';
 import CategoryDonut from '@/components/charts/CategoryDonut';
@@ -107,6 +108,7 @@ export default function FlowsPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.flows')}</h1>
+      <PageIntro page="flows" />
 
       <Card>
         <form

@@ -14,6 +14,7 @@ import { downloadText, toCsv } from '@/lib/csv';
 import ReportDocument from '@/components/analytics/ReportDocument';
 import Widget from '@/components/analytics/Widget';
 import { LensState } from '@/app/insights/tabs/shared';
+import PageIntro from '@/components/PageIntro';
 
 const btnCls =
   'inline-flex items-center gap-1 rounded-md bg-ink/[.06] px-2 py-1 text-[11px] font-medium text-ink/60 transition-colors hover:bg-ink/10 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/10 dark:text-white/60 dark:hover:bg-white/20 dark:hover:text-white';
@@ -70,6 +71,7 @@ export default function ReportsPage() {
           </button>
         </div>
       </div>
+      <PageIntro page="reports" />
       <p className="text-[11px] leading-relaxed text-ink/50 dark:text-white/50">
         {t('reports.hint')}
       </p>

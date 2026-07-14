@@ -17,6 +17,7 @@ import Toplist from '@/components/analytics/Toplist';
 import { CategoryChip } from '@/components/FlowTable';
 import { SortableHeader } from '@/components/SortableHeader';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
+import PageIntro from '@/components/PageIntro';
 
 // WI metrics present in the snapshot (the collector does not query RTT).
 const METRICS = ['DATA_TRANSFERRED', 'RETRANSMISSIONS', 'TIMEOUTS'] as const;
@@ -214,6 +215,8 @@ export default function WorkloadPage() {
           </span>
         ) : null}
       </div>
+
+      <PageIntro page="workload" />
 
       {error ? (
         notice(t('common.error'))

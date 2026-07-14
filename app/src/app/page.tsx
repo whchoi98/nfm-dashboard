@@ -32,6 +32,7 @@ import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import { HoverSyncProvider, useHoverSync } from '@/components/analytics/HoverSync';
 import { Card } from '@/components/ui/Controls';
+import PageIntro from '@/components/PageIntro';
 
 interface OverviewData extends OverviewKpis {
   topTalkers: { label: string; usd: number; bytes: number }[];
@@ -234,6 +235,8 @@ export default function OverviewPage() {
         <h1 className="text-lg font-semibold">{t('nav.overview')}</h1>
         <StatusBadge value={data?.nhi ?? null} testId="nhi-badge" />
       </div>
+
+      <PageIntro page="overview" />
 
       {error ? (
         <Card>

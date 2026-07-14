@@ -32,6 +32,7 @@ import FacetRail, { type FacetGroup } from '@/components/analytics/FacetRail';
 import Sparkline from '@/components/charts/Sparkline';
 import { SortableHeader } from '@/components/SortableHeader';
 import { LensState } from '@/app/insights/tabs/shared';
+import PageIntro from '@/components/PageIntro';
 import { initialFacetSel } from './ns-param';
 
 /** Selected-metric cell, formatted per metric unit. */
@@ -157,6 +158,7 @@ function NetworkPageInner() {
   return (
     <div data-testid="network-page" className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.network')}</h1>
+      <PageIntro page="network" />
 
       <Card>
         <div className="flex flex-wrap items-end gap-3">
