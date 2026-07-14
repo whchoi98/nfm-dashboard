@@ -21,6 +21,7 @@ Next.js route handlers — the dashboard's entire API surface. All routes are pr
 
 ## Rules
 - Handlers stay thin: parse/validate input, call `app/src/lib/*`, shape the response. No business logic in routes.
+- PURE flow-lens routes (analytics cost/dependencies/efficiency/latency/movers, anomalies, network, cost-explorer) wrap their compute in `cachedLens(lensCacheKey(route, req.url), …)` (`app/src/lib/ddb.ts`) — cached until the collector writes a new cycle or the 5-min grid rolls, shared across users. NEVER wrap a route that mixes CloudWatch alarms/metrics or user-specific data (reliability/scorecard/alerts/overview/reports/search stay unwrapped).
 - Streaming responses use `app/src/lib/sse.ts` helpers (`sseEvent`); send keepalives on long streams (see `ai/route.ts`).
 - New endpoint => update this file and `docs/reference/api.md`; UI-facing strings still go through i18n on the client side.
 - Tests for route logic live next to the extracted lib code in `app/src/lib` (keep routes trivially thin).
