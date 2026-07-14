@@ -1,4 +1,6 @@
 {
+  "pageintro.overview": "Overview",
+  "pageintro.features": "Features",
   "nav.overview": "Overview",
   "nav.topology": "Topology",
   "nav.flows": "Flows",

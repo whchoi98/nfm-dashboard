@@ -1,4 +1,6 @@
 {
+  "pageintro.overview": "개요",
+  "pageintro.features": "기능",
   "nav.overview": "개요",
   "nav.topology": "토폴로지",
   "nav.flows": "플로우",
