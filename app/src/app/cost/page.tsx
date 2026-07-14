@@ -40,6 +40,18 @@ export default function CostExplorerPage() {
   const namespaceRows = useMemo(() => groupRows(data?.byNamespace), [data]);
   const monitorRows = useMemo(() => groupRows(data?.byMonitor), [data]);
 
+  // Egress toplist: label = domain, value = USD, sub = bytes — same shape as
+  // the other cost-group toplists (cost.ts egressBytesToUsd, not bytesToUsd).
+  const egressDomainRows = useMemo(
+    () =>
+      (data?.egressDomains ?? []).map((r) => ({
+        label: r.domain,
+        value: r.usd,
+        sub: formatBytes(r.bytes),
+      })),
+    [data],
+  );
+
   // Savings toplist: label + estimated USD; the sub carries the translated hint.
   const savingsRows: ToplistRow[] = useMemo(
     () => (data?.savings ?? []).map((s) => ({ label: s.label, value: s.usd, sub: t(s.hint) })),
@@ -132,6 +144,18 @@ export default function CostExplorerPage() {
         <Widget title={t('cost.byCategory')} testId="widget-cost-category">
           <LensState loading={firstLoad} error={error}>
             <CategoryDonut values={donutValues} valueFormatter={formatUsd} />
+          </LensState>
+        </Widget>
+
+        <Widget title={t('cost.egressByDomain')} testId="widget-cost-egress-domain">
+          <LensState loading={firstLoad} error={error}>
+            <Toplist
+              rows={egressDomainRows}
+              valueFormatter={formatUsd}
+              testId="toplist-cost-egress-domain"
+              sortable
+              valueHeader={t('common.usd')}
+            />
           </LensState>
         </Widget>
 

@@ -524,6 +524,7 @@
   "cost.byNamespace": "Cost by namespace",
   "cost.byMonitor": "Cost by monitor",
   "cost.byCategory": "Cost by category",
+  "cost.egressByDomain": "Egress cost by domain",
   "cost.savings": "Savings opportunities",
   "cost.trend": "Billed cost trend",
   "cost.trendSeries": "Billed USD",

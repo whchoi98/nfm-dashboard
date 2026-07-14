@@ -5,6 +5,7 @@ import type { DestCategory, FlowEdge } from '../types';
 import { CATEGORY_ORDER } from '../chart-tokens';
 import type { Series } from './aggregate';
 import { bytesToUsd, topCostContributors } from './cost';
+import type { EgressDomainRow } from './egress-domains';
 
 // Default lens window: 12 five-minute buckets (the hub's 1h default range).
 const DEFAULT_WINDOW_SECONDS = 12 * 300;
@@ -23,6 +24,9 @@ export interface CostExplorerResult {
   byMonitor: CostGroupRow[]; // desc by usd
   savings: SavingsRow[]; // billed contributors only, desc by usd
   trend: Series; // billed USD per bucket over the window
+  // Internet-egress cost by destination domain (added by the /api/cost-explorer
+  // route, not by costExplorerLens itself — see egress-domains.ts).
+  egressDomains?: EgressDomainRow[];
 }
 
 // t()-able recommendation key per billed category (translated in ko.json/en.json).

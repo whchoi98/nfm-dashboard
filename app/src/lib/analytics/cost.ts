@@ -10,6 +10,17 @@ import { entityKey, groupBy, type EntityKind, type Series } from './aggregate';
 // estimate of billable bytes — this is NOT an exact bill (UI shows an "estimate" badge).
 export const AZ_TRANSFER_USD_PER_GB = 0.01;
 
+// Internet data-transfer-out (egress) rate — AWS first-tier ~$0.09/GB in
+// ap-northeast-2. INTERNET is NOT in BILLED_CATEGORIES (bytesToUsd returns 0
+// for it) because inter-AZ pricing doesn't apply; egress is priced separately.
+// An estimate, like AZ_TRANSFER_USD_PER_GB (UI shows an "estimate" badge).
+export const INTERNET_EGRESS_USD_PER_GB = 0.09;
+
+/** Estimated USD for internet-egress bytes. */
+export function egressBytesToUsd(bytes: number): number {
+  return (bytes / 1e9) * INTERNET_EGRESS_USD_PER_GB;
+}
+
 /** Categories that incur data-transfer charges; everything else costs $0. */
 export const BILLED_CATEGORIES: ReadonlySet<DestCategory> = new Set<DestCategory>([
   'INTER_AZ', 'INTER_VPC', 'INTER_REGION',

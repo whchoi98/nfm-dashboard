@@ -524,6 +524,7 @@
   "cost.byNamespace": "네임스페이스별 비용",
   "cost.byMonitor": "모니터별 비용",
   "cost.byCategory": "카테고리별 비용",
+  "cost.egressByDomain": "도메인별 인터넷 송신 비용",
   "cost.savings": "절감 기회",
   "cost.trend": "청구 비용 추이",
   "cost.trendSeries": "청구 USD",
