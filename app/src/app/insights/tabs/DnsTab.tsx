@@ -13,8 +13,9 @@ import {
   topNxdomainSources,
   topResolvers,
 } from '@/lib/analytics/dns-insights';
-import type { DnsAggregate } from '@/lib/types';
+import type { DnsAggregate, DnsSourceStat } from '@/lib/types';
 import { formatCount } from '@/lib/format';
+import { STATUS } from '@/lib/chart-tokens';
 import Widget from '@/components/analytics/Widget';
 import Toplist, { type ToplistRow } from '@/components/analytics/Toplist';
 import StatDelta from '@/components/charts/StatDelta';
@@ -26,6 +27,91 @@ import { LensState } from './shared';
 const formatMs = (v: number) => `${v.toFixed(1)} ms`;
 /** failRate is a 0–1 fraction (collector/src/dns.ts). */
 const formatPct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+/**
+ * CoreDNS vs Route53 Resolver comparison panel (Task 4). Route53 Resolver
+ * query logs carry NO per-query latency, so in production
+ * `bySource.resolver.latencySampleCount` is always 0 and its
+ * latencyP50/P95 are meaningless zeros — we must never render "0.0 ms" for
+ * that case (would present fabricated data). Instead the latency cells fall
+ * back to a `noLatency` placeholder whenever `latencySampleCount === 0`,
+ * source-by-source (so coredns keeps rendering real numbers even if resolver
+ * has none). The fail-rate column is always real for both sources and
+ * always renders.
+ */
+export function ResolverCompare({ bySource }: { bySource: DnsAggregate['bySource'] }) {
+  const { t } = useLanguage();
+
+  if (!bySource) {
+    return (
+      <p
+        data-testid="dns-resolver-compare-empty"
+        className="flex min-h-24 items-center justify-center px-4 text-center text-sm text-ink/60 dark:text-white/60"
+      >
+        {t('dns.resolverCompare.awaiting')}
+      </p>
+    );
+  }
+
+  const rows: { key: 'coredns' | 'resolver'; stat: DnsSourceStat }[] = [
+    { key: 'coredns', stat: bySource.coredns },
+    { key: 'resolver', stat: bySource.resolver },
+  ];
+
+  const latencyCell = (stat: DnsSourceStat, value: number) =>
+    stat.latencySampleCount === 0 ? (
+      <span className="text-ink/40 dark:text-white/40">{t('dns.resolverCompare.noLatency')}</span>
+    ) : (
+      <span className="font-semibold tabular-nums text-ink dark:text-white">{formatMs(value)}</span>
+    );
+
+  return (
+    <div data-testid="dns-resolver-compare">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wide text-ink/50 dark:text-white/50">
+            <th className="py-1 pr-2 font-semibold">{t('common.name')}</th>
+            <th className="py-1 pr-2 text-right font-semibold">{t('dns.resolverCompare.p50')}</th>
+            <th className="py-1 pr-2 text-right font-semibold">{t('dns.resolverCompare.p95')}</th>
+            <th className="py-1 text-right font-semibold">{t('dns.resolverCompare.failRate')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ key, stat }) => {
+            // Dual-encode fail-rate severity: STATUS color dot + sr-only text
+            // label, alongside the always-visible percent (never color alone).
+            const status: keyof typeof STATUS = stat.failRate > 0 ? 'warn' : 'ok';
+            return (
+              <tr key={key} className="border-t border-black/5 dark:border-white/10">
+                <td className="py-1.5 pr-2 font-medium text-ink dark:text-white">
+                  {t(`dns.source.${key}`)}
+                </td>
+                <td className="py-1.5 pr-2 text-right">{latencyCell(stat, stat.latencyP50)}</td>
+                <td className="py-1.5 pr-2 text-right">{latencyCell(stat, stat.latencyP95)}</td>
+                <td className="py-1.5 text-right">
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: STATUS[status] }}
+                    />
+                    <span className="sr-only">{t(`toplist.status.${status}`)}</span>
+                    <span className="font-semibold tabular-nums text-ink dark:text-white">
+                      {formatPct(stat.failRate)}
+                    </span>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-2 text-[11px] text-ink/50 dark:text-white/50">
+        {t('dns.resolverCompare.note')}
+      </p>
+    </div>
+  );
+}
 
 // Accepts no props on purpose: () => JSX is assignable to ComponentType<TabProps>,
 // and the DNS aggregate has no filter inputs to consume.
@@ -265,6 +351,12 @@ export default function DnsTab() {
             sortable
             valueHeader={t('common.count')}
           />
+        </LensState>
+      </Widget>
+
+      <Widget title={t('dns.resolverCompare.title')} testId="widget-dns-resolver-compare">
+        <LensState loading={firstLoad} error={error}>
+          <ResolverCompare bySource={data.bySource} />
         </LensState>
       </Widget>
 
