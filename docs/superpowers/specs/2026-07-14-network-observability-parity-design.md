@@ -23,7 +23,20 @@ Data facts verified during brainstorming:
 - **UI:** add a `port` option to the Network Analytics dest-scope selector (`app/src/app/network/page.tsx` + `network-analytics.ts` aggregation), so the existing source→dest table can aggregate the dest side by port. Metric toggle (volume/retransmits) reuses the existing controls. Follows the established Scope pattern (service/namespace/subnet/az/vpc/category/monitor → add `port`).
 - **Test:** lens groups by port, labels well-known ports, sorts desc, handles undefined port; network page scope option renders.
 
-## G2 — Internet-egress cost by domain (app-only)
+## G2 — Internet-egress cost by domain (app-only) — ❌ DROPPED (infeasible on NFM data)
+
+> **Status: DROPPED during implementation (2026-07-14).** A spec-stage feasibility miss:
+> the brainstorming claim that `nameFlow` makes this app-only does not hold. Two independent
+> data breaks confirmed against the collector code:
+> 1. `INTERNET`-category volume is produced **only** by the Workload Insights collector
+>    (`wi-query.ts` → `WI#latest`, `WiRow{remoteIdentifier,value}`), never by the flows
+>    collector (`nfm-query.ts` writes CORE/EXTENDED categories to the flows table). So the
+>    `FlowEdge[]` this lens consumes never contains an `INTERNET` flow — the widget is always empty.
+> 2. `nameFlow` (`dns.ts:36-38`) is built from `flowIps` (CORE/EXTENDED `a.ip`/`b.ip`) ∩ resolver
+>    answer IPs — external egress IPs never enter that set, so the domain map lacks egress IPs anyway.
+>
+> "Egress cost **by domain**" therefore cannot be built on the current pipeline. Moved to Non-Goals.
+> The original design below is retained for the record. Reverted commit: `46603df`.
 
 **What:** which external domains drive internet-egress cost (Datadog "group destination by domain", but with our $ estimate — a differentiator).
 
@@ -60,6 +73,10 @@ Data facts verified during brainstorming:
 ## Non-Goals (YAGNI)
 
 - L7 HTTP/gRPC breakdown, network-policy verdicts (infeasible on NFM data).
+- **G2 egress cost by domain (dropped 2026-07-14)** — `INTERNET` volume lives only in `WI#latest`
+  (not the flows table) and `nameFlow` never contains external egress IPs, so a per-domain egress
+  breakdown is not derivable from current NFM/DNS data. A WI-based egress *total* remains possible
+  as future work but was not in scope.
 - Real CloudWatch Composite Alarm resources (G5 chosen as an app-only view).
 - New charting library; reuse existing Toplist / bars / tables.
 

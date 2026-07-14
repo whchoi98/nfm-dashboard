@@ -126,7 +126,13 @@ git commit -m "feat(network): port/service traffic-mix lens + port scope"
 
 ---
 
-### Task 2: G2 — Internet-egress cost by domain
+### Task 2: G2 — Internet-egress cost by domain — ❌ DROPPED (infeasible; reverted 46603df)
+
+> **DROPPED 2026-07-14.** Implemented then reverted after the task review found the feature
+> non-functional against real data: `INTERNET` volume exists only in `WI#latest` (not the flows
+> table the lens reads), and `nameFlow` never contains external egress IPs. Root cause = spec-stage
+> feasibility miss. See the design doc's G2 Non-Goals entry. Skip this task; proceed Task 1 → Task 3.
+> The original plan text is retained below for the record.
 
 **Files:**
 - Modify: `app/src/lib/analytics/cost.ts` (add `INTERNET_EGRESS_USD_PER_GB` + `egressBytesToUsd`)
