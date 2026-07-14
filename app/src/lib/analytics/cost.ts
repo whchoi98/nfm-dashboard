@@ -11,7 +11,7 @@ import { entityKey, groupBy, type EntityKind, type Series } from './aggregate';
 export const AZ_TRANSFER_USD_PER_GB = 0.01;
 
 /** Categories that incur data-transfer charges; everything else costs $0. */
-const BILLED_CATEGORIES: ReadonlySet<DestCategory> = new Set<DestCategory>([
+export const BILLED_CATEGORIES: ReadonlySet<DestCategory> = new Set<DestCategory>([
   'INTER_AZ', 'INTER_VPC', 'INTER_REGION',
 ]);
 

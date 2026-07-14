@@ -25,7 +25,17 @@ const full: ReportData = {
   anomalies: [
     { label: 'default/api', kind: 'retrans', severity: 'critical', detail: 'retrans 25.0/GB > 10/GB' },
   ],
-  cost: { totalUsd: 0.005 },
+  cost: {
+    totalUsd: 0.005,
+    monthlyRunRate: 3.6, // 0.005 × (2_592_000 / 3600) = 0.005 × 720
+    windowSeconds: 3600,
+    ratePerGbPerDirection: 0.01,
+    billedCategories: ['INTER_AZ', 'INTER_VPC', 'INTER_REGION'],
+    byCategory: [
+      { category: 'INTER_AZ', bytes: 2_000_000_000, usd: 0.02 },
+      { category: 'INTER_VPC', bytes: 500_000_000, usd: 0.005 },
+    ],
+  },
 };
 
 const empty: ReportData = {
@@ -36,7 +46,14 @@ const empty: ReportData = {
   topTalkers: [],
   breachCount: 0,
   anomalies: [],
-  cost: { totalUsd: 0 },
+  cost: {
+    totalUsd: 0,
+    monthlyRunRate: 0,
+    windowSeconds: 3600,
+    ratePerGbPerDirection: 0.01,
+    billedCategories: ['INTER_AZ', 'INTER_VPC', 'INTER_REGION'],
+    byCategory: [],
+  },
 };
 
 describe('buildReportMarkdown', () => {
@@ -82,5 +99,15 @@ describe('buildReportMarkdown', () => {
     expect(a).toBe(b);
     // the only timestamp in the document is the injected one
     expect(a.match(/\d{4}-\d{2}-\d{2}T/g)).toEqual([GENERATED_AT.slice(0, 11)]);
+  });
+
+  it('emits the cost-estimation basis and per-category breakdown', () => {
+    const md = buildReportMarkdown(full, GENERATED_AT, t);
+    expect(md).toContain('report.basis.title');
+    expect(md).toContain('report.basis.rate(0.01)'); // rate param threaded through t()
+    expect(md).toContain('report.basis.runRate: $3.60'); // monthly run-rate
+    expect(md).toContain('INTER_AZ'); // per-category line present
+    expect(md).toContain('2 GB'); // INTER_AZ bytes formatted
+    expect(md).toContain('$0.02'); // INTER_AZ usd
   });
 });
