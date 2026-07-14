@@ -99,6 +99,26 @@ startup crashes / failing health checks. Common causes: a bad image rollout
 (roll back per `docs/runbooks/deploy.md`), the container failing its health
 check, or a task-role / env misconfiguration.
 
+**OOM signature (2026-07-14 incident):** `describe-tasks` shows
+`stopCode: EssentialContainerExited` with container `exitCode 137` and reason
+`OutOfMemoryError: container killed due to memory usage` — the task blew past
+its Fargate memory limit and ECS enters a replace loop (brief 502/504 windows
+while the target group is empty). Since the fix, a heap-side failure would
+instead surface as `exit 134` (V8 "Reached heap limit" abort at
+`--max-old-space-size=3072`). Leading indicator in the app logs, minutes before
+the kill:
+```
+@smithy/node-http-handler:WARN - socket usage at capacity=N and M additional requests are enqueued.
+```
+That warning means the DynamoDB fan-out (bucket-window queries × monitors) is
+queuing on the SDK socket pool — every menu slows first, then memory climbs.
+Mitigations shipped as task-def rev 25 / image `5f344e8`: 4096 MiB task +
+NODE_OPTIONS heap cap, 512-socket keep-alive agent, `getFlowsWindow`/
+`getFlowsWindowPair` shared settle-based 10s cache (`app/src/lib/ddb.ts`). If
+it recurs, capture WHICH routes/windows were hot (`?buckets=` sizes in access
+patterns), then consider lowering `BUCKET_QUERY_CONCURRENCY`, quantizing
+`?buckets`, or moving multi-day windows to the Athena cold tier.
+
 ### 4. Triage: `nfm-dashboard-alb-5xx`
 The ALB returned more than 10 ELB-generated 5xx in 5 minutes — viewers are
 getting errors. Walk the request path CloudFront → ALB → target → app:
@@ -253,6 +273,25 @@ aws elbv2 describe-target-health --target-group-arn "$TG_ARN"
 그다음 앱 컨테이너 로그([로그 찾기](#로그-찾기))에서 기동 크래시 / 헬스체크
 실패를 읽는다. 흔한 원인: 잘못된 이미지 롤아웃(`docs/runbooks/deploy.md` 롤백),
 컨테이너 헬스체크 실패, 태스크 역할 / 환경변수 오구성.
+
+**OOM 시그니처 (2026-07-14 인시던트):** `describe-tasks`에
+`stopCode: EssentialContainerExited` + 컨테이너 `exitCode 137` + reason
+`OutOfMemoryError: container killed due to memory usage`가 보이면 태스크가
+Fargate 메모리 한도를 초과해 ECS가 교체 루프에 들어간 것이다(타깃 그룹이 비는
+동안 짧은 502/504 창 발생). 수정 이후 힙 쪽 실패는 `exit 134`(V8 "Reached heap
+limit" abort, `--max-old-space-size=3072`)로 나타난다. 죽기 몇 분 전 앱 로그의
+선행 지표:
+```
+@smithy/node-http-handler:WARN - socket usage at capacity=N and M additional requests are enqueued.
+```
+이 경고는 DynamoDB fan-out(버킷 윈도우 쿼리 × 모니터)이 SDK 소켓 풀에 큐잉되고
+있다는 뜻 — 먼저 모든 메뉴가 느려지고, 그다음 메모리가 차오른다. 조치는 태스크
+정의 rev 25 / 이미지 `5f344e8`로 배포됨: 4096 MiB 태스크 + NODE_OPTIONS 힙 캡,
+512-소켓 keep-alive agent, `getFlowsWindow`/`getFlowsWindowPair` 공유
+settle-기준 10초 캐시(`app/src/lib/ddb.ts`). 재발 시 어떤 라우트/윈도우가
+뜨거웠는지(`?buckets=` 크기) 확보한 뒤 `BUCKET_QUERY_CONCURRENCY` 하향,
+`?buckets` 양자화, 또는 다일(multi-day) 윈도우의 Athena 콜드 티어 이전을
+검토한다.
 
 ### 4. 트리아지: `nfm-dashboard-alb-5xx`
 ALB가 5분간 10건 초과의 ELB 발생 5xx를 반환 — 뷰어가 오류를 받고 있다. 요청
