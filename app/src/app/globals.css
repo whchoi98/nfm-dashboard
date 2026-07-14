@@ -378,7 +378,7 @@ body {
   [data-testid="sidebar"],
   [data-testid="topbar"],
   [data-testid="floating-chat-fab"],
-  header.nav, nav,
+  nav,
   [data-testid="reports-page"] > div:first-child, /* the action-button header row */
   [data-testid="reports-page"] > p,              /* the page hint paragraph */
   [data-testid="report-preview"] > div:first-child /* the Widget/Card "Report Preview" title bar */ {

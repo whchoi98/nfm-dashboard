@@ -534,7 +534,6 @@
   "reports.preview": "Report preview",
   "reports.downloadMd": "Download .md",
   "reports.downloadCsv": "Download .csv",
-  "reports.print": "Print",
   "reports.exportCsv": "Export CSV",
   "reports.downloadPdf": "Download PDF",
   "reports.pdfHint": "Opens the print dialog — choose Save as PDF",

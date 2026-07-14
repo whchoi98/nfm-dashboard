@@ -28,11 +28,11 @@ export default function ReportsPage() {
 
   // Recomputed when the data refreshes (or the language flips) — the pure fn
   // itself never reads the clock, the timestamp is injected here.
-  const markdown = useMemo(
-    () => (data ? buildReportMarkdown(data, new Date().toISOString(), t) : ''),
-    [data, t],
-  );
   const generatedAt = useMemo(() => new Date().toISOString(), [data]);
+  const markdown = useMemo(
+    () => (data ? buildReportMarkdown(data, generatedAt, t) : ''),
+    [data, generatedAt, t],
+  );
 
   const downloadMd = () => downloadText(`nfm-report-${dateStamp()}.md`, markdown, 'text/markdown');
   const downloadCsv = () => {

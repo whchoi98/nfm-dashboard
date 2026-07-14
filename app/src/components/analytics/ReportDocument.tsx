@@ -56,12 +56,15 @@ export default function ReportDocument({
       </section>
 
       {/* KPI tiles */}
-      <section data-testid="report-kpis" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile label={t('report.kpi.dataTransferred')} value={fmt(kpis.dataTransferred, formatBytes)} />
-        <Tile label={t('report.kpi.retransmissions')} value={fmt(kpis.retransmissions, formatCount)} />
-        <Tile label={t('report.kpi.timeouts')} value={fmt(kpis.timeouts, formatCount)} />
-        <Tile label={t('report.kpi.rtt')} value={`${fmt(kpis.rtt, formatMicros)} · p95 ${fmt(kpis.rttP95, formatMicros)}`} />
-        <Tile label={t('report.kpi.nhi')} value={fmt(kpis.nhi, formatCount)} />
+      <section data-testid="report-kpis" className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold">{t('report.kpis')}</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Tile label={t('report.kpi.dataTransferred')} value={fmt(kpis.dataTransferred, formatBytes)} />
+          <Tile label={t('report.kpi.retransmissions')} value={fmt(kpis.retransmissions, formatCount)} />
+          <Tile label={t('report.kpi.timeouts')} value={fmt(kpis.timeouts, formatCount)} />
+          <Tile label={t('report.kpi.rtt')} value={`${fmt(kpis.rtt, formatMicros)} · p95 ${fmt(kpis.rttP95, formatMicros)}`} />
+          <Tile label={t('report.kpi.nhi')} value={fmt(kpis.nhi, formatCount)} />
+        </div>
       </section>
 
       {/* Cost detail */}
