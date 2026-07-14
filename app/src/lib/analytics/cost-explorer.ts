@@ -9,7 +9,7 @@ import { bytesToUsd, topCostContributors } from './cost';
 // Default lens window: 12 five-minute buckets (the hub's 1h default range).
 const DEFAULT_WINDOW_SECONDS = 12 * 300;
 // 30 days in seconds — monthlyRunRate = totalUsd × (MONTH_SECONDS / windowSeconds).
-const MONTH_SECONDS = 2_592_000;
+export const MONTH_SECONDS = 2_592_000;
 const SAVINGS_LIMIT = 8;
 
 export interface CostGroupRow { label: string; bytes: number; usd: number; }

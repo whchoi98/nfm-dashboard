@@ -361,3 +361,46 @@ body {
 .chat-markdown .hljs-strong {
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------------
+ * Print stylesheet (/reports "Download PDF" -> window.print()).
+ * Isolates ReportDocument (wrapper class .report-print-root, set in
+ * ReportDocument.tsx) so the printed/PDF output shows only the report:
+ * app chrome (Sidebar, Topbar, MobileTabs <nav>, the reports-page action-
+ * button row + hint paragraph, the always-mounted FloatingChat FAB) is
+ * hidden, the enclosing Widget/Card (its "Report Preview" title bar +
+ * border/background/shadow/padding) is unwrapped, the shell is reset to a
+ * plain white page, token colors/bars are preserved, and section cards
+ * avoid breaking across a page boundary.
+ * ------------------------------------------------------------------------- */
+@media print {
+  /* Hide app chrome so only the report prints. */
+  [data-testid="sidebar"],
+  [data-testid="topbar"],
+  [data-testid="floating-chat-fab"],
+  nav,
+  [data-testid="reports-page"] > div:first-child, /* the action-button header row */
+  [data-testid="reports-page"] > p,              /* the page hint paragraph */
+  [data-testid="report-preview"] > div:first-child /* the Widget/Card "Report Preview" title bar */ {
+    display: none !important;
+  }
+  /* Unwrap the report card (Widget/Card in ui/Controls.tsx) so only the report
+   * content prints — strip its own border/background/shadow/padding. */
+  [data-testid="report-preview"] {
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  /* Reset the shell to a plain white page. */
+  html, body { background: #fff !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  /* Preserve token colors + bars in print. */
+  .report-print-root, .report-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Avoid breaking a section card across pages. */
+  .report-print-root section, .report-print-root header { break-inside: avoid; }
+  @page { margin: 14mm; }
+}

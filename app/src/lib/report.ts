@@ -5,6 +5,7 @@
 // with the page's t() so the document follows the UI language (ko/en).
 import { formatBytes, formatCount, formatMicros } from './format';
 import { formatUsd } from '@/app/insights/tabs/shared';
+import type { DestCategory } from './types';
 
 export interface ReportKpis {
   /** Avg bytes per bucket (§15.4 DataTransferred). */
@@ -32,13 +33,31 @@ export interface ReportAnomaly {
   detail: string;
 }
 
+export interface ReportCostCategory {
+  category: DestCategory;
+  bytes: number;
+  usd: number;
+}
+
+export interface ReportCost {
+  totalUsd: number;
+  /** totalUsd scaled to 30 days: totalUsd × (MONTH_SECONDS / windowSeconds). */
+  monthlyRunRate: number;
+  windowSeconds: number;
+  /** = AZ_TRANSFER_USD_PER_GB (per direction). */
+  ratePerGbPerDirection: number;
+  billedCategories: DestCategory[];
+  /** Billed categories with traffic in the window, desc by usd. */
+  byCategory: ReportCostCategory[];
+}
+
 export interface ReportData {
   kpis: ReportKpis;
   topTalkers: ReportTalker[];
   /** Reliability lens threshold breaches in the window. */
   breachCount: number;
   anomalies: ReportAnomaly[];
-  cost: { totalUsd: number };
+  cost: ReportCost;
 }
 
 /** Same shape as useLanguage().t — injectable so the pure fn stays testable. */
@@ -83,12 +102,24 @@ export function buildReportMarkdown(data: ReportData, generatedAt: string, t: Re
     lines.push('');
     for (const a of anomalies) lines.push(`- [${a.severity}] ${a.label} — ${a.detail}`);
   }
+  const { cost } = data;
   lines.push(
     '',
     `## ${t('report.cost')}`,
     '',
-    `${t('report.costTotal')}: ${formatUsd(data.cost.totalUsd)}`,
+    `_${t('report.basis.title')}_`,
+    `- ${t('report.basis.rate', { rate: cost.ratePerGbPerDirection })}`,
+    `- ${t('report.basis.billed')}`,
+    `- ${t('report.basis.estimate')}`,
+    `- ${t('report.basis.runRate')}: ${formatUsd(cost.monthlyRunRate)}`,
     '',
   );
+  if (cost.byCategory.length > 0) {
+    for (const c of cost.byCategory) {
+      lines.push(`- ${c.category}: ${formatBytes(c.bytes)} (${formatUsd(c.usd)})`);
+    }
+    lines.push('');
+  }
+  lines.push(`${t('report.costTotal')}: ${formatUsd(cost.totalUsd)}`, '');
   return lines.join('\n');
 }

@@ -11,7 +11,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import { buildReportMarkdown, type ReportData } from '@/lib/report';
 import { downloadText, toCsv } from '@/lib/csv';
-import Markdown from '@/components/Markdown';
+import ReportDocument from '@/components/analytics/ReportDocument';
 import Widget from '@/components/analytics/Widget';
 import { LensState } from '@/app/insights/tabs/shared';
 
@@ -28,9 +28,10 @@ export default function ReportsPage() {
 
   // Recomputed when the data refreshes (or the language flips) — the pure fn
   // itself never reads the clock, the timestamp is injected here.
+  const generatedAt = useMemo(() => new Date().toISOString(), [data]);
   const markdown = useMemo(
-    () => (data ? buildReportMarkdown(data, new Date().toISOString(), t) : ''),
-    [data, t],
+    () => (data ? buildReportMarkdown(data, generatedAt, t) : ''),
+    [data, generatedAt, t],
   );
 
   const downloadMd = () => downloadText(`nfm-report-${dateStamp()}.md`, markdown, 'text/markdown');
@@ -57,9 +58,15 @@ export default function ReportsPage() {
             <Download size={12} strokeWidth={1.5} aria-hidden />
             {t('reports.downloadCsv')}
           </button>
-          <button type="button" onClick={() => window.print()} className={btnCls}>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            title={t('reports.pdfHint')}
+            aria-label={t('reports.pdfHint')}
+            className={btnCls}
+          >
             <Printer size={12} strokeWidth={1.5} aria-hidden />
-            {t('reports.print')}
+            {t('reports.downloadPdf')}
           </button>
         </div>
       </div>
@@ -68,8 +75,8 @@ export default function ReportsPage() {
       </p>
 
       <Widget title={t('reports.preview')} testId="report-preview">
-        <LensState loading={firstLoad} error={error} empty={!markdown}>
-          <Markdown>{markdown}</Markdown>
+        <LensState loading={firstLoad} error={error} empty={!data}>
+          {data && <ReportDocument data={data} generatedAt={generatedAt} />}
         </LensState>
       </Widget>
     </div>
