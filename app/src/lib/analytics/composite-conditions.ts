@@ -39,8 +39,14 @@ export function compositeConditions(current: FlowEdge[], prior: FlowEdge[]): Com
   // Condition 2: large volume drop (deltaPct <= VOLUME_DROP_PCT) from the
   // DATA_TRANSFERRED movers list — NOT `.movers`, which does not exist on
   // MoversResult ({ dataTransferred, retransmissions, timeouts, silent }).
+  // topN is unbounded here (moversLens defaults to top-8 by ABSOLUTE byte
+  // change): a composite breach must also catch a low-traffic entity with a
+  // severe RELATIVE drop (e.g. -90%) whose small absolute change would
+  // otherwise fall outside the default top-8 and be silently missed. The
+  // deltaPct <= VOLUME_DROP_PCT filter below plus the >=2-condition gate
+  // control noise — not the mover ranking.
   const drop = new Map<string, number>();
-  for (const m of moversLens(current, prior).dataTransferred) {
+  for (const m of moversLens(current, prior, { topN: Number.MAX_SAFE_INTEGER }).dataTransferred) {
     if (m.deltaPct != null && m.deltaPct <= VOLUME_DROP_PCT) drop.set(m.label, m.deltaPct);
   }
 
