@@ -361,3 +361,34 @@ body {
 .chat-markdown .hljs-strong {
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------------
+ * Print stylesheet (/reports "Download PDF" -> window.print()).
+ * Isolates ReportDocument (wrapper class .report-print-root, set in
+ * ReportDocument.tsx) so the printed/PDF output shows only the report:
+ * app chrome (Sidebar, Topbar, MobileTabs <nav>, the reports-page action-
+ * button row, the always-mounted FloatingChat FAB) is hidden, the shell is
+ * reset to a plain white page, token colors/bars are preserved, and section
+ * cards avoid breaking across a page boundary.
+ * ------------------------------------------------------------------------- */
+@media print {
+  /* Hide app chrome so only the report prints. */
+  [data-testid="sidebar"],
+  [data-testid="topbar"],
+  [data-testid="floating-chat-fab"],
+  header.nav, nav,
+  [data-testid="reports-page"] > div:first-child /* the action-button header row */ {
+    display: none !important;
+  }
+  /* Reset the shell to a plain white page. */
+  html, body { background: #fff !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  /* Preserve token colors + bars in print. */
+  .report-print-root, .report-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Avoid breaking a section card across pages. */
+  .report-print-root section, .report-print-root header { break-inside: avoid; }
+  @page { margin: 14mm; }
+}
