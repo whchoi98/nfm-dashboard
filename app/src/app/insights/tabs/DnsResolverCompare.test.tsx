@@ -47,6 +47,27 @@ describe('ResolverCompare', () => {
     expect(screen.getByText('20.0%')).toBeTruthy();
   });
 
+  it('renders "0.0 ms" for a genuine zero-latency measurement (sampleCount > 0) — guard is on sample count, not the value', () => {
+    wrap(
+      <ResolverCompare
+        bySource={{
+          coredns: { latencyP50: 2, latencyP95: 5, latencySampleCount: 100, failRate: 0, count: 100 },
+          resolver: { latencyP50: 0, latencyP95: 0, latencySampleCount: 40, failRate: 0, count: 40 },
+        }}
+      />,
+    );
+    const panel = screen.getByTestId('dns-resolver-compare');
+    // resolver has real samples (latencySampleCount === 40) even though the
+    // measured P50/P95 happen to be 0 — that is a genuine 0ms and must
+    // render, not fall back to the noLatency placeholder. Both the P50 and
+    // P95 cells render "0.0 ms".
+    expect(screen.getAllByText('0.0 ms').length).toBe(2);
+    // The noLatency placeholder must NOT appear anywhere in this panel —
+    // if the component's guard regressed from `latencySampleCount === 0` to
+    // `value === 0`, resolver's zero P50/P95 would wrongly hit this branch.
+    expect(screen.queryAllByText('지연 데이터 없음').length).toBe(0);
+  });
+
   it('shows an awaiting-data state when bySource is undefined', () => {
     wrap(<ResolverCompare bySource={undefined} />);
     expect(screen.getByTestId('dns-resolver-compare-empty')).toBeTruthy();
