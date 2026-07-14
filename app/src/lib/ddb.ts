@@ -1,3 +1,4 @@
+import { Agent as HttpsAgent } from 'node:https';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { listMonitorNames } from './cw-metrics';
@@ -8,9 +9,18 @@ const REGION = process.env.AWS_REGION ?? 'ap-northeast-2';
 const TABLE_FLOWS = process.env.TABLE_FLOWS ?? 'nfm-dashboard-flows';
 const TABLE_META = process.env.TABLE_META ?? 'nfm-dashboard-meta';
 
+// One window/pair fetch peaks at BUCKET_QUERY_CONCURRENCY x monitors (~200 in
+// flight) and two differently-keyed fetches can overlap (~400); the SDK's
+// default 50-socket agent queues the excess, which stalls every route on the
+// box and retains queued request state in memory (seen live as @smithy
+// socket-capacity warnings preceding a task OOM). In-flight concurrency stays
+// bounded by mapPool, so the extra capacity is free until demanded.
+export const ddbSocketAgent = new HttpsAgent({ keepAlive: true, maxSockets: 512 });
+
 let client: DynamoDBDocumentClient | undefined;
 function ddb(): DynamoDBDocumentClient {
-  return (client ??= DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }),
+  return (client ??= DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION,
+    requestHandler: { httpsAgent: ddbSocketAgent } }),
     { marshallOptions: { removeUndefinedValues: true } }));
 }
 
@@ -115,41 +125,67 @@ async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
   return results.flat();
 }
 
-// In-flight de-dup + short TTL keyed by window size: the analytics routes fire
-// concurrently with identical windows, so they share one underlying query set.
-// Rejected fetches are evicted immediately — a failure is never cached.
+// In-flight de-dup + short TTL keyed by fetch shape ('w:12' window, 'p:6' pair):
+// the analytics routes fire concurrently with identical windows (and /alerts,
+// /anomalies, /reports poll the pair fetch), so they share one underlying query
+// set. The TTL runs from SETTLE, not fetch start — a slow multi-day fetch must
+// keep absorbing callers for as long as it runs, never be swept mid-flight and
+// re-launched. Expired entries are dropped on every access (sweep) AND by an
+// unref'd timer, so the last big window's flow arrays don't stay pinned in the
+// heap when traffic stops. Rejected fetches are evicted immediately — a failure
+// is never cached.
 const FLOWS_WINDOW_TTL_MS = 10_000;
-const flowsWindowCache = new Map<number, { p: Promise<FlowEdge[]>; at: number }>();
+type FlowsCacheEntry = { p: Promise<unknown>; expiresAt: number | null }; // null = in flight
+const flowsWindowCache = new Map<string, FlowsCacheEntry>();
+
+/** Live entry count, for tests/diagnostics. */
+export function flowsCacheSize(): number {
+  return flowsWindowCache.size;
+}
+
+function cachedFetch<T>(key: string, fetch: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  for (const [k, v] of flowsWindowCache) {
+    if (v.expiresAt !== null && now >= v.expiresAt) flowsWindowCache.delete(k);
+  }
+  const hit = flowsWindowCache.get(key); // survivors are in flight or fresh
+  if (hit) return hit.p as Promise<T>;
+  const entry: FlowsCacheEntry = { p: fetch(), expiresAt: null };
+  flowsWindowCache.set(key, entry);
+  entry.p.then(() => {
+    entry.expiresAt = Date.now() + FLOWS_WINDOW_TTL_MS;
+    const timer = setTimeout(() => {
+      if (flowsWindowCache.get(key) === entry) flowsWindowCache.delete(key);
+    }, FLOWS_WINDOW_TTL_MS);
+    timer.unref?.();
+  }, () => {
+    if (flowsWindowCache.get(key) === entry) flowsWindowCache.delete(key);
+  });
+  return entry.p as Promise<T>;
+}
 
 /** All flows across the n most-recent 5-min buckets (all monitors), concatenated. */
 export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
-  const hit = flowsWindowCache.get(n);
-  if (hit && Date.now() - hit.at < FLOWS_WINDOW_TTL_MS) return hit.p;
-  const p = fetchFlowsWindow(n);
-  flowsWindowCache.set(n, { p, at: Date.now() });
-  p.catch(() => {
-    if (flowsWindowCache.get(n)?.p === p) flowsWindowCache.delete(n);
-  });
-  return p;
+  return cachedFetch(`w:${n}`, () => fetchFlowsWindow(n));
 }
 
 /**
  * Current + prior flow windows of n buckets each for window-over-window lenses
  * (movers): the 2n most-recent buckets from ONE clock read, split in half —
  * two separate recentBuckets() calls could overlap/skip a bucket if a 5-min
- * boundary rolled between them. Uncached (getFlowsWindow's cache is untouched).
+ * boundary rolled between them. All 2n buckets run through ONE mapPool so the
+ * pair shares a single concurrency budget — two per-half pools would double
+ * the fan-out ceiling (2 x BUCKET_QUERY_CONCURRENCY x monitors) past the
+ * socket pool.
  */
 export async function getFlowsWindowPair(
   n: number,
 ): Promise<{ current: FlowEdge[]; prior: FlowEdge[] }> {
-  const buckets = recentBuckets(2 * n);
-  const fetchAll = (bs: string[]) =>
-    mapPool(bs, BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b)).then(r => r.flat());
-  const [current, prior] = await Promise.all([
-    fetchAll(buckets.slice(0, n)),
-    fetchAll(buckets.slice(n)),
-  ]);
-  return { current, prior };
+  return cachedFetch(`p:${n}`, async () => {
+    const buckets = recentBuckets(2 * n);
+    const perBucket = await mapPool(buckets, BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
+    return { current: perBucket.slice(0, n).flat(), prior: perBucket.slice(n).flat() };
+  });
 }
 
 async function queryAll(input: ConstructorParameters<typeof QueryCommand>[0]): Promise<FlowEdge[]> {
