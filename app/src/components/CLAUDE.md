@@ -10,8 +10,9 @@ Presentational React components for the dashboard: chart primitives, topology gr
 - `layout/` — `AppShell.tsx`, `Sidebar.tsx`, `Topbar.tsx`, `MobileTabs.tsx`, `nav.ts`
 - `cards/`, `analytics/`, `monitors/` — page-level widgets
 - `analytics/AnomalyDetailPanel.tsx` — /anomalies row-select right slide-over (`role=dialog`/`aria-modal`, Escape/backdrop close, focus-on-open) with topology (`?focus=`) / network (`?ns=`) deep-link buttons
+- `PageIntro.tsx` — per-page 개요/기능 intro box rendered under each of the 17 page titles; `{ page }` prop → `t('pageintro.overview')`/`t('pageintro.features')` labels + `t(\`pageintro.${page}.what\`)`/`.features` copy (bilingual), tinted token box, `data-testid="page-intro"` + `data-page`
 - `ui/Controls.tsx` — shared controls
-- Root: `FlowTable.tsx`, `HopPath.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `SortableHeader.tsx`
+- Root: `FlowTable.tsx`, `HopPath.tsx`, `Markdown.tsx`, `CodeBlock.tsx`, `SortableHeader.tsx`, `PageIntro.tsx`
 
 ## Rules
 - Colors only via `app/src/lib/chart-tokens.ts` (`TOKENS`, series palettes) — never hardcode hex.

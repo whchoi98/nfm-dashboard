@@ -7,7 +7,7 @@ Scheduled Lambda (5-minute cycle) that queries CloudWatch Network Flow Monitor (
 - `src/handler.ts` — Lambda entry: computes the 5-min bucket, orchestrates one collection cycle
 - `src/nfm-query.ts` — NFM `runQueryMatrix` (top-contributors queries per metric)
 - `src/wi-query.ts` — workload insights collection
-- `src/dns-collect.ts` / `src/dns-parse.ts` / `src/dns.ts` — CoreDNS log collection and parsing
+- `src/dns-collect.ts` / `src/dns-parse.ts` / `src/dns.ts` — CoreDNS log collection and parsing; `dns.ts` `aggregateDns` also computes per-source DNS stats (`bySource`: CoreDNS vs Route53 Resolver — p50/p95 latency, fail rate, `latencySampleCount`) for the G3 resolver-comparison panel (resolver has no per-query latency, so its `latencySampleCount` is 0 and the UI renders "no data")
 - `src/storage.ts` — `writeCycle` / `buildTopology`: DynamoDB write path
 - `src/categories.ts` — destination-category classification per cycle
 - `src/onboard.ts` — onboarding coverage discovery (EC2/IAM)

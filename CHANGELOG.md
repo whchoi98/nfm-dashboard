@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Real User Monitoring via aws-rum-pipeline: `RumProvider` loads the self-hosted RUM SDK and stamps every event with `appName: nfm-dashboard` (page views, SPA route dwell time, Core Web Vitals, JS errors). Enabled only when `NEXT_PUBLIC_RUM_ENDPOINT`/`NEXT_PUBLIC_RUM_API_KEY` are exported before `scripts/build-push.sh` (Docker build args).
 - Anomaly detail panel: selecting a row on `/anomalies` opens a right-hand slide-over with entity detail (metric, current-vs-baseline, overshoot, severity) and working deep-links — `/topology?focus=<ns/name>` focuses the node, `/network?ns=<namespace>` presets the namespace facet; the panel live-updates with polling and auto-closes when the anomaly resolves.
+- Fancy report on `/reports`: a styled `ReportDocument` leads with a cost-estimation-basis block (inter-AZ transfer rate, billed categories, monthly run-rate), then KPI tiles, a per-category cost table, top talkers, and anomalies, with a Download PDF button (browser print-to-PDF). The `.md`/`.csv` downloads stay.
+- Network Analytics `port` destination scope (G1): the source-to-destination matrix aggregates the destination side by target port, with well-known ports labeled (HTTPS, DNS, PostgreSQL, and so on).
+- DNS resolver comparison (G3): the collector aggregates per-source DNS stats (`bySource` — CoreDNS vs Route53 Resolver: p50/p95 latency, fail rate, sample count) and the Insights DNS tab renders a resolver-comparison panel. Resolver latency shows "no data" instead of a fabricated 0 ms when Route53 Resolver query logs carry no latency sample.
+- Composite-condition view (G5) on `/alerts`: a dashboard highlight listing service entities that breach two or more signals at once (high retransmission rate and a large window-over-window volume drop). It is an app-side signal, not a CloudWatch alarm.
+- Per-page intro boxes: each of the 17 sidebar pages shows an overview/features (개요/기능) description box under its title, via a shared `PageIntro` component with bilingual copy.
 
 ### Changed
 - The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (default OFF — login enforced). Only the Cognito session gate is skipped when set; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay either way (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
@@ -190,6 +195,11 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Added
 - aws-rum-pipeline 연동 RUM(Real User Monitoring): `RumProvider`가 자체 호스팅 SDK를 로드해 모든 이벤트에 `appName: nfm-dashboard`를 스탬핑 (페이지뷰·SPA 체류시간·Core Web Vitals·JS 에러). `scripts/build-push.sh` 실행 전 `NEXT_PUBLIC_RUM_*` export 시에만 활성화 (Docker build args).
 - 이상 징후 상세 패널: `/anomalies`에서 행을 선택하면 엔티티 상세(지표, 현재값 대비 베이스라인, 초과분, 심각도)와 동작하는 딥링크를 갖춘 우측 슬라이드오버 표시 — `/topology?focus=<ns/name>`은 해당 노드를 포커스, `/network?ns=<namespace>`는 네임스페이스 facet을 프리셋; 패널은 폴링으로 실시간 갱신되며 이상 징후 해소 시 자동 닫힘 기능 추가.
+- `/reports` 리포트 개선: 스타일드 `ReportDocument`가 비용 산정 근거 블록(AZ 간 전송 요율, 청구 카테고리, 월 예상 run-rate)을 앞세우고 KPI 타일, 카테고리별 비용 표, 상위 트래픽, 이상 징후를 렌더링하며 Download PDF 버튼(브라우저 print-to-PDF) 추가. `.md`/`.csv` 다운로드 유지.
+- 네트워크 분석 `port` 목적지 스코프(G1): source-to-destination 매트릭스가 목적지 측을 target port로 집계하며 잘 알려진 포트(HTTPS, DNS, PostgreSQL 등) 라벨링 추가.
+- DNS resolver 비교(G3): 수집기가 소스별 DNS 통계(`bySource` — CoreDNS vs Route53 Resolver: p50/p95 지연, 실패율, 샘플 수)를 집계하고 Insights DNS 탭이 resolver 비교 패널을 렌더링. Route53 Resolver 쿼리 로그에 지연 샘플이 없으면 조작된 0 ms 대신 "데이터 없음" 표시.
+- `/alerts` 복합 조건 뷰(G5): 동시에 2개 이상 신호(높은 재전송률 및 윈도우 대비 큰 트래픽 급감)를 위반한 서비스 엔티티를 나열하는 대시보드 하이라이트 추가. CloudWatch 알람이 아닌 앱 측 신호.
+- 페이지별 소개 박스: 17개 사이드바 페이지 각각의 제목 아래에 개요/기능 설명 박스 표시 — 공유 `PageIntro` 컴포넌트 + 한/영 카피.
 
 ### Changed
 - 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (기본 OFF — 로그인 강제). 설정 시 Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 어느 경우든 유지 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.

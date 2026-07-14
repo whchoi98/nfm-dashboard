@@ -29,6 +29,7 @@ Next.js 16 App Router frontend (React 19): one page per dashboard view under `ap
 - `app/src/lib/use-sse.ts` — client consumption of SSE endpoints (AI chat)
 - `app/src/app/topology/focus-param.ts`, `app/src/app/network/ns-param.ts` — additive deep-link params: `/topology?focus=<ns/name>` focuses a node, `/network?ns=<namespace>` presets the namespace facet; both are no-ops when the param is absent
 - `app/src/lib/analytics/network-analytics.ts` (`Scope`/`SCOPES`) + `app/src/app/network/page.tsx` — the source→dest matrix adds a `port` dest-scope (G1 port/service traffic mix) alongside service/namespace/subnet/az/vpc/category/monitor; well-known port labels come from `app/src/lib/analytics/port-mix.ts`
+- `app/src/components/PageIntro.tsx` — per-page 개요/기능 intro box wired under the `<h1>` on all 17 pages; copy in i18n `pageintro.<page>.{what,features}` (both ko/en), row labels `pageintro.overview`/`pageintro.features`
 
 ### 5. Cross-references
 <!-- TODO -->
@@ -62,6 +63,7 @@ Next.js 16 App Router 프론트엔드(React 19): `app/src/app/` 아래 대시보
 - `app/src/lib/use-sse.ts` — SSE 엔드포인트(AI 채팅)의 클라이언트 소비
 - `app/src/app/topology/focus-param.ts`, `app/src/app/network/ns-param.ts` — 추가형(additive) 딥링크 파라미터: `/topology?focus=<ns/name>`은 노드를 포커스, `/network?ns=<namespace>`는 네임스페이스 facet을 프리셋; 파라미터가 없으면 둘 다 아무 동작도 하지 않음(no-op)
 - `app/src/lib/analytics/network-analytics.ts` (`Scope`/`SCOPES`) + `app/src/app/network/page.tsx` — source→dest 매트릭스에 `port` 목적지 스코프 추가(G1 포트/서비스 트래픽 믹스); service/namespace/subnet/az/vpc/category/monitor와 함께 제공되며 잘 알려진 포트 라벨은 `app/src/lib/analytics/port-mix.ts`에서 나옴
+- `app/src/components/PageIntro.tsx` — 17개 페이지 각각의 `<h1>` 아래에 연결되는 페이지별 개요/기능 소개 박스; 카피는 i18n `pageintro.<page>.{what,features}`(ko/en 양쪽), 행 라벨은 `pageintro.overview`/`pageintro.features`
 
 ### 5. 상호 참조
 <!-- TODO -->

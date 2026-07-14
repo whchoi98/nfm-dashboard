@@ -21,6 +21,7 @@ Presentational component layer built on Tailwind CSS v4 with SnowUI design token
 | Anomaly detail panel | `app/src/components/analytics/AnomalyDetailPanel.tsx` | Right-hand slide-over on `/anomalies` opened by selecting a row; basic detail + topology/network deep-link buttons; `role=dialog`/`aria-modal`, closes on Escape/backdrop |
 | DNS resolver-compare panel | `app/src/app/insights/tabs/DnsTab.tsx` (`ResolverCompare`) | CoreDNS vs Route53 Resolver side-by-side latency (p50/p95) + fail-rate; resolver latency renders "no data" (not 0 ms) when `latencySampleCount === 0`, since Resolver query logs carry no per-query latency; awaiting-data state when `bySource` is absent |
 | Alerts composite-conditions section | `app/src/app/alerts/page.tsx` (`CompositeConditions`) | Dashboard signal (not a CloudWatch alarm) listing service entities breaching ≥2 signals at once (high retransmission rate + a large window-over-window volume drop); dual-encoded severity chips |
+| Page intro box | `app/src/components/PageIntro.tsx` | Per-page 개요/기능 (overview/features) description box under each of the 17 page titles; `{ page }` → i18n `pageintro.<page>.what`/`.features` + `pageintro.overview`/`pageintro.features` labels; tinted token box, `data-testid="page-intro"` |
 | Design tokens | `app/src/lib/chart-tokens.ts`, `app/tailwind.config.ts` | SnowUI palette — the two files must stay in sync |
 
 ### 3. Key Decisions
@@ -56,6 +57,7 @@ Tailwind CSS v4 + SnowUI 디자인 토큰 기반 프레젠테이션 컴포넌트
 | 이상 탐지 상세 패널 | `app/src/components/analytics/AnomalyDetailPanel.tsx` | `/anomalies`에서 행 선택 시 열리는 우측 슬라이드 오버; 기본 상세 정보 + 토폴로지/네트워크 딥링크 버튼; `role=dialog`/`aria-modal`, Escape/배경 클릭으로 닫힘 |
 | DNS resolver 비교 패널 | `app/src/app/insights/tabs/DnsTab.tsx` (`ResolverCompare`) | CoreDNS vs Route53 Resolver 지연(p50/p95) + 실패율 나란히 비교; Resolver 쿼리 로그에는 쿼리별 지연이 없으므로 `latencySampleCount === 0`이면 지연을 0 ms가 아닌 "데이터 없음"으로 표기; `bySource` 부재 시 데이터 대기 상태 |
 | Alerts 복합 조건 섹션 | `app/src/app/alerts/page.tsx` (`CompositeConditions`) | CloudWatch 알람이 아닌 대시보드 신호로, 동시에 2개 이상 신호(높은 재전송률 + 윈도우 대비 큰 트래픽 급감)를 위반한 서비스 엔티티를 나열; 심각도 칩 이중 인코딩 |
+| 페이지 소개 박스 | `app/src/components/PageIntro.tsx` | 17개 페이지 각각의 제목 아래 개요/기능 설명 박스; `{ page }` → i18n `pageintro.<page>.what`/`.features` + `pageintro.overview`/`pageintro.features` 라벨; tinted 토큰 박스, `data-testid="page-intro"` |
 | 디자인 토큰 | `app/src/lib/chart-tokens.ts`, `app/tailwind.config.ts` | SnowUI 팔레트 — 두 파일은 항상 동기화 유지 |
 
 ### 3. 주요 결정
