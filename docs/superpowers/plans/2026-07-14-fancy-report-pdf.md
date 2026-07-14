@@ -579,7 +579,8 @@ Append to `app/src/app/globals.css` a `@media print` block that isolates the rep
 @media print {
   /* Hide app chrome so only the report prints. */
   [data-testid="sidebar"],
-  header.nav, nav, .topbar,
+  [data-testid="topbar"],
+  header.nav, nav,
   [data-testid="reports-page"] > div:first-child /* the action-button header row */ {
     display: none !important;
   }
