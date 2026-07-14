@@ -61,7 +61,7 @@ export default function ReportDocument({
         <Tile label={t('report.kpi.retransmissions')} value={fmt(kpis.retransmissions, formatCount)} />
         <Tile label={t('report.kpi.timeouts')} value={fmt(kpis.timeouts, formatCount)} />
         <Tile label={t('report.kpi.rtt')} value={`${fmt(kpis.rtt, formatMicros)} · p95 ${fmt(kpis.rttP95, formatMicros)}`} />
-        <Tile label={t('report.kpi.nhi')} value={kpis.nhi == null ? DASH : formatCount(kpis.nhi)} />
+        <Tile label={t('report.kpi.nhi')} value={fmt(kpis.nhi, formatCount)} />
       </section>
 
       {/* Cost detail */}
@@ -82,7 +82,7 @@ export default function ReportDocument({
                 data-testid={`report-cost-row-${c.category}`}
                 className={`border-t border-black/5 dark:border-white/10 ${c.category === 'INTER_AZ' ? 'font-semibold' : ''}`}
               >
-                <td className="py-1">{c.category}</td>
+                <td className="py-1">{t(`category.${c.category}`)}</td>
                 <td className="py-1 text-right tabular-nums">{formatBytes(c.bytes)}</td>
                 <td className="py-1 text-right tabular-nums">{formatUsd(c.usd)}</td>
               </tr>
@@ -137,7 +137,7 @@ export default function ReportDocument({
                   className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase text-ink"
                   style={{ backgroundColor: a.severity === 'critical' ? STATUS.danger : STATUS.warn }}
                 >
-                  {a.severity}
+                  {t(`anomalies.severity.${a.severity}`)}
                 </span>
                 <span className="font-medium">{a.label}</span>
                 <span className="text-ink/60 dark:text-white/60">
