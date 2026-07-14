@@ -5,7 +5,8 @@
 import { getFlowsWindowPair } from '@/lib/ddb';
 import { getNfmMetrics, type NfmSeries } from '@/lib/cw-metrics';
 import { buildOverviewKpis } from '@/lib/overview-metrics';
-import { costLens } from '@/lib/analytics/cost';
+import { AZ_TRANSFER_USD_PER_GB, BILLED_CATEGORIES, costLens } from '@/lib/analytics/cost';
+import { MONTH_SECONDS } from '@/lib/analytics/cost-explorer';
 import {
   DEFAULT_RETRANS_RATE,
   DEFAULT_TIMEOUT_RATE,
@@ -32,6 +33,12 @@ export async function GET() {
       timeoutThreshold: DEFAULT_TIMEOUT_RATE,
       sigma: DEFAULT_SIGMA,
     });
+    const windowSeconds = 12 * 300; // getFlowsWindowPair(12) window
+    const billedCategories = [...BILLED_CATEGORIES];
+    const byCategory = billedCategories
+      .map((category) => ({ category, ...cost.byCategory[category] }))
+      .filter((c) => c.usd > 0 || c.bytes > 0)
+      .sort((a, b) => b.usd - a.usd || b.bytes - a.bytes);
     const data: ReportData = {
       kpis: {
         dataTransferred: kpis.dataTransferred.value,
@@ -49,7 +56,14 @@ export async function GET() {
       anomalies: anomalies
         .slice(0, MAX_ANOMALIES)
         .map(({ label, kind, severity, detail }) => ({ label, kind, severity, detail })),
-      cost: { totalUsd: cost.totalUsd },
+      cost: {
+        totalUsd: cost.totalUsd,
+        monthlyRunRate: cost.totalUsd * (MONTH_SECONDS / windowSeconds),
+        windowSeconds,
+        ratePerGbPerDirection: AZ_TRANSFER_USD_PER_GB,
+        billedCategories,
+        byCategory,
+      },
     };
     return Response.json(data);
   } catch (e) {
