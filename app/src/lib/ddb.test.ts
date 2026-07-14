@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getFlowsWindowPair,
-  flowsCacheSize, ddbSocketAgent, getDns, getCollectionHistory, mapPool } from './ddb';
+  flowsCacheSize, ddbSocketAgent, getDns, getCollectionHistory, mapPool,
+  cachedLens, lensCacheKey } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -109,8 +110,10 @@ describe('getFlowsWindow in-flight cache', () => {
     else process.env.MONITORS = prevMonitors;
   });
 
-  // The cache is module-level state: each test pins a distinct fake system time far
-  // (>> TTL) beyond any earlier test's so entries from previous tests are always expired.
+  // The cache is module-level state: each test pins a fake system time in a
+  // LATER 5-min bucket than every earlier test's (monotonic file order), so the
+  // version sweep drops prior tests' entries — and the 15s cycle-probe memo
+  // (keyed on Date.now deltas) can never leak backwards.
   const flowItem = (pk: string) =>
     ({ edgeHash: `e-${pk}`, bucket: pk.split('#')[1], monitor: 'nfm-eks-demo' });
 
@@ -130,7 +133,7 @@ describe('getFlowsWindow in-flight cache', () => {
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
   });
 
-  it('re-queries after the TTL has elapsed', async () => {
+  it('stays cached across time within one cycle+bucket, re-queries when the boundary rolls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-08T14:00:00.000Z'));
     ddbMock.on(QueryCommand).resolves({ Items: [] });
@@ -138,7 +141,14 @@ describe('getFlowsWindow in-flight cache', () => {
     await getFlowsWindow(12);
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
 
-    vi.setSystemTime(new Date('2026-07-08T14:00:10.001Z')); // TTL (10s) just passed
+    // Collector data only changes per cycle, so mere time passage (well past
+    // the old 10s TTL) within the same bucket+cycle must NOT refetch.
+    vi.setSystemTime(new Date('2026-07-08T14:00:20.000Z'));
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    // The 5-min grid rolled — the window's bucket list itself shifted.
+    vi.setSystemTime(new Date('2026-07-08T14:05:00.001Z'));
     await getFlowsWindow(12);
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24);
   });
@@ -285,7 +295,7 @@ describe('getFlowsWindowPair cache', () => {
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
   });
 
-  it('re-queries after the TTL has elapsed', async () => {
+  it('stays cached within one cycle+bucket, re-queries when the boundary rolls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-08T16:00:00.000Z'));
     ddbMock.on(QueryCommand).resolves({ Items: [] });
@@ -293,7 +303,11 @@ describe('getFlowsWindowPair cache', () => {
     await getFlowsWindowPair(6);
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
 
-    vi.setSystemTime(new Date('2026-07-08T16:00:10.001Z')); // TTL (10s) just passed
+    vi.setSystemTime(new Date('2026-07-08T16:00:20.000Z')); // same bucket+cycle → cached
+    await getFlowsWindowPair(6);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    vi.setSystemTime(new Date('2026-07-08T16:05:00.001Z')); // grid rolled
     await getFlowsWindowPair(6);
     expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24);
   });
@@ -318,9 +332,9 @@ describe('getFlowsWindowPair cache', () => {
     ddbMock.on(QueryCommand).callsFake(async () => { await gate; return { Items: [] }; });
 
     const first = getFlowsWindowPair(6);
-    // TTL elapses while the fetch is still in flight (a 7d window under DDB
-    // throttling routinely runs past 10s): a fresh call must join the pending
-    // fetch, not sweep it and launch a duplicate full fan-out.
+    // Time passes while the fetch is still in flight (a 7d window under DDB
+    // throttling routinely runs 10s+): within the same cycle+bucket a fresh
+    // call must join the pending fetch, never launch a duplicate fan-out.
     vi.setSystemTime(new Date('2026-07-08T17:30:10.001Z'));
     const second = getFlowsWindowPair(6);
     release();
@@ -359,7 +373,7 @@ describe('flows cache eviction', () => {
     else process.env.MONITORS = prevMonitors;
   });
 
-  it('drops expired entries on the next cache access so stale windows are not retained', async () => {
+  it('drops stale-version entries on the next cache access so old windows are not retained', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-08T19:30:00.000Z'));
     ddbMock.on(QueryCommand).resolves({ Items: [] });
@@ -368,9 +382,209 @@ describe('flows cache eviction', () => {
     await getFlowsWindowPair(6);
     expect(flowsCacheSize()).toBe(2);
 
-    vi.setSystemTime(new Date('2026-07-08T19:30:10.001Z')); // both entries now expired
+    vi.setSystemTime(new Date('2026-07-08T19:35:00.001Z')); // boundary rolled → both stale
     await getFlowsWindow(3);
     expect(flowsCacheSize()).toBe(1); // only the fresh n=3 entry survives
+  });
+});
+
+describe('flows cache versioning (collector cycle)', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  // The cycle probe (STATUS#collect latest) is memoized ~15s, so tests advance
+  // 20s between phases to force a re-probe while staying inside one 5-min bucket.
+  it('re-queries when the collector writes a new cycle', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T20:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    vi.setSystemTime(new Date('2026-07-08T20:00:20.000Z')); // same bucket; probe memo expired
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'B', stats: {} } });
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24); // new data → refetch
+  });
+
+  it('falls back to boundary-only versioning when the status probe fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T20:30:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    ddbMock.on(GetCommand).rejects(new Error('status unavailable'));
+
+    await getFlowsWindow(12); // probe failure must not fail the request
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    vi.setSystemTime(new Date('2026-07-08T20:30:20.000Z')); // still same bucket
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // still cached
+  });
+
+  it('keeps deduping onto an in-flight fetch across a version roll', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T22:04:50.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    ddbMock.on(QueryCommand).callsFake(async () => { await gate; return { Items: [] }; });
+
+    const first = getFlowsWindowPair(6);
+    await vi.advanceTimersByTimeAsync(0); // drain microtasks so the entry lands pre-roll
+
+    // The 5-min grid rolls while the fetch is still in flight. A pending fetch
+    // must keep absorbing callers (its data is at most one cycle stale) —
+    // sweeping it re-launches the same full fan-out concurrently, the exact
+    // pileup the 2026-07-14 OOM hotfix removed.
+    vi.setSystemTime(new Date('2026-07-08T22:05:00.001Z'));
+    const second = getFlowsWindowPair(6);
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // ONE fan-out
+    expect(b).toEqual(a);
+  });
+
+  it('keeps the last known cycle when the probe starts failing (no flush flip-flop)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T22:20:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'STICKY', stats: {} } });
+
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    // A transient probe blip (DDB throttling — likeliest exactly under load)
+    // must not flip the version and flush every cached window.
+    vi.setSystemTime(new Date('2026-07-08T22:20:20.000Z')); // memo expired, same bucket
+    ddbMock.on(GetCommand).rejects(new Error('throttled'));
+    await getFlowsWindow(12);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // still cached
+  });
+
+  it('memoizes the cycle probe — at most one STATUS GetCommand per memo window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T22:40:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+
+    await getFlowsWindow(12);
+    await getFlowsWindow(6);
+    await cachedLens('probe-memo-check', async () => 1);
+
+    expect(ddbMock.commandCalls(GetCommand)).toHaveLength(1);
+  });
+
+  it('clears the idle timer when an entry is dropped, so nothing pins evicted results', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T23:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+
+    await getFlowsWindow(12); // settles → arms its idle timer
+    expect(vi.getTimerCount()).toBe(1);
+
+    vi.setSystemTime(new Date('2026-07-08T23:05:00.001Z')); // roll → old entry swept
+    await getFlowsWindow(12);
+    // The swept entry's timer must be cleared — a live timer closure would keep
+    // the old window's flow arrays reachable for the full 330s max-age.
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('cap eviction never drops a pending fetch', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T23:20:00.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    ddbMock.on(QueryCommand).callsFake(async () => { await gate; return { Items: [] }; });
+
+    const pending = getFlowsWindowPair(6); // in flight, held open by the gate
+    await vi.advanceTimersByTimeAsync(0); // entry lands as the OLDEST key in the map
+
+    // Param churn floods the cache past the 200-entry cap while the fetch is
+    // still in flight — the oldest-first eviction must skip the pending entry.
+    for (let i = 0; i < 230; i++) await cachedLens(`churn:${i}`, async () => i);
+
+    const joined = getFlowsWindowPair(6); // must join the pending fetch, not re-launch
+    release();
+    await Promise.all([pending, joined]);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // ONE fan-out
+  });
+});
+
+describe('cachedLens (route aggregate cache)', () => {
+  it('computes once per key per version and returns the cached result', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T00:30:00.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+    const compute = vi.fn(async () => ({ total: 42 }));
+
+    const a = await cachedLens('cost?buckets=12', compute);
+    const b = await cachedLens('cost?buckets=12', compute);
+
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(b).toBe(a);
+  });
+
+  it('keys results by cache key so different params never collide', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T00:40:00.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+    const c1 = vi.fn(async () => 1);
+    const c2 = vi.fn(async () => 2);
+
+    expect(await cachedLens('net?buckets=12', c1)).toBe(1);
+    expect(await cachedLens('net?buckets=72', c2)).toBe(2);
+    expect(c1).toHaveBeenCalledTimes(1);
+    expect(c2).toHaveBeenCalledTimes(1);
+  });
+
+  it('recomputes when the collector cycle changes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T00:50:00.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+    const compute = vi.fn(async () => 'v');
+
+    await cachedLens('movers?buckets=6', compute);
+    vi.setSystemTime(new Date('2026-07-09T00:50:20.000Z')); // probe memo expired
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'B', stats: {} } });
+    await cachedLens('movers?buckets=6', compute);
+
+    expect(compute).toHaveBeenCalledTimes(2);
+  });
+
+  it('caps the cache entry count', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T01:00:00.000Z'));
+    ddbMock.on(GetCommand).resolves({ Item: { cycleTs: 'A', stats: {} } });
+
+    for (let i = 0; i < 230; i++) await cachedLens(`cap:${i}`, async () => i);
+    expect(flowsCacheSize()).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('lensCacheKey', () => {
+  it('is stable across query-param order and distinct per route', () => {
+    expect(lensCacheKey('cost', 'https://x/api/analytics/cost?b=2&a=1'))
+      .toBe(lensCacheKey('cost', 'https://x/api/analytics/cost?a=1&b=2'));
+    expect(lensCacheKey('cost', 'https://x/api?a=1'))
+      .not.toBe(lensCacheKey('latency', 'https://x/api?a=1'));
+    expect(lensCacheKey('anomalies', 'https://x/api?buckets=12&sigma=3'))
+      .toContain('sigma=3');
+  });
+
+  it('re-encodes params so delimiter characters inside values cannot forge a colliding key', () => {
+    // buckets=12%26sigma%3D9 is ONE param whose value contains '&sigma=9' after
+    // decoding — it must never share a cache key with the two-param request.
+    expect(lensCacheKey('anomalies', 'https://x/api?buckets=12%26sigma%3D9'))
+      .not.toBe(lensCacheKey('anomalies', 'https://x/api?buckets=12&sigma=9'));
   });
 });
 

@@ -125,43 +125,120 @@ async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
   return results.flat();
 }
 
-// In-flight de-dup + short TTL keyed by fetch shape ('w:12' window, 'p:6' pair):
-// the analytics routes fire concurrently with identical windows (and /alerts,
-// /anomalies, /reports poll the pair fetch), so they share one underlying query
-// set. The TTL runs from SETTLE, not fetch start — a slow multi-day fetch must
-// keep absorbing callers for as long as it runs, never be swept mid-flight and
-// re-launched. Expired entries are dropped on every access (sweep) AND by an
-// unref'd timer, so the last big window's flow arrays don't stay pinned in the
-// heap when traffic stops. Rejected fetches are evicted immediately — a failure
-// is never cached.
-const FLOWS_WINDOW_TTL_MS = 10_000;
-type FlowsCacheEntry = { p: Promise<unknown>; expiresAt: number | null }; // null = in flight
+// ── Flows cache versioning ────────────────────────────────────────────────
+// Collector data only changes when a cycle is written (~5 min), so cached
+// windows / lens outputs stay valid while BOTH hold:
+//  (1) the collector hasn't written a new cycle — probed via STATUS#collect
+//      latest.cycleTs, memoized CYCLE_MEMO_MS so the probe adds ~zero DDB
+//      load and fresh data appears within that memo window; and
+//  (2) the 5-min grid hasn't rolled — recentBuckets() shifts at each boundary,
+//      so a cached window's bucket list goes stale there even if the collector
+//      is down (frozen cycleTs).
+// If the probe fails it degrades to boundary-only versioning ('nocycle')
+// instead of failing the request.
+const CYCLE_MEMO_MS = 15_000;
+let cycleMemo: { p: Promise<string>; at: number } | undefined;
+let lastCycleId = 'nocycle';
+function latestCycleId(): Promise<string> {
+  if (cycleMemo && Date.now() - cycleMemo.at < CYCLE_MEMO_MS) return cycleMemo.p;
+  cycleMemo = {
+    // Probe failures are sticky on the last known cycle: a transient blip
+    // (likeliest under DDB load) must not flip the version back and forth and
+    // flush every cached window twice.
+    p: getCollectionStatus().then(
+      (s) => (lastCycleId = s?.cycleTs ?? lastCycleId),
+      () => lastCycleId,
+    ),
+    at: Date.now(),
+  };
+  return cycleMemo.p;
+}
+
+async function flowsVersion(): Promise<string> {
+  return `${await latestCycleId()}|${Math.floor(Date.now() / 300_000)}`;
+}
+
+// In-flight de-dup + versioned cache keyed by fetch shape ('w:12' window,
+// 'p:6' pair, 'r:…' route lens output): the analytics routes fire concurrently
+// with identical windows (and /alerts, /anomalies, /reports poll the pair
+// fetch), so they share one underlying query set / computation. PENDING
+// entries are never dropped by sweep or cap — a slow multi-day fetch keeps
+// absorbing callers even across a version roll (its data is at most one cycle
+// stale); dropping it would re-launch the same full fan-out concurrently, the
+// exact pileup behind the 2026-07-14 OOM. Settled stale entries are dropped on
+// every access (sweep) AND by an unref'd max-age timer (idle heap release);
+// every drop path clears the timer so no closure pins an evicted window's
+// arrays. Rejected fetches are evicted immediately — a failure is never cached.
+type FlowsCacheEntry = {
+  p: Promise<unknown>;
+  version: string;
+  settled: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+};
 const flowsWindowCache = new Map<string, FlowsCacheEntry>();
+const FLOWS_CACHE_MAX_ENTRIES = 200; // route keys include free-form params — bound them
+const FLOWS_CACHE_MAX_AGE_MS = 330_000; // > any version lifetime (5-min grid + probe memo)
 
 /** Live entry count, for tests/diagnostics. */
 export function flowsCacheSize(): number {
   return flowsWindowCache.size;
 }
 
-function cachedFetch<T>(key: string, fetch: () => Promise<T>): Promise<T> {
-  const now = Date.now();
+function dropEntry(key: string, entry: FlowsCacheEntry): void {
+  if (entry.timer !== undefined) clearTimeout(entry.timer);
+  if (flowsWindowCache.get(key) === entry) flowsWindowCache.delete(key);
+}
+
+async function cachedFetch<T>(key: string, fetch: () => Promise<T>): Promise<T> {
+  const version = await flowsVersion();
   for (const [k, v] of flowsWindowCache) {
-    if (v.expiresAt !== null && now >= v.expiresAt) flowsWindowCache.delete(k);
+    if (v.settled && v.version !== version) dropEntry(k, v);
   }
-  const hit = flowsWindowCache.get(key); // survivors are in flight or fresh
+  // Survivors are current-version, or pending (joined regardless of version).
+  const hit = flowsWindowCache.get(key);
   if (hit) return hit.p as Promise<T>;
-  const entry: FlowsCacheEntry = { p: fetch(), expiresAt: null };
+  const entry: FlowsCacheEntry = { p: fetch(), version, settled: false };
   flowsWindowCache.set(key, entry);
+  for (const k of flowsWindowCache.keys()) { // insertion order → oldest first
+    if (flowsWindowCache.size <= FLOWS_CACHE_MAX_ENTRIES) break;
+    const v = flowsWindowCache.get(k);
+    if (k === key || !v || !v.settled) continue; // never drop the new or a pending entry
+    dropEntry(k, v);
+  }
   entry.p.then(() => {
-    entry.expiresAt = Date.now() + FLOWS_WINDOW_TTL_MS;
-    const timer = setTimeout(() => {
-      if (flowsWindowCache.get(key) === entry) flowsWindowCache.delete(key);
-    }, FLOWS_WINDOW_TTL_MS);
+    entry.settled = true;
+    if (flowsWindowCache.get(key) !== entry) return; // evicted while in flight — no timer
+    const timer = setTimeout(() => dropEntry(key, entry), FLOWS_CACHE_MAX_AGE_MS);
     timer.unref?.();
+    entry.timer = timer;
   }, () => {
-    if (flowsWindowCache.get(key) === entry) flowsWindowCache.delete(key);
+    entry.settled = true;
+    dropEntry(key, entry);
   });
   return entry.p as Promise<T>;
+}
+
+/**
+ * Versioned cache for a computed route/lens result — same validity as the
+ * flow windows it derives from (collector cycle + 5-min grid). ONLY for
+ * results that are pure functions of flow data + request params (no CloudWatch
+ * alarms/metrics, nothing user-specific — responses are shared across users).
+ * `key` must encode every request param the result depends on (lensCacheKey).
+ */
+export async function cachedLens<T>(key: string, compute: () => Promise<T>): Promise<T> {
+  return cachedFetch(`r:${key}`, compute);
+}
+
+/**
+ * Stable cache key for a lens route: route name + sorted query params,
+ * RE-ENCODED via URLSearchParams — joining decoded values by hand would let a
+ * value containing '&'/'=' forge a key that collides with a different request
+ * (the cache is shared across users).
+ */
+export function lensCacheKey(route: string, url: string): string {
+  const params = [...new URL(url).searchParams.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `${route}?${new URLSearchParams(params).toString()}`;
 }
 
 /** All flows across the n most-recent 5-min buckets (all monitors), concatenated. */

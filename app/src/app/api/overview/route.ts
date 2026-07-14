@@ -18,7 +18,7 @@ export async function GET() {
       getCollectionStatus(),
       getCoverage(),
       getNfmMetrics(60).catch(() => ({} as Record<string, NfmSeries>)),
-      getFlowsWindow(12), // 10s-cached; feeds the lenses below
+      getFlowsWindow(12), // version-cached (collector cycle + 5-min grid); feeds the lenses below
       getDns().catch(() => null), // DNS is optional — degrade summary (dns → null) instead of 500
     ]);
     const { kpis, rttP50, rttP95, nhi } = buildOverviewKpis(series);
