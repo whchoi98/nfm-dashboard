@@ -3,11 +3,12 @@
 // windowSeconds and the bucket keys for sparklines via recentBuckets()).
 import type { FlowEdge } from '../types';
 import { entityKey, ratePerGb } from './aggregate';
+import { portLabel } from './port-mix';
 
-export type Scope = 'service' | 'namespace' | 'subnet' | 'az' | 'vpc' | 'category' | 'monitor';
+export type Scope = 'service' | 'namespace' | 'subnet' | 'az' | 'vpc' | 'category' | 'monitor' | 'port';
 export type NetMetric = 'volume' | 'throughput' | 'retransmits' | 'rtt';
 
-export const SCOPES: Scope[] = ['service', 'namespace', 'subnet', 'az', 'vpc', 'category', 'monitor'];
+export const SCOPES: Scope[] = ['service', 'namespace', 'subnet', 'az', 'vpc', 'category', 'monitor', 'port'];
 export const NET_METRICS: NetMetric[] = ['volume', 'throughput', 'retransmits', 'rtt'];
 
 /** Default danger threshold in retransmissions per GB (matches reliability DEFAULT_RETRANS_RATE). */
@@ -58,6 +59,8 @@ export function scopeKey(flow: FlowEdge, endpoint: 'a' | 'b', scope: Scope): str
       return flow.category;
     case 'monitor':
       return flow.monitor;
+    case 'port':
+      return portLabel(flow.targetPort);
   }
 }
 
