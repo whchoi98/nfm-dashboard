@@ -476,6 +476,8 @@
   "alerts.minAgo": "{min} min ago",
   "alerts.hourAgo": "{h} hr ago",
   "alerts.dayAgo": "{d} d ago",
+  "alerts.composite.title": "Composite conditions",
+  "alerts.composite.empty": "No entities are breaching multiple conditions",
   "anomalies.title": "Anomalies",
   "anomalies.hint": "Thresholds: retrans >{retrans}/GB · timeout >{timeout}/GB · spike >{sigma}× prior window",
   "anomalies.list": "Detected anomalies",

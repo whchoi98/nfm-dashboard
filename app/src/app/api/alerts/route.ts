@@ -3,14 +3,17 @@ import { getNfmMetrics } from '@/lib/cw-metrics';
 import { getCollectionHistory, getFlowsWindow, getFlowsWindowPair } from '@/lib/ddb';
 import { reliabilityLens } from '@/lib/analytics/reliability';
 import { moversLens } from '@/lib/analytics/movers';
+import { compositeConditions } from '@/lib/analytics/composite-conditions';
 import { deriveEvents } from '@/lib/alerts';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/alerts → { alarms, events }: live CloudWatch alarm states plus the
- * derived event feed (NHI degradation, reliability breaches, collection gaps,
- * retrans/timeout spikes). CloudWatch failures degrade to empty sections —
+ * GET /api/alerts → { alarms, events, composite }: live CloudWatch alarm
+ * states plus the derived event feed (NHI degradation, reliability breaches,
+ * collection gaps, retrans/timeout spikes) plus the composite-condition view
+ * (G5 — entities breaching >=2 signals simultaneously, a dashboard signal,
+ * NOT a CloudWatch alarm). CloudWatch failures degrade to empty sections —
  * getAlarms() returns [] internally and metrics fall back to {} — only the
  * DDB-backed signals failing produces a 500.
  */
@@ -44,8 +47,9 @@ export async function GET() {
       })),
       movers: [...movers.retransmissions, ...movers.timeouts],
     });
+    const composite = compositeConditions(pair.current, pair.prior);
 
-    return Response.json({ alarms, events });
+    return Response.json({ alarms, events, composite });
   } catch (e) {
     console.error('[api/alerts]', e);
     return Response.json({ error: 'internal error' }, { status: 500 });

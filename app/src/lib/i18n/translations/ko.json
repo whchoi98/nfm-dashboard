@@ -476,6 +476,8 @@
   "alerts.minAgo": "{min}분 전",
   "alerts.hourAgo": "{h}시간 전",
   "alerts.dayAgo": "{d}일 전",
+  "alerts.composite.title": "복합 조건",
+  "alerts.composite.empty": "복합 조건을 충족하는 엔터티가 없습니다",
   "anomalies.title": "이상 징후",
   "anomalies.hint": "임계값: 재전송 >{retrans}/GB · 타임아웃 >{timeout}/GB · 급증 >{sigma}× 이전 윈도우",
   "anomalies.list": "감지된 이상 징후",

@@ -17,6 +17,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { AlarmState } from '@/lib/cw-alarms';
 import type { AlertEvent, AlertKind, AlertSeverity } from '@/lib/alerts';
+import type { CompositeRow } from '@/lib/analytics/composite-conditions';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import Widget from '@/components/analytics/Widget';
 import { LensState } from '@/app/insights/tabs/shared';
@@ -24,6 +25,7 @@ import { LensState } from '@/app/insights/tabs/shared';
 interface AlertsResponse {
   alarms: AlarmState[];
   events: AlertEvent[];
+  composite: CompositeRow[];
 }
 
 // Severity dot colors from chart tokens — ALWAYS dual-encoded with the
@@ -115,11 +117,70 @@ function EventRow({ event }: { event: AlertEvent }) {
   );
 }
 
+/**
+ * G5 — composite-condition view: entities breaching >=2 signals at once
+ * (high retransmission rate AND a large window-over-window volume drop).
+ * A dashboard signal, NOT a CloudWatch alarm. Severity is dual-encoded — the
+ * SEVERITY_COLOR dot is always paired with the always-visible severity text,
+ * never color alone (chart-tokens.ts STATUS contract). Condition strings are
+ * a data payload (rates/percentages), rendered verbatim like AlertEvent.detail.
+ */
+export function CompositeConditions({ rows }: { rows: CompositeRow[] }) {
+  const { t } = useLanguage();
+  if (rows.length === 0) {
+    return (
+      <p
+        data-testid="alerts-composite-empty"
+        className="ui-empty flex h-32 items-center justify-center text-sm text-ink/45 dark:text-white/45"
+      >
+        {t('alerts.composite.empty')}
+      </p>
+    );
+  }
+  return (
+    <ul data-testid="alerts-composite-list" className="flex flex-col gap-2">
+      {rows.map((r) => (
+        <li
+          key={r.label}
+          className="flex items-start gap-3 rounded-lg bg-black/5 px-3 py-2 dark:bg-white/5"
+        >
+          <span
+            className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: SEVERITY_COLOR[r.severity] }}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="truncate text-sm font-medium" title={r.label}>
+                {r.label}
+              </p>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink/50 dark:text-white/50">
+                {t(`alerts.severity.${r.severity}`)}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {r.conditions.map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-ink/70 dark:bg-white/10 dark:text-white/70"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function AlertsPage() {
   const { t } = useLanguage();
   const { data, error, loading } = usePolling<AlertsResponse>('/api/alerts');
   const alarms = data?.alarms ?? [];
   const events = data?.events ?? [];
+  const composite = data?.composite ?? [];
 
   return (
     <div data-testid="alerts-page" className="flex flex-col gap-4">
@@ -171,6 +232,12 @@ export default function AlertsPage() {
           </LensState>
         </Widget>
       </div>
+
+      <Widget title={t('alerts.composite.title')} testId="alerts-composite">
+        <LensState loading={loading && !data} error={error}>
+          <CompositeConditions rows={composite} />
+        </LensState>
+      </Widget>
     </div>
   );
 }
