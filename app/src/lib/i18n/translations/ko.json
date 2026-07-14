@@ -90,6 +90,7 @@
   "scope.vpc": "VPC",
   "scope.category": "카테고리",
   "scope.monitor": "모니터",
+  "scope.port": "포트",
   "netmetric.volume": "전송량",
   "netmetric.throughput": "처리량",
   "netmetric.retransmits": "재전송",

@@ -90,6 +90,7 @@
   "scope.vpc": "VPC",
   "scope.category": "Category",
   "scope.monitor": "Monitor",
+  "scope.port": "Port",
   "netmetric.volume": "Volume",
   "netmetric.throughput": "Throughput",
   "netmetric.retransmits": "Retransmits",
