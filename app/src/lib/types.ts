@@ -40,10 +40,17 @@ export interface CycleStats { started: number; succeeded: number; failed: number
 export interface CollectionStatus { cycleTs: string; stats: CycleStats; }
 
 // DNS aggregate written by the collector under DNS#latest/all (collector/src/dns.ts)
+// latencySampleCount = number of duration samples that fed latencyP50/P95: Route53 Resolver query
+// logs carry no per-query latency, so bySource.resolver.latencySampleCount is always 0 in production —
+// this field lets the UI distinguish "no latency data" from a genuine 0ms measurement.
+export interface DnsSourceStat { latencyP50: number; latencyP95: number; latencySampleCount: number; failRate: number; count: number }
 export interface DnsAggregate { enabled: boolean;
   topDomains: { name: string; count: number; internal: boolean }[];
   failures: { key: string; label: string; nxdomain: number; servfail: number; total: number; failRate: number }[];
   latency: { p50: number; p90: number; p95: number; max: number; count: number };
   queryTypes: { type: string; count: number }[];
   resolution: { nodes: { name: string }[]; links: { source: number; target: number; value: number }[] };
-  nameFlow: { ip: string; name: string }[]; }
+  nameFlow: { ip: string; name: string }[];
+  // Optional: older DNS#latest items (written before this field existed) won't have it —
+  // UI must handle the awaiting-data / undefined case.
+  bySource?: { coredns: DnsSourceStat; resolver: DnsSourceStat }; }

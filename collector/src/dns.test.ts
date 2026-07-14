@@ -43,3 +43,29 @@ it('nameFlow only counts resolver records', () => {
   const nf = aggregateDns(recs, flows).nameFlow;
   expect(nf).toEqual([{ ip:'10.0.0.8', name:'ddb.amazonaws.com' }]);
 });
+it('splits latency + failRate by DNS source (coredns vs resolver)', () => {
+  const recs = [
+    { source: 'resolver', name: 'a.com', qtype: 'A', rcode: 'NOERROR', durationMs: 10, answerIps: [] },
+    { source: 'resolver', name: 'b.com', qtype: 'A', rcode: 'NXDOMAIN', durationMs: 30, answerIps: [] },
+    { source: 'coredns', name: 'svc.local', qtype: 'A', rcode: 'NOERROR', durationMs: 2, answerIps: [] },
+  ] as import('./dns-parse.js').DnsRecord[];
+  const agg = aggregateDns(recs);
+  expect(agg.bySource.resolver.count).toBe(2);
+  expect(agg.bySource.resolver.failRate).toBeCloseTo(0.5, 5); // 1 NXDOMAIN of 2
+  expect(agg.bySource.coredns.count).toBe(1);
+  expect(agg.bySource.coredns.failRate).toBe(0);
+  expect(agg.bySource.resolver.latencyP95).toBeGreaterThanOrEqual(agg.bySource.resolver.latencyP50);
+});
+it('bySource.resolver has zero latency samples in production (Route53 Resolver logs carry no durationMs)', () => {
+  const recs = [
+    { source: 'resolver', name: 'a.com', qtype: 'A', rcode: 'NOERROR', answerIps: [] },
+    { source: 'resolver', name: 'b.com', qtype: 'A', rcode: 'NXDOMAIN', answerIps: [] },
+    { source: 'coredns', name: 'svc.local', qtype: 'A', rcode: 'NOERROR', durationMs: 2, answerIps: [] },
+    { source: 'coredns', name: 'svc2.local', qtype: 'A', rcode: 'NOERROR', durationMs: 4, answerIps: [] },
+  ] as import('./dns-parse.js').DnsRecord[];
+  const agg = aggregateDns(recs);
+  expect(agg.bySource.resolver.latencySampleCount).toBe(0);
+  expect(agg.bySource.resolver.latencyP50).toBe(0);
+  expect(agg.bySource.resolver.latencyP95).toBe(0);
+  expect(agg.bySource.coredns.latencySampleCount).toBeGreaterThan(0);
+});
