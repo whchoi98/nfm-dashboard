@@ -17,6 +17,7 @@ import {
 import { formatBytes } from '@/lib/format';
 import { SERIES_COLORS, STATUS } from '@/lib/chart-tokens';
 import StatusBadge from '@/components/cards/StatusBadge';
+import PageIntro from '@/components/PageIntro';
 import { Line, LineChart, ResponsiveContainer } from 'recharts';
 
 /** overview's statusFor, on per-GB rates: ok < warnAt <= warn < dangerAt <= danger. */
@@ -75,6 +76,7 @@ export default function MonitorsPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('monitors.title')}</h1>
+      <PageIntro page="monitors" />
 
       {error ? (
         <p className="text-sm text-ink/60 dark:text-white/60">{t('common.error')}</p>

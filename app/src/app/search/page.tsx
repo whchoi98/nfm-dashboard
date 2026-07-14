@@ -9,6 +9,7 @@ import { Box, Boxes, Globe, Hash, Network, Server, type LucideIcon } from 'lucid
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Card, TextInput } from '@/components/ui/Controls';
 import Widget from '@/components/analytics/Widget';
+import PageIntro from '@/components/PageIntro';
 import { LensState } from '@/app/insights/tabs/shared';
 import { MIN_QUERY_LENGTH, type SearchResult, type SearchResultType } from '@/lib/search';
 
@@ -106,6 +107,7 @@ export default function SearchPage() {
   return (
     <div data-testid="search-page" className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('search.title')}</h1>
+      <PageIntro page="search" />
 
       <Card>
         <TextInput

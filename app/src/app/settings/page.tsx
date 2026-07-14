@@ -11,6 +11,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { Card, Select, TextInput } from '@/components/ui/Controls';
 import { TIME_RANGES, type TimeRange } from '@/lib/analytics/filters';
 import { DEFAULT_SETTINGS, useSettings } from '@/lib/settings';
+import PageIntro from '@/components/PageIntro';
 
 const SNS_SUBSCRIBE_CMD =
   'aws sns subscribe --topic-arn arn:aws:sns:ap-northeast-2:<account-id>:nfm-dashboard-alarms --protocol email --notification-endpoint you@example.com';
@@ -125,6 +126,8 @@ export default function SettingsPage() {
           {t('settings.reset')}
         </button>
       </div>
+
+      <PageIntro page="settings" />
 
       <p className={noteCls}>
         {t('settings.savedHint')} {t('settings.wiredNote')}

@@ -19,6 +19,7 @@ import StatDelta from '@/components/charts/StatDelta';
 import CategoryDonut from '@/components/charts/CategoryDonut';
 import TimeSeries from '@/components/charts/TimeSeries';
 import { formatUsd, LensState } from '@/app/insights/tabs/shared';
+import PageIntro from '@/components/PageIntro';
 
 /** Toplist rows from a lens group: value = USD, sub = bytes, pre-sorted by the lens. */
 function groupRows(rows: CostGroupRow[] | undefined): ToplistRow[] {
@@ -73,6 +74,8 @@ export default function CostExplorerPage() {
           options={TIME_RANGES.map((r) => ({ value: r, label: t(`filter.range.${r}`) }))}
         />
       </div>
+
+      <PageIntro page="cost" />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Widget title={t('cost.summary')} testId="widget-cost-summary">

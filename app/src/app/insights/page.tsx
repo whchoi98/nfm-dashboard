@@ -10,6 +10,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { usePolling } from '@/lib/use-polling';
 import type { TopologySnapshot } from '@/lib/types';
 import { useAnalyticsFilters } from '@/lib/hooks/useAnalyticsFilters';
+import PageIntro from '@/components/PageIntro';
 import FilterBar from '@/components/analytics/FilterBar';
 import { HoverSyncProvider } from '@/components/analytics/HoverSync';
 import CostTab from './tabs/CostTab';
@@ -94,6 +95,7 @@ function InsightsHub() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.insights')}</h1>
+      <PageIntro page="insights" />
 
       <FilterBar
         filters={filters}

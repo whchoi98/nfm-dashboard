@@ -21,6 +21,7 @@ import type { CompositeRow } from '@/lib/analytics/composite-conditions';
 import { STATUS, TOKENS } from '@/lib/chart-tokens';
 import Widget from '@/components/analytics/Widget';
 import { LensState } from '@/app/insights/tabs/shared';
+import PageIntro from '@/components/PageIntro';
 
 interface AlertsResponse {
   alarms: AlarmState[];
@@ -185,6 +186,7 @@ export default function AlertsPage() {
   return (
     <div data-testid="alerts-page" className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('alerts.title')}</h1>
+      <PageIntro page="alerts" />
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <Widget title={t('alerts.alarms')} testId="alerts-alarms">

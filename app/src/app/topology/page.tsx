@@ -20,6 +20,7 @@ import type { HealthLevel } from '@/lib/analytics/edge-health';
 import { RETRANS_RATE_DANGER, RETRANS_RATE_WARN } from '@/lib/analytics/aggregate';
 import { CATEGORY_ORDER, STATUS } from '@/lib/chart-tokens';
 import { formatMetricValue } from '@/lib/format';
+import PageIntro from '@/components/PageIntro';
 import NetworkGraph from '@/components/topology/NetworkGraph';
 import GraphLegend, { type HealthStatus } from '@/components/topology/GraphLegend';
 import TagFilterPanel from '@/components/topology/TagFilterPanel';
@@ -583,6 +584,8 @@ function TopologyPageInner() {
           ) : null}
         </div>
       </div>
+
+      <PageIntro page="topology" />
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <Card className="min-w-0">

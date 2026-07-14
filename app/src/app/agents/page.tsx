@@ -16,6 +16,7 @@ import StatDelta from '@/components/charts/StatDelta';
 import CollectionStatusCard from '@/components/cards/CollectionStatusCard';
 import { SortableHeader } from '@/components/SortableHeader';
 import { Card } from '@/components/ui/Controls';
+import PageIntro from '@/components/PageIntro';
 
 type StandaloneAgent = Coverage['standalone'][number];
 
@@ -107,6 +108,7 @@ export default function AgentsPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold">{t('nav.agents')}</h1>
+      <PageIntro page="agents" />
 
       {error ? (
         <Card>
