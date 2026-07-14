@@ -29,10 +29,13 @@ it('TaskDefinition is arm64 Fargate with prod env and no AUTH_DISABLED', () => {
   t.hasResourceProperties('AWS::ECS::TaskDefinition', {
     RequiresCompatibilities: ['FARGATE'],
     RuntimePlatform: { CpuArchitecture: 'ARM64', OperatingSystemFamily: 'LINUX' },
-    Cpu: '1024', Memory: '2048' });
+    Cpu: '1024', Memory: '4096' });
   const td = Object.values(t.findResources('AWS::ECS::TaskDefinition'))[0];
-  const env: Array<{ Name: string }> = td.Properties.ContainerDefinitions[0].Environment;
+  const env: Array<{ Name: string; Value?: string }> = td.Properties.ContainerDefinitions[0].Environment;
   const names = env.map((e) => e.Name);
+  // Node must GC against a heap ceiling below the task limit instead of being
+  // OOM-killed by the cgroup (exit 137) under analytics fan-out load.
+  expect(env.find((e) => e.Name === 'NODE_OPTIONS')?.Value).toContain('--max-old-space-size=3072');
   expect(names).toContain('NODE_ENV');
   expect(names).toContain('COGNITO_USER_POOL_ID');
   expect(names).toContain('COGNITO_CLIENT_ID');

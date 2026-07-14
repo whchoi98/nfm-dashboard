@@ -137,8 +137,11 @@ export class AppStack extends cdk.Stack {
 
     // ── ECS Fargate (arm64, private subnets, existing NAT) ────────────────
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: 'nfm-dashboard' });
+    // 4 GB headroom: the analytics DDB fan-out materializes multi-day flow
+    // windows in the Node heap; 2 GB tasks were OOM-killed (exit 137) under
+    // active browsing, dropping every ALB target (2026-07-14 incident).
     const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
-      family: 'nfm-dashboard-app', cpu: 1024, memoryLimitMiB: 2048,
+      family: 'nfm-dashboard-app', cpu: 1024, memoryLimitMiB: 4096,
       runtimePlatform: {
         cpuArchitecture: ecs.CpuArchitecture.ARM64,
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX } });
@@ -166,6 +169,9 @@ export class AppStack extends cdk.Stack {
       portMappings: [{ containerPort: 3000 }],
       environment: {
         NODE_ENV: 'production',
+        // Heap ceiling below the 4096 MiB task limit (rest is RSS overhead):
+        // V8 GCs under pressure instead of the cgroup OOM-killing the task.
+        NODE_OPTIONS: '--max-old-space-size=3072',
         ...(authDisabled ? { AUTH_DISABLED: '1' } : {}), // session gate off (ADR-005)
         AWS_REGION: region,
         APP_URL: appUrl,

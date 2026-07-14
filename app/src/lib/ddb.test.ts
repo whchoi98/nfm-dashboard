@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getDns,
-  getCollectionHistory, mapPool } from './ddb';
+import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getFlowsWindowPair,
+  flowsCacheSize, ddbSocketAgent, getDns, getCollectionHistory, mapPool } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -258,6 +258,132 @@ describe('mapPool', () => {
     const results = await mapPool([] as number[], 5, fn);
     expect(results).toEqual([]);
     expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('getFlowsWindowPair cache', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  // Same module-level-cache convention as the getFlowsWindow tests above: each
+  // test pins a distinct fake system time far (>> TTL) beyond any earlier test's.
+  it('serves concurrent and repeat calls within the TTL from one underlying query set', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T15:30:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    const [a, b] = await Promise.all([getFlowsWindowPair(6), getFlowsWindowPair(6)]);
+
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // 2n buckets x 1 monitor, ONCE
+    expect(b).toEqual(a);
+
+    await getFlowsWindowPair(6); // still within TTL → served from cache, no new queries
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+  });
+
+  it('re-queries after the TTL has elapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T16:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    await getFlowsWindowPair(6);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12);
+
+    vi.setSystemTime(new Date('2026-07-08T16:00:10.001Z')); // TTL (10s) just passed
+    await getFlowsWindowPair(6);
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(24);
+  });
+
+  it('does not cache a rejected pair fetch', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T16:30:00.000Z'));
+    ddbMock.on(QueryCommand).rejects(new Error('boom'));
+    await expect(getFlowsWindowPair(6)).rejects.toThrow('boom');
+
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    const { current, prior } = await getFlowsWindowPair(6); // immediate retry re-queries
+    expect(current).toEqual([]);
+    expect(prior).toEqual([]);
+  });
+
+  it('keeps deduping onto an in-flight fetch that outlives the TTL', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T17:30:00.000Z'));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    ddbMock.on(QueryCommand).callsFake(async () => { await gate; return { Items: [] }; });
+
+    const first = getFlowsWindowPair(6);
+    // TTL elapses while the fetch is still in flight (a 7d window under DDB
+    // throttling routinely runs past 10s): a fresh call must join the pending
+    // fetch, not sweep it and launch a duplicate full fan-out.
+    vi.setSystemTime(new Date('2026-07-08T17:30:10.001Z'));
+    const second = getFlowsWindowPair(6);
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(12); // ONE underlying query set
+    expect(b).toEqual(a);
+  });
+
+  it('shares one concurrency budget across both pair halves', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T18:30:00.000Z'));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    ddbMock.on(QueryCommand).callsFake(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve(); // yield so concurrent workers overlap
+      inFlight--;
+      return { Items: [] };
+    });
+
+    await getFlowsWindowPair(60); // 120 buckets across the two halves
+
+    // Two per-half pools would double the fan-out ceiling past the socket pool
+    // (2 x BUCKET_QUERY_CONCURRENCY x monitors) — the halves must share one.
+    expect(maxInFlight).toBeLessThanOrEqual(40);
+  });
+});
+
+describe('flows cache eviction', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  it('drops expired entries on the next cache access so stale windows are not retained', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-08T19:30:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    await getFlowsWindow(12); // sweeps every stale entry from earlier tests, then caches w:12
+    await getFlowsWindowPair(6);
+    expect(flowsCacheSize()).toBe(2);
+
+    vi.setSystemTime(new Date('2026-07-08T19:30:10.001Z')); // both entries now expired
+    await getFlowsWindow(3);
+    expect(flowsCacheSize()).toBe(1); // only the fresh n=3 entry survives
+  });
+});
+
+describe('ddb socket pool', () => {
+  it('uses a keep-alive agent sized above the query fan-out ceiling', () => {
+    expect(ddbSocketAgent.options.keepAlive).toBe(true);
+    // One window/pair fetch keeps BUCKET_QUERY_CONCURRENCY(40) buckets in flight
+    // x ~5 monitors ≈ 200 concurrent queries, and two differently-keyed fetches
+    // (e.g. w:2016 + p:2016) can overlap — the pool must cover ~400, with room
+    // for monitor growth. The SDK default 50-socket agent queued the rest
+    // (observed live as socket-capacity warnings + menu latency + queue-held
+    // memory before the OOM).
+    expect(ddbSocketAgent.maxSockets).toBeGreaterThanOrEqual(400);
   });
 });
 
