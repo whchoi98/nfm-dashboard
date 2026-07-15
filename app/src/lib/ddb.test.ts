@@ -737,4 +737,24 @@ describe('grain-aware window fetch', () => {
       .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string);
     expect(pks.filter(pk => pk?.startsWith('FLOW#'))).toHaveLength(0); // no tail
   });
+
+  it('hourly pair shares one concurrency budget across 48 closed-hour parts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T08:00:30.000Z'));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    ddbMock.on(QueryCommand).callsFake(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve(); // yield so concurrent workers overlap
+      inFlight--;
+      return { Items: [] };
+    });
+
+    await getFlowsWindowPair(288); // 2 x 24 closed hours = 48 hourly parts
+
+    // Two per-half pools (24+24) could reach 48 in flight; ONE shared pool caps at 40.
+    expect(maxInFlight).toBeLessThanOrEqual(40);
+    expect(maxInFlight).toBeGreaterThan(1); // sanity: the pool did overlap work
+  });
 });

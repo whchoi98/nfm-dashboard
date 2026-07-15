@@ -305,13 +305,15 @@ export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
 }
 
 /**
- * Current + prior flow windows of n buckets each for window-over-window lenses
- * (movers): the 2n most-recent buckets from ONE clock read, split in half —
- * two separate recentBuckets() calls could overlap/skip a bucket if a 5-min
- * boundary rolled between them. All 2n buckets run through ONE mapPool so the
- * pair shares a single concurrency budget — two per-half pools would double
- * the fan-out ceiling (2 x BUCKET_QUERY_CONCURRENCY x monitors) past the
- * socket pool.
+ * Current + prior flow windows for window-over-window lenses (movers), planned
+ * from ONE clock read via windowPairPlan — two separately-clocked plans could
+ * overlap/skip a part if a grid boundary rolled between them. n <= 36: the 2n
+ * most-recent 5-min buckets split in half; n > 36: 2H closed hours split
+ * symmetrically H/H with NO raw tail (an asymmetric tail would bias every
+ * window-over-window delta toward the current window). All parts of both
+ * halves run through ONE mapPool so the pair shares a single concurrency
+ * budget — two per-half pools would double the fan-out ceiling
+ * (2 x BUCKET_QUERY_CONCURRENCY x monitors) past the socket pool.
  */
 export async function getFlowsWindowPair(
   n: number,
