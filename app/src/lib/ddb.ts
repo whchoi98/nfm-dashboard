@@ -35,6 +35,61 @@ export function recentBuckets(n: number): string[] {
     new Date(Math.floor(t / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'));
 }
 
+export type WindowPart = { grain: 'raw' | 'hourly'; bucket: string };
+export interface WindowPlan { parts: WindowPart[]; buckets: string[]; windowSeconds: number }
+
+// Requests over 3h read hour-grain HFLOW rollups (closed hours) plus the open
+// hour's 5-min buckets as a live tail; smaller requests stay raw (unchanged).
+export const GRAIN_SWITCH_BUCKETS = 36;
+const HOUR_MS = 3_600_000;
+const isoNoMs = (t: number) => new Date(t).toISOString().replace(/\.\d+Z/, 'Z');
+
+/** Closed-hour keys newest-first: [openHourStart - 1h, …, openHourStart - H h]. */
+function closedHourBuckets(hoursBack: number, openHourStartMs: number): string[] {
+  return Array.from({ length: hoursBack },
+    (_, i) => isoNoMs(openHourStartMs - (i + 1) * HOUR_MS));
+}
+
+export function windowPlan(n: number, now = Date.now()): WindowPlan {
+  if (n <= GRAIN_SWITCH_BUCKETS) {
+    const buckets = recentBuckets(n);
+    return { parts: buckets.map(b => ({ grain: 'raw' as const, bucket: b })),
+      buckets, windowSeconds: n * 300 };
+  }
+  const H = Math.round(n / 12);
+  const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const tailCount = Math.floor((Math.floor(now / 300_000) * 300_000 - openHourStart) / 300_000) + 1;
+  const tail = recentBuckets(tailCount);
+  const hours = closedHourBuckets(H, openHourStart);
+  const parts: WindowPart[] = [
+    ...tail.map(b => ({ grain: 'raw' as const, bucket: b })),
+    ...hours.map(b => ({ grain: 'hourly' as const, bucket: b }))];
+  return { parts, buckets: parts.map(p => p.bucket),
+    windowSeconds: H * 3600 + tailCount * 300 };
+}
+
+/**
+ * Pair plan: 2H CLOSED hours split symmetrically H/H — no tail on either half.
+ * An asymmetric tail would bias every window-over-window delta (movers,
+ * anomalies) toward the current window; the pair path trades <=1h of
+ * freshness for symmetry (spec 2026-07-15-hourly-rollups).
+ */
+export function windowPairPlan(n: number, now = Date.now()):
+    { current: WindowPart[]; prior: WindowPart[]; windowSeconds: number } {
+  if (n <= GRAIN_SWITCH_BUCKETS) {
+    const buckets = recentBuckets(2 * n);
+    const part = (b: string): WindowPart => ({ grain: 'raw', bucket: b });
+    return { current: buckets.slice(0, n).map(part), prior: buckets.slice(n).map(part),
+      windowSeconds: n * 300 };
+  }
+  const H = Math.round(n / 12);
+  const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const hours = closedHourBuckets(2 * H, openHourStart);
+  const part = (b: string): WindowPart => ({ grain: 'hourly', bucket: b });
+  return { current: hours.slice(0, H).map(part), prior: hours.slice(H).map(part),
+    windowSeconds: H * 3600 };
+}
+
 export async function getTopology(): Promise<TopologySnapshot | null> {
   const res = await ddb().send(new GetCommand({ TableName: TABLE_META,
     Key: { pk: 'TOPO#latest', sk: 'snapshot' } }));

@@ -3,7 +3,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getFlowsWindowPair,
   flowsCacheSize, ddbSocketAgent, getDns, getCollectionHistory, mapPool,
-  cachedLens, lensCacheKey } from './ddb';
+  cachedLens, lensCacheKey, windowPlan, windowPairPlan } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -611,5 +611,59 @@ describe('queryEdgeSeries', () => {
     expect(input.ScanIndexForward).toBe(false);
     expect(input.Limit).toBe(50);
     expect(series).toHaveLength(1);
+  });
+});
+
+describe('windowPlan / windowPairPlan', () => {
+  it('n <= 36 stays raw and matches recentBuckets exactly', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T02:00:00.000Z'));
+    const plan = windowPlan(12);
+    expect(plan.parts.every(p => p.grain === 'raw')).toBe(true);
+    expect(plan.buckets).toEqual(recentBuckets(12));
+    expect(plan.windowSeconds).toBe(12 * 300);
+  });
+
+  it('n > 36 quantizes to H=round(n/12) closed hours plus the open-hour 5-min tail', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T02:17:33.000Z')); // open hour 02:00, tail = 02:00..02:15
+    const plan = windowPlan(288); // 24h -> H=24
+    const raw = plan.parts.filter(p => p.grain === 'raw');
+    const hourly = plan.parts.filter(p => p.grain === 'hourly');
+    expect(raw.map(p => p.bucket)).toEqual(
+      ['2026-07-09T02:15:00Z', '2026-07-09T02:10:00Z', '2026-07-09T02:05:00Z', '2026-07-09T02:00:00Z']);
+    expect(hourly).toHaveLength(24);
+    expect(hourly[0].bucket).toBe('2026-07-09T01:00:00Z'); // newest CLOSED hour
+    expect(hourly[23].bucket).toBe('2026-07-08T02:00:00Z');
+    expect(plan.buckets).toEqual(plan.parts.map(p => p.bucket)); // newest-first, tail then hours
+    expect(plan.windowSeconds).toBe(24 * 3600 + 4 * 300);
+  });
+
+  it('7d (2016) plans 168 closed hours', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T03:02:00.000Z'));
+    const plan = windowPlan(2016);
+    expect(plan.parts.filter(p => p.grain === 'hourly')).toHaveLength(168);
+  });
+
+  it('pair plan over 36 buckets is symmetric closed hours with NO tail', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T03:20:00.000Z')); // open hour 03:00
+    const pair = windowPairPlan(288); // H=24 per half
+    expect(pair.current).toHaveLength(24);
+    expect(pair.prior).toHaveLength(24);
+    expect(pair.current.every(p => p.grain === 'hourly')).toBe(true);
+    expect(pair.current[0].bucket).toBe('2026-07-09T02:00:00Z'); // newest closed hour
+    expect(pair.prior[0].bucket).toBe('2026-07-08T02:00:00Z');   // continues where current ends
+    expect(pair.windowSeconds).toBe(24 * 3600);
+  });
+
+  it('pair plan at or under 36 buckets keeps the raw split', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T04:00:00.000Z'));
+    const pair = windowPairPlan(6);
+    expect(pair.current.every(p => p.grain === 'raw')).toBe(true);
+    expect(pair.current.map(p => p.bucket)).toEqual(recentBuckets(12).slice(0, 6));
+    expect(pair.prior.map(p => p.bucket)).toEqual(recentBuckets(12).slice(6));
   });
 });
