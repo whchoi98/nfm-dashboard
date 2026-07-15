@@ -48,7 +48,9 @@ export class DataStack extends cdk.Stack {
         DNS_CORE_GROUPS: ['ekscluster01-iptables', 'ekscluster01-ipvs', 'ekscluster01-nftables',
           'eksworkshop'].map(c => `/aws/containerinsights/${c}/application`).join(','),
         DNS_RESOLVER_GROUP: '/nfm-dashboard/resolver-dns' } });
-    this.flows.grantWriteData(this.collector);
+    // Read + write: the hour-close rollup step Queries FLOW# partitions back
+    // out of the flows table to merge them into HFLOW rows (ADR-009).
+    this.flows.grantReadWriteData(this.collector);
     this.meta.grantReadWriteData(this.collector);
     this.collector.addToRolePolicy(new iam.PolicyStatement({ actions: [
       'networkflowmonitor:StartQueryMonitorTopContributors',
