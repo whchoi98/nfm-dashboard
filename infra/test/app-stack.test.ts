@@ -24,6 +24,15 @@ it('ALB SG ingress is ONLY the CloudFront origin-facing prefix list on :80', () 
   }
 });
 
+it('target group tolerates slow cold computes before killing the task', () => {
+  const t = template();
+  // interval 15s x unhealthy 5 = 75s of blocked event loop before replacement —
+  // a 24h cold window compute (~40s) must never crash-loop the task
+  // (2026-07-15 incident: threshold 2 killed tasks after 30s).
+  t.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', {
+    HealthCheckIntervalSeconds: 15, UnhealthyThresholdCount: 5 });
+});
+
 it('TaskDefinition is arm64 Fargate with prod env and no AUTH_DISABLED', () => {
   const t = template();
   t.hasResourceProperties('AWS::ECS::TaskDefinition', {
