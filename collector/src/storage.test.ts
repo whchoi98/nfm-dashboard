@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, BatchWriteCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { flowItem, buildTopology, writeCycle } from './storage.js';
+import { flowItem, buildTopology, writeCycle, batchWriteAll } from './storage.js';
 import type { FlowEdge } from './types.js';
 
 const edge: FlowEdge = { edgeHash: 'abc', monitor: 'nfm-eks-demo', metric: 'DATA_TRANSFERRED',
@@ -67,6 +67,24 @@ it('flowItem falls back to "_" namespace for pod GSI keys, matching endpointKey 
   const e = { ...edge, a: { ...edge.a, podNamespace: undefined } };
   const item = flowItem(e as FlowEdge, 1);
   expect(item.gsi1pk).toBe('POD#_/api-1');
+});
+
+describe('batchWriteAll', () => {
+  const ddbMock = mockClient(DynamoDBDocumentClient);
+  beforeEach(() => ddbMock.reset());
+
+  it('batchWriteAll chunks into 25-item batches', async () => {
+    ddbMock.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
+    const items = Array.from({ length: 30 }, (_, i) => ({ pk: `p${i}`, sk: 's' }));
+    const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+
+    await batchWriteAll(ddb, 'flows-table', items);
+
+    const calls = ddbMock.commandCalls(BatchWriteCommand);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].args[0].input.RequestItems!['flows-table']).toHaveLength(25);
+    expect(calls[1].args[0].input.RequestItems!['flows-table']).toHaveLength(5);
+  });
 });
 
 describe('writeCycle', () => {

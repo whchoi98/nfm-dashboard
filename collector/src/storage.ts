@@ -22,6 +22,24 @@ function nodeOf(ep: EndpointInfo, cluster?: string): TopoNode {
   return { id, kind: 'external', label: ep.ip ?? 'unknown' };
 }
 
+export async function batchWriteAll(ddb: DynamoDBDocumentClient, table: string,
+    rawItems: Record<string, unknown>[]): Promise<void> {
+  const items = rawItems.map(item => ({ PutRequest: { Item: item } }));
+  for (let i = 0; i < items.length; i += 25) {
+    let pending = items.slice(i, i + 25);
+    for (let attempt = 0; pending.length > 0; attempt++) {
+      const res = await ddb.send(new BatchWriteCommand({ RequestItems: { [table]: pending } }));
+      pending = (res.UnprocessedItems?.[table] ?? []) as typeof pending;
+      if (pending.length === 0) break;
+      if (attempt >= 3) {
+        console.error(JSON.stringify({ level: 'error', msg: 'unprocessed items dropped', count: pending.length }));
+        break;
+      }
+      await new Promise(r => setTimeout(r, 200 * 2 ** attempt));
+    }
+  }
+}
+
 export function buildTopology(edges: FlowEdge[], monitorToCluster: Record<string, string>,
     now: string): TopologySnapshot {
   const nodes = new Map<string, TopoNode>();
@@ -52,20 +70,7 @@ export async function writeCycle(ddb: DynamoDBDocumentClient,
     payload: { edges: FlowEdge[]; topology: TopologySnapshot; stats: CycleStats;
       cycleTs: string; coverage?: unknown; cycle?: number }): Promise<void> {
   const ttl = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
-  const items = payload.edges.map(e => ({ PutRequest: { Item: flowItem(e, ttl) } }));
-  for (let i = 0; i < items.length; i += 25) {
-    let pending = items.slice(i, i + 25);
-    for (let attempt = 0; pending.length > 0; attempt++) {
-      const res = await ddb.send(new BatchWriteCommand({ RequestItems: { [tables.flows]: pending } }));
-      pending = (res.UnprocessedItems?.[tables.flows] ?? []) as typeof pending;
-      if (pending.length === 0) break;
-      if (attempt >= 3) {
-        console.error(JSON.stringify({ level: 'error', msg: 'unprocessed items dropped', count: pending.length }));
-        break;
-      }
-      await new Promise(r => setTimeout(r, 200 * 2 ** attempt));
-    }
-  }
+  await batchWriteAll(ddb, tables.flows, payload.edges.map(e => flowItem(e, ttl)));
   await ddb.send(new PutCommand({ TableName: tables.meta,
     Item: { pk: 'STATUS#collect', sk: payload.cycleTs, stats: payload.stats, ttl } }));
   await ddb.send(new PutCommand({ TableName: tables.meta,
