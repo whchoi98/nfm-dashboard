@@ -174,9 +174,13 @@ export async function mapPool<T, R>(
 // requests. This caps the fan-out regardless of window size.
 const BUCKET_QUERY_CONCURRENCY = 40;
 
+async function fetchParts(parts: WindowPart[]): Promise<FlowEdge[][]> {
+  const monitors = await monitorNames();
+  return mapPool(parts, BUCKET_QUERY_CONCURRENCY, (p) => queryPart(p, monitors));
+}
+
 async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
-  const results = await mapPool(recentBuckets(n), BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
-  return results.flat();
+  return (await fetchParts(windowPlan(n).parts)).flat();
 }
 
 // ── Flows cache versioning ────────────────────────────────────────────────
@@ -313,9 +317,10 @@ export async function getFlowsWindowPair(
   n: number,
 ): Promise<{ current: FlowEdge[]; prior: FlowEdge[] }> {
   return cachedFetch(`p:${n}`, async () => {
-    const buckets = recentBuckets(2 * n);
-    const perBucket = await mapPool(buckets, BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
-    return { current: perBucket.slice(0, n).flat(), prior: perBucket.slice(n).flat() };
+    const plan = windowPairPlan(n);
+    const perPart = await fetchParts([...plan.current, ...plan.prior]);
+    return { current: perPart.slice(0, plan.current.length).flat(),
+      prior: perPart.slice(plan.current.length).flat() };
   });
 }
 
@@ -344,14 +349,19 @@ async function monitorNames(): Promise<string[]> {
   return names;
 }
 
-/** Flows in one 5-min bucket; all monitors when `monitor` is omitted. */
-export async function queryFlowsByBucket(bucket: string, monitor?: string): Promise<FlowEdge[]> {
-  const monitors = monitor ? [monitor] : await monitorNames();
+async function queryPart(part: WindowPart, monitors: string[]): Promise<FlowEdge[]> {
+  const prefix = part.grain === 'hourly' ? 'HFLOW' : 'FLOW';
   const results = await Promise.all(monitors.map(m => queryAll({
     TableName: TABLE_FLOWS,
     KeyConditionExpression: 'pk = :pk',
-    ExpressionAttributeValues: { ':pk': `FLOW#${bucket}#${m}` } })));
+    ExpressionAttributeValues: { ':pk': `${prefix}#${part.bucket}#${m}` } })));
   return results.flat();
+}
+
+/** Flows in one 5-min bucket; all monitors when `monitor` is omitted. */
+export async function queryFlowsByBucket(bucket: string, monitor?: string): Promise<FlowEdge[]> {
+  const monitors = monitor ? [monitor] : await monitorNames();
+  return queryPart({ grain: 'raw', bucket }, monitors);
 }
 
 /** Flows where the pod is either endpoint (GSI1 = source a, GSI2 = dest b), merged+deduped. */

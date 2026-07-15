@@ -357,7 +357,7 @@ describe('getFlowsWindowPair cache', () => {
       return { Items: [] };
     });
 
-    await getFlowsWindowPair(60); // 120 buckets across the two halves
+    await getFlowsWindowPair(60); // n=60 > 36 -> 2x5 closed-hour HFLOW parts across the two halves
 
     // Two per-half pools would double the fan-out ceiling past the socket pool
     // (2 x BUCKET_QUERY_CONCURRENCY x monitors) — the halves must share one.
@@ -678,5 +678,63 @@ describe('windowPlan / windowPairPlan', () => {
     expect(raw.map(p => p.bucket)).toEqual(
       ['2026-07-01T10:15:00Z', '2026-07-01T10:10:00Z', '2026-07-01T10:05:00Z', '2026-07-01T10:00:00Z']);
     expect(hourly[0].bucket).toBe('2026-07-01T09:00:00Z');
+  });
+});
+
+describe('grain-aware window fetch', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  it('n > 36 queries HFLOW partitions for closed hours and FLOW for the tail', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T05:07:00.000Z')); // tail = 05:05, 05:00
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    await getFlowsWindow(288);
+
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string)
+      .filter(pk => pk?.startsWith('FLOW#') || pk?.startsWith('HFLOW#'));
+    const hflow = pks.filter(pk => pk.startsWith('HFLOW#'));
+    const flow = pks.filter(pk => pk.startsWith('FLOW#'));
+    expect(hflow).toHaveLength(24); // 24 closed hours x 1 monitor
+    expect(hflow).toContain('HFLOW#2026-07-09T04:00:00Z#nfm-eks-demo');
+    expect(flow).toHaveLength(2);   // 05:05 + 05:00 tail
+    expect(flow).toContain('FLOW#2026-07-09T05:05:00Z#nfm-eks-demo');
+  });
+
+  it('n <= 36 keeps today\'s raw path byte-identical', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T06:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    await getFlowsWindow(12);
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string)
+      .filter(pk => pk?.startsWith('FLOW#'));
+    expect(pks).toHaveLength(12);
+  });
+
+  it('pair with n > 36 fetches 2H closed hours, split symmetrically, no tail', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T07:03:00.000Z'));
+    ddbMock.on(QueryCommand).callsFake((input) => {
+      const pk = (input.ExpressionAttributeValues ?? {})[':pk'] as string;
+      if (!pk?.startsWith('HFLOW#')) return { Items: [] };
+      return { Items: [{ edgeHash: `e-${pk}`, bucket: pk.split('#')[1],
+        monitor: 'nfm-eks-demo', value: 1 }] };
+    });
+
+    const { current, prior } = await getFlowsWindowPair(288);
+
+    expect(current).toHaveLength(24);
+    expect(prior).toHaveLength(24);
+    expect(current[0].bucket).toBe('2026-07-09T06:00:00Z'); // newest closed hour
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string);
+    expect(pks.filter(pk => pk?.startsWith('FLOW#'))).toHaveLength(0); // no tail
   });
 });
