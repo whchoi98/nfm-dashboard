@@ -1,7 +1,7 @@
 # NFM Dashboard
 
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)]()
-[![Version](https://img.shields.io/badge/Version-0.10.0-green.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.11.0-green.svg)]()
 <a href="#english"><img src="https://img.shields.io/badge/lang-English-blue.svg" alt="English"></a>
 <a href="#korean"><img src="https://img.shields.io/badge/lang-한국어-red.svg" alt="Korean"></a>
 
