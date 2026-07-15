@@ -92,6 +92,30 @@ describe('runRollupStep', () => {
     expect(ddbMock.commandCalls(PutCommand)).toHaveLength(6);
   });
 
+  it('withholds the HROLL#done marker when BatchWrite persistently drops items', async () => {
+    ddbMock.on(QueryCommand, { TableName: tables.meta }).resolves({
+      Items: Array.from({ length: 167 }, (_, i) => // only 03:00 missing
+        ({ pk: 'HROLL#done', sk: new Date(Date.parse('2026-07-15T03:00:00Z') - (i + 1) * 3_600_000)
+          .toISOString().replace(/\.\d+Z/, 'Z') })) });
+    ddbMock.on(QueryCommand, { TableName: tables.flows }).callsFake((input) => {
+      const pk = input.ExpressionAttributeValues[':pk'] as string;
+      return { Items: [edge({ bucket: pk.split('#')[1], monitor: pk.split('#')[2], value: 2 })] };
+    });
+    // Every attempt reports the same item unprocessed → batchWriteAll drops it.
+    ddbMock.on(BatchWriteCommand).resolves({ UnprocessedItems:
+      { 'flows-t': [{ PutRequest: { Item: { pk: 'stuck', sk: 's' } } }] } });
+    ddbMock.on(PutCommand).resolves({});
+
+    const res = await runRollupStep({ ddb, tables, monitors: ['m1'], nowMs });
+
+    // A dropped item means the hour-sum is silently incomplete: no marker, not
+    // in hoursDone — the idempotent hour is retried next cycle.
+    expect(res.hoursDone).toEqual([]);
+    const markers = ddbMock.commandCalls(PutCommand)
+      .filter(c => c.args[0].input.Item!.pk === 'HROLL#done');
+    expect(markers).toHaveLength(0);
+  });
+
   it('paginates the raw-hour query (LastEvaluatedKey)', async () => {
     ddbMock.on(QueryCommand, { TableName: tables.meta }).resolves({
       Items: Array.from({ length: 167 }, (_, i) =>

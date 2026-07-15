@@ -85,6 +85,23 @@ describe('batchWriteAll', () => {
     expect(calls[0].args[0].input.RequestItems!['flows-table']).toHaveLength(25);
     expect(calls[1].args[0].input.RequestItems!['flows-table']).toHaveLength(5);
   });
+
+  it('resolves 0 dropped items on a clean write', async () => {
+    ddbMock.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
+    const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+    await expect(batchWriteAll(ddb, 'flows-table', [{ pk: 'p', sk: 's' }])).resolves.toBe(0);
+  });
+
+  it('resolves the dropped count when UnprocessedItems persist through all retries', async () => {
+    const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+    const unprocessed = [{ PutRequest: { Item: { pk: 'stuck', sk: 's' } } }];
+    // Every attempt (initial + 3 retries) reports the same item unprocessed.
+    ddbMock.on(BatchWriteCommand).resolves({ UnprocessedItems: { 'flows-table': unprocessed } });
+
+    await expect(batchWriteAll(ddb, 'flows-table',
+      [{ pk: 'stuck', sk: 's' }, { pk: 'ok', sk: 's' }])).resolves.toBe(1);
+    expect(ddbMock.commandCalls(BatchWriteCommand)).toHaveLength(4); // initial + 3 retries
+  });
 });
 
 describe('writeCycle', () => {

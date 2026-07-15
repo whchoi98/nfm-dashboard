@@ -81,7 +81,15 @@ export async function runRollupStep(opts: {
       pk => queryPartition(ddb, tables.flows, pk))).flat();
     const merged = mergeHourEdges(raw, hour);
     if (merged.length > 0) {
-      await batchWriteAll(ddb, tables.flows, merged.map(e => hflowItem(e, ttl)));
+      const dropped = await batchWriteAll(ddb, tables.flows, merged.map(e => hflowItem(e, ttl)));
+      if (dropped > 0) {
+        // A dropped item = a silently incomplete hour-sum. Writing the marker
+        // anyway would make the undercount permanent — withhold it so the
+        // idempotent hour is retried next cycle.
+        console.warn(JSON.stringify({ level: 'warn',
+          msg: 'rollup hour incomplete — marker withheld', hour, dropped }));
+        continue;
+      }
     }
     // Marker LAST: a crash mid-hour leaves no marker, so the hour is retried.
     await ddb.send(new PutCommand({ TableName: tables.meta,

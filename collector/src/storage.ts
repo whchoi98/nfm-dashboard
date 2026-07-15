@@ -22,9 +22,13 @@ function nodeOf(ep: EndpointInfo, cluster?: string): TopoNode {
   return { id, kind: 'external', label: ep.ip ?? 'unknown' };
 }
 
+/** Batch-writes all items (25-chunk, retry w/ backoff). Returns the number of
+ *  items DROPPED after retries were exhausted (0 = every item landed) so
+ *  callers gating completion markers on a full write can withhold them. */
 export async function batchWriteAll(ddb: DynamoDBDocumentClient, table: string,
-    rawItems: Record<string, unknown>[]): Promise<void> {
+    rawItems: Record<string, unknown>[]): Promise<number> {
   const items = rawItems.map(item => ({ PutRequest: { Item: item } }));
+  let dropped = 0;
   for (let i = 0; i < items.length; i += 25) {
     let pending = items.slice(i, i + 25);
     for (let attempt = 0; pending.length > 0; attempt++) {
@@ -33,11 +37,13 @@ export async function batchWriteAll(ddb: DynamoDBDocumentClient, table: string,
       if (pending.length === 0) break;
       if (attempt >= 3) {
         console.error(JSON.stringify({ level: 'error', msg: 'unprocessed items dropped', count: pending.length }));
+        dropped += pending.length;
         break;
       }
       await new Promise(r => setTimeout(r, 200 * 2 ** attempt));
     }
   }
+  return dropped;
 }
 
 export function buildTopology(edges: FlowEdge[], monitorToCluster: Record<string, string>,
