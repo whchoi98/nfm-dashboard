@@ -10,6 +10,7 @@ import { categoriesForCycle } from './categories.js';
 import { discoverOnboarding } from './onboard.js';
 import { collectWorkloadInsights } from './wi-query.js';
 import { collectDns } from './dns-collect.js';
+import { runRollupStep } from './rollup-store.js';
 import type { MetricName } from './types.js';
 
 const nfm = new NetworkFlowMonitorClient({});
@@ -64,6 +65,14 @@ export const handler = async () => {
     else if (dns) console.log(JSON.stringify({ level: 'info',
       msg: 'dns aggregate empty — keeping last-good DNS#latest' }));
   }
-  console.log(JSON.stringify({ level: 'info', msg: 'cycle done', stats, edges: edges.length }));
+  // Hour-close rollup (spec 2026-07-15-hourly-rollups): idempotent, <=6 hours
+  // per cycle newest-first, auto-backfills from raw rows still inside the 7d
+  // TTL. MUST NOT fail the collect cycle.
+  const rollup = await runRollupStep({ ddb,
+    tables: { flows: process.env.TABLE_FLOWS!, meta: process.env.TABLE_META! },
+    monitors: monitorPairs.map(([m]) => m), nowMs: now.getTime() })
+    .catch(err => { console.error('rollup failed', err); return { hoursDone: [] as string[] }; });
+  console.log(JSON.stringify({ level: 'info', msg: 'cycle done', stats,
+    edges: edges.length, rollupHours: rollup.hoursDone.length }));
   return { ok: true, stats };
 };

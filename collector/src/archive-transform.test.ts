@@ -77,4 +77,12 @@ describe('flattenFlowImage', () => {
     const image = marshall({ sk: 'no-pk-here' });
     expect(flattenFlowImage(image)).toBeNull();
   });
+
+  it('excludes HFLOW hourly rollup rows from the Parquet archive', () => {
+    const image = marshall({ pk: 'HFLOW#2026-07-15T03:00:00Z#m1',
+      sk: 'DATA_TRANSFERRED#INTER_AZ#e1', edgeHash: 'e1', monitor: 'm1',
+      metric: 'DATA_TRANSFERRED', category: 'INTER_AZ',
+      bucket: '2026-07-15T03:00:00Z', value: 1, unit: 'Bytes' });
+    expect(flattenFlowImage(image as never)).toBeNull();
+  });
 });
