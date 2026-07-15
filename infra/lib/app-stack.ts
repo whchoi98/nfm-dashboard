@@ -246,7 +246,13 @@ export class AppStack extends cdk.Stack {
       port: 3000, protocol: elbv2.ApplicationProtocol.HTTP, targets: [service],
       deregistrationDelay: cdk.Duration.seconds(10),
       healthCheck: { path: '/api/health', healthyHttpCodes: '200',
-        interval: cdk.Duration.seconds(15), healthyThresholdCount: 2 } });
+        interval: cdk.Duration.seconds(15), healthyThresholdCount: 2,
+        // 15s x 5 = 75s of blocked event loop before the task is replaced: a
+        // 24h cold window compute (~40s of near-synchronous lens work on
+        // 1 vCPU) must not crash-loop the task (2026-07-15 incident — the
+        // default threshold 2 killed tasks after 30s, losing the in-process
+        // cache and re-triggering the same cold compute forever).
+        unhealthyThresholdCount: 5 } });
     this.alb = alb;
     this.targetGroup = targetGroup;
 

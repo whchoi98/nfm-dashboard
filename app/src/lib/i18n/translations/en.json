@@ -576,7 +576,7 @@
   "report.cost.colUsd": "Est. USD",
   "report.none": "None",
   "history.title": "History",
-  "history.hint": "History queries the S3 archive (Athena, retained up to ~2 years) — unlike the live 7-day dashboard, it accepts arbitrary date ranges, and each run is an on-demand, billed query.",
+  "history.hint": "History queries the S3 archive (Athena, retained up to ~2 years) — unlike the live dashboard (24h max range), it accepts arbitrary date ranges, and each run is an on-demand, billed query.",
   "history.prompt": "Choose a date range and run the query",
   "history.from": "From",
   "history.to": "To",
