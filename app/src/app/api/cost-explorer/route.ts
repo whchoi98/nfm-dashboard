@@ -1,4 +1,4 @@
-import { cachedLens, getFlowsWindow, lensCacheKey } from '@/lib/ddb';
+import { cachedLens, getFlowsWindow, lensCacheKey, windowPlan } from '@/lib/ddb';
 import { applyFlowFilters, parseLensParams } from '@/lib/analytics/filters';
 import { costExplorerLens, deriveCluster } from '@/lib/analytics/cost-explorer';
 import { parseMonitorsEnv } from '@/lib/monitors';
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       const clusters = parseMonitorsEnv(process.env.MONITORS);
       const clusterOf = (monitor: string) => clusters[monitor] ?? deriveCluster(monitor);
       // Each bucket covers 5 minutes — the run-rate scales this window to 30 days.
-      return costExplorerLens(flows, { windowSeconds: buckets * 300, clusterOf });
+      return costExplorerLens(flows, { windowSeconds: windowPlan(buckets).windowSeconds, clusterOf });
     });
     return Response.json(data);
   } catch (e) {
