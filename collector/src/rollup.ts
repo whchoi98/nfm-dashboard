@@ -5,6 +5,9 @@ import type { FlowEdge } from './types.js';
 export const HOUR_MS = 3_600_000;
 const FIVE_MIN_MS = 300_000;
 // One full cycle past hour close, so the hour's last 5-min bucket has landed.
+// MUST stay > the collector Lambda timeout (270s, infra/lib/data-stack.ts) so
+// a cycle started just before the hour close cannot commit raw rows after the
+// hour is rolled up.
 const CLOSE_GRACE_MS = 5 * 60_000;
 
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d+Z/, 'Z');
