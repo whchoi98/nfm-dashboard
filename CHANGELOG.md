@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-15
+
 ### Added
+- Hourly rollup tier: the collector writes hour-grain HFLOW rows (same item shape, counters summed, RTT averaged, top-200 per monitor/metric/category, 8-day TTL) after each closed hour, auto-backfilling the last 7 days on first deploy; lens reads over 3h use closed-hour rollups plus a live 5-minute tail, cutting a cold 24h read from ~1,440 to ~180 queries and 7d to ~840 (ADR-009).
+- Restore the 7d interactive range on the lens pages, superseding the 24h cap (ADR-008).
 - Real User Monitoring via aws-rum-pipeline: `RumProvider` loads the self-hosted RUM SDK and stamps every event with `appName: nfm-dashboard` (page views, SPA route dwell time, Core Web Vitals, JS errors). Enabled only when `NEXT_PUBLIC_RUM_ENDPOINT`/`NEXT_PUBLIC_RUM_API_KEY` are exported before `scripts/build-push.sh` (Docker build args).
 - Anomaly detail panel: selecting a row on `/anomalies` opens a right-hand slide-over with entity detail (metric, current-vs-baseline, overshoot, severity) and working deep-links — `/topology?focus=<ns/name>` focuses the node, `/network?ns=<namespace>` presets the namespace facet; the panel live-updates with polling and auto-closes when the anomaly resolves.
 - Fancy report on `/reports`: a styled `ReportDocument` leads with a cost-estimation-basis block (inter-AZ transfer rate, billed categories, monthly run-rate), then KPI tiles, a per-category cost table, top talkers, and anomalies, with a Download PDF button (browser print-to-PDF). The `.md`/`.csv` downloads stay.
@@ -171,7 +175,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - SnowUI footer attribution link from the app shell (the CC BY 4.0 design attribution remains in README.md).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
@@ -199,7 +204,11 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-15
+
 ### Added
+- 시간 단위 rollup 계층 추가: 수집기가 매 시간 마감 후 시간 단위 HFLOW row(동일 아이템 형태, 카운터 합산, RTT 평균, 모니터/메트릭/카테고리별 top-200, 8일 TTL)를 기록하고 최초 배포 시 최근 7일을 자동 백필; 3시간 초과 lens 조회는 마감된 시간 rollup + 실시간 5분 tail을 조합해 사용 — 콜드 24시간 조회를 쿼리 약 1,440회에서 약 180회로, 7일 조회를 약 840회로 절감 (ADR-009).
+- lens 페이지의 7일 인터랙티브 범위 복원 — 기존 24시간 상한을 대체 (ADR-008).
 - aws-rum-pipeline 연동 RUM(Real User Monitoring): `RumProvider`가 자체 호스팅 SDK를 로드해 모든 이벤트에 `appName: nfm-dashboard`를 스탬핑 (페이지뷰·SPA 체류시간·Core Web Vitals·JS 에러). `scripts/build-push.sh` 실행 전 `NEXT_PUBLIC_RUM_*` export 시에만 활성화 (Docker build args).
 - 이상 징후 상세 패널: `/anomalies`에서 행을 선택하면 엔티티 상세(지표, 현재값 대비 베이스라인, 초과분, 심각도)와 동작하는 딥링크를 갖춘 우측 슬라이드오버 표시 — `/topology?focus=<ns/name>`은 해당 노드를 포커스, `/network?ns=<namespace>`는 네임스페이스 facet을 프리셋; 패널은 폴링으로 실시간 갱신되며 이상 징후 해소 시 자동 닫힘 기능 추가.
 - `/reports` 리포트 개선: 스타일드 `ReportDocument`가 비용 산정 근거 블록(AZ 간 전송 요율, 청구 카테고리, 월 예상 run-rate)을 앞세우고 KPI 타일, 카테고리별 비용 표, 상위 트래픽, 이상 징후를 렌더링하며 Download PDF 버튼(브라우저 print-to-PDF) 추가. `.md`/`.csv` 다운로드 유지.
@@ -353,7 +362,8 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Removed
 - 앱 셸에서 SnowUI 푸터 저작자 표시 링크 제거(CC BY 4.0 디자인 저작자 표시는 README.md에 유지).
 
-[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/whchoi98/nfm-dashboard/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/whchoi98/nfm-dashboard/compare/v0.7.0...v0.8.0
