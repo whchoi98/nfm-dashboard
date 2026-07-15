@@ -109,6 +109,17 @@ export function applyFlowFilters(
   return out;
 }
 
+/**
+ * Fraction [0..1] of the expected prior-half hour buckets actually present in
+ * a window-pair's prior flows. The hourly-pair routes (movers, anomalies) use
+ * this to detect a partially-retained prior half (first ~7 days after the
+ * rollup deploy, or any retention hole) and serve an honest empty state
+ * instead of reporting fake spikes on every entity.
+ */
+export function priorCoverage(prior: FlowEdge[], expectedHours: number): number {
+  return new Set(prior.map((f) => f.bucket)).size / expectedHours;
+}
+
 /** Query string for /api/analytics/* lens routes derived from the hub filters. */
 export function lensQuery(filters: AnalyticsFilters): string {
   let qs = `?buckets=${rangeToBuckets(filters.range)}`;

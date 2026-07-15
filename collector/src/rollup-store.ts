@@ -7,7 +7,10 @@ import { batchWriteAll } from './storage.js';
 import { eligibleMissingHours, fiveMinBucketsOfHour, mergeHourEdges } from './rollup.js';
 import type { FlowEdge } from './types.js';
 
-const ROLLUP_TTL_SECONDS = 8 * 24 * 3600; // 7d window + margin
+// The app's 7d pair path (movers/anomalies) reads 2 x 168 closed hours plus
+// the 1-hour shift, so hourly rows must outlive ~2 weeks; markers share the
+// TTL (the 168h re-roll lookback stays far below it).
+const ROLLUP_TTL_SECONDS = 15 * 24 * 3600;
 const RAW_QUERY_CONCURRENCY = 8;
 
 /** HFLOW item: FlowEdge payload at hour grain. NO gsi attrs — the pod/edge

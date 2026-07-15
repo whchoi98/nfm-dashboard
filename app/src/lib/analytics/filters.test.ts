@@ -10,6 +10,7 @@ import {
   parseBuckets,
   parseFilters,
   parseLensParams,
+  priorCoverage,
   rangeToBuckets,
   TIME_RANGES,
 } from './filters';
@@ -126,6 +127,28 @@ describe('applyFlowFilters', () => {
     expect(
       applyFlowFilters(flows, { category: 'INTER_AZ', namespace: 'shop' }).map((f) => f.edgeHash),
     ).toEqual(['3']);
+  });
+});
+
+describe('priorCoverage', () => {
+  const hour = (h: number) => `2026-07-10T${String(h).padStart(2, '0')}:00:00Z`;
+
+  it('is 1 when the prior half holds every expected hour bucket', () => {
+    const prior = [0, 1, 2, 3].map((h) => flow({ bucket: hour(h) }));
+    expect(priorCoverage(prior, 4)).toBe(1);
+  });
+
+  it('is 0.5 for a half-empty prior (duplicate buckets count once)', () => {
+    const prior = [
+      flow({ bucket: hour(0) }),
+      flow({ bucket: hour(0), edgeHash: 'other' }), // same hour, different edge
+      flow({ bucket: hour(1) }),
+    ];
+    expect(priorCoverage(prior, 4)).toBe(0.5);
+  });
+
+  it('is 0 for an empty prior', () => {
+    expect(priorCoverage([], 24)).toBe(0);
   });
 });
 
