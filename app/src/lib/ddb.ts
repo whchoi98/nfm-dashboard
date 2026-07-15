@@ -29,10 +29,71 @@ function ddb(): DynamoDBDocumentClient {
  * MUST match the collector bucket formula exactly:
  * new Date(Math.floor(t/300000)*300000).toISOString().replace(/\.\d+Z/,'Z')
  */
-export function recentBuckets(n: number): string[] {
-  const t = Date.now();
+export function recentBuckets(n: number, now = Date.now()): string[] {
   return Array.from({ length: n }, (_, i) =>
-    new Date(Math.floor(t / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'));
+    new Date(Math.floor(now / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'));
+}
+
+export type WindowPart = { grain: 'raw' | 'hourly'; bucket: string };
+export interface WindowPlan { parts: WindowPart[]; buckets: string[]; windowSeconds: number }
+
+// Requests over 3h read hour-grain HFLOW rollups (closed hours) plus the open
+// hour's 5-min buckets as a live tail; smaller requests stay raw (unchanged).
+export const GRAIN_SWITCH_BUCKETS = 36;
+const HOUR_MS = 3_600_000;
+const isoNoMs = (t: number) => new Date(t).toISOString().replace(/\.\d+Z/, 'Z');
+
+/** Closed-hour keys newest-first: [openHourStart - 1h, …, openHourStart - H h]. */
+function closedHourBuckets(hoursBack: number, openHourStartMs: number): string[] {
+  return Array.from({ length: hoursBack },
+    (_, i) => isoNoMs(openHourStartMs - (i + 1) * HOUR_MS));
+}
+
+export function windowPlan(n: number, now = Date.now()): WindowPlan {
+  if (n <= GRAIN_SWITCH_BUCKETS) {
+    const buckets = recentBuckets(n, now);
+    return { parts: buckets.map(b => ({ grain: 'raw' as const, bucket: b })),
+      buckets, windowSeconds: n * 300 };
+  }
+  const H = Math.round(n / 12);
+  const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const tailCount = Math.floor((Math.floor(now / 300_000) * 300_000 - openHourStart) / 300_000) + 1;
+  // The newest CLOSED hour is ALWAYS read at raw 5-min grain: its HFLOW row
+  // lands ~5-15 min after the hour closes (collector rollup lag), so reading
+  // it hourly would drop that hour from every >3h view once per hour (the
+  // sawtooth). Its raw rows exist immediately and the 7d raw TTL covers it.
+  const tail = recentBuckets(tailCount + 12, now);
+  const hours = closedHourBuckets(H - 1, openHourStart - HOUR_MS);
+  const parts: WindowPart[] = [
+    ...tail.map(b => ({ grain: 'raw' as const, bucket: b })),
+    ...hours.map(b => ({ grain: 'hourly' as const, bucket: b }))];
+  return { parts, buckets: parts.map(p => p.bucket),
+    // (H-1)*3600 + (tailCount+12)*300 === H*3600 + tailCount*300 — unchanged in total.
+    windowSeconds: (H - 1) * 3600 + (tailCount + 12) * 300 };
+}
+
+/**
+ * Pair plan: 2H CLOSED hours split symmetrically H/H — no tail on either half.
+ * An asymmetric tail would bias every window-over-window delta (movers,
+ * anomalies) toward the current window; the pair path trades <=1h of
+ * freshness for symmetry (spec 2026-07-15-hourly-rollups). Both halves start
+ * at the SECOND newest closed hour — the newest one may not be rolled up yet
+ * (collector lag), and a mixed-grain half would break symmetry.
+ */
+export function windowPairPlan(n: number, now = Date.now()):
+    { current: WindowPart[]; prior: WindowPart[]; windowSeconds: number } {
+  if (n <= GRAIN_SWITCH_BUCKETS) {
+    const buckets = recentBuckets(2 * n, now);
+    const part = (b: string): WindowPart => ({ grain: 'raw', bucket: b });
+    return { current: buckets.slice(0, n).map(part), prior: buckets.slice(n).map(part),
+      windowSeconds: n * 300 };
+  }
+  const H = Math.round(n / 12);
+  const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const hours = closedHourBuckets(2 * H, openHourStart - HOUR_MS);
+  const part = (b: string): WindowPart => ({ grain: 'hourly', bucket: b });
+  return { current: hours.slice(0, H).map(part), prior: hours.slice(H).map(part),
+    windowSeconds: H * 3600 };
 }
 
 export async function getTopology(): Promise<TopologySnapshot | null> {
@@ -120,9 +181,13 @@ export async function mapPool<T, R>(
 // requests. This caps the fan-out regardless of window size.
 const BUCKET_QUERY_CONCURRENCY = 40;
 
+async function fetchParts(parts: WindowPart[]): Promise<FlowEdge[][]> {
+  const monitors = await monitorNames();
+  return mapPool(parts, BUCKET_QUERY_CONCURRENCY, (p) => queryPart(p, monitors));
+}
+
 async function fetchFlowsWindow(n: number): Promise<FlowEdge[]> {
-  const results = await mapPool(recentBuckets(n), BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
-  return results.flat();
+  return (await fetchParts(windowPlan(n).parts)).flat();
 }
 
 // ── Flows cache versioning ────────────────────────────────────────────────
@@ -247,21 +312,24 @@ export async function getFlowsWindow(n = 12): Promise<FlowEdge[]> {
 }
 
 /**
- * Current + prior flow windows of n buckets each for window-over-window lenses
- * (movers): the 2n most-recent buckets from ONE clock read, split in half —
- * two separate recentBuckets() calls could overlap/skip a bucket if a 5-min
- * boundary rolled between them. All 2n buckets run through ONE mapPool so the
- * pair shares a single concurrency budget — two per-half pools would double
- * the fan-out ceiling (2 x BUCKET_QUERY_CONCURRENCY x monitors) past the
- * socket pool.
+ * Current + prior flow windows for window-over-window lenses (movers), planned
+ * from ONE clock read via windowPairPlan — two separately-clocked plans could
+ * overlap/skip a part if a grid boundary rolled between them. n <= 36: the 2n
+ * most-recent 5-min buckets split in half; n > 36: 2H closed hours split
+ * symmetrically H/H with NO raw tail (an asymmetric tail would bias every
+ * window-over-window delta toward the current window). All parts of both
+ * halves run through ONE mapPool so the pair shares a single concurrency
+ * budget — two per-half pools would double the fan-out ceiling
+ * (2 x BUCKET_QUERY_CONCURRENCY x monitors) past the socket pool.
  */
 export async function getFlowsWindowPair(
   n: number,
 ): Promise<{ current: FlowEdge[]; prior: FlowEdge[] }> {
   return cachedFetch(`p:${n}`, async () => {
-    const buckets = recentBuckets(2 * n);
-    const perBucket = await mapPool(buckets, BUCKET_QUERY_CONCURRENCY, (b) => queryFlowsByBucket(b));
-    return { current: perBucket.slice(0, n).flat(), prior: perBucket.slice(n).flat() };
+    const plan = windowPairPlan(n);
+    const perPart = await fetchParts([...plan.current, ...plan.prior]);
+    return { current: perPart.slice(0, plan.current.length).flat(),
+      prior: perPart.slice(plan.current.length).flat() };
   });
 }
 
@@ -290,14 +358,19 @@ async function monitorNames(): Promise<string[]> {
   return names;
 }
 
-/** Flows in one 5-min bucket; all monitors when `monitor` is omitted. */
-export async function queryFlowsByBucket(bucket: string, monitor?: string): Promise<FlowEdge[]> {
-  const monitors = monitor ? [monitor] : await monitorNames();
+async function queryPart(part: WindowPart, monitors: string[]): Promise<FlowEdge[]> {
+  const prefix = part.grain === 'hourly' ? 'HFLOW' : 'FLOW';
   const results = await Promise.all(monitors.map(m => queryAll({
     TableName: TABLE_FLOWS,
     KeyConditionExpression: 'pk = :pk',
-    ExpressionAttributeValues: { ':pk': `FLOW#${bucket}#${m}` } })));
+    ExpressionAttributeValues: { ':pk': `${prefix}#${part.bucket}#${m}` } })));
   return results.flat();
+}
+
+/** Flows in one 5-min bucket; all monitors when `monitor` is omitted. */
+export async function queryFlowsByBucket(bucket: string, monitor?: string): Promise<FlowEdge[]> {
+  const monitors = monitor ? [monitor] : await monitorNames();
+  return queryPart({ grain: 'raw', bucket }, monitors);
 }
 
 /** Flows where the pod is either endpoint (GSI1 = source a, GSI2 = dest b), merged+deduped. */

@@ -10,6 +10,7 @@ import {
   parseBuckets,
   parseFilters,
   parseLensParams,
+  priorCoverage,
   rangeToBuckets,
   TIME_RANGES,
 } from './filters';
@@ -27,15 +28,14 @@ describe('rangeToBuckets', () => {
   it('maps 24h to 288 buckets', () => {
     expect(rangeToBuckets('24h')).toBe(288);
   });
+  it('maps 7d to 2016 buckets', () => {
+    expect(rangeToBuckets('7d')).toBe(2016);
+  });
 });
 
 describe('TIME_RANGES', () => {
-  // 7d was REMOVED from the interactive lens ranges (2026-07-15 incident):
-  // a 2016-bucket cold fetch+compute blocks the 1-vCPU event loop for minutes,
-  // fails the ALB health check and crash-loops the task. 7d+ lives on the
-  // Athena-backed /history page instead.
-  it('caps at 24h and no longer offers 7d', () => {
-    expect(TIME_RANGES).toEqual(['15m', '1h', '3h', '24h']);
+  it('offers 7d again, backed by hourly rollups (spec 2026-07-15-hourly-rollups)', () => {
+    expect(TIME_RANGES).toEqual(['15m', '1h', '3h', '24h', '7d']);
   });
 });
 
@@ -130,6 +130,28 @@ describe('applyFlowFilters', () => {
   });
 });
 
+describe('priorCoverage', () => {
+  const hour = (h: number) => `2026-07-10T${String(h).padStart(2, '0')}:00:00Z`;
+
+  it('is 1 when the prior half holds every expected hour bucket', () => {
+    const prior = [0, 1, 2, 3].map((h) => flow({ bucket: hour(h) }));
+    expect(priorCoverage(prior, 4)).toBe(1);
+  });
+
+  it('is 0.5 for a half-empty prior (duplicate buckets count once)', () => {
+    const prior = [
+      flow({ bucket: hour(0) }),
+      flow({ bucket: hour(0), edgeHash: 'other' }), // same hour, different edge
+      flow({ bucket: hour(1) }),
+    ];
+    expect(priorCoverage(prior, 4)).toBe(0.5);
+  });
+
+  it('is 0 for an empty prior', () => {
+    expect(priorCoverage([], 24)).toBe(0);
+  });
+});
+
 describe('parseBuckets', () => {
   const req = (qs: string) => new Request(`http://localhost/api/analytics/cost${qs}`);
 
@@ -142,11 +164,11 @@ describe('parseBuckets', () => {
     expect(parseBuckets(req('?buckets=-3'))).toBe(12);
   });
 
-  it('floors and clamps valid values into [1, 288]', () => {
+  it('floors and clamps valid values into [1, 2016]', () => {
     expect(parseBuckets(req('?buckets=5'))).toBe(5);
     expect(parseBuckets(req('?buckets=5.9'))).toBe(5);
     expect(parseBuckets(req('?buckets=1'))).toBe(1);
-    expect(parseBuckets(req('?buckets=9999'))).toBe(288);
+    expect(parseBuckets(req('?buckets=9999'))).toBe(2016);
   });
 });
 
@@ -163,14 +185,14 @@ describe('parseLensParams', () => {
     expect(parseLensParams(req)).toEqual({ buckets: 12, namespace: null, category: null });
   });
 
-  it('clamps an over-range buckets value (incl. legacy 7d=2016) down to 288', () => {
-    const req = new Request('http://localhost/api/analytics/cost?buckets=2016');
-    expect(parseLensParams(req).buckets).toBe(288);
+  it('clamps an over-range buckets value down to 2016', () => {
+    const req = new Request('http://localhost/api/analytics/cost?buckets=5000');
+    expect(parseLensParams(req).buckets).toBe(2016);
   });
 
-  it('accepts exactly 288 (the 24h ceiling) unchanged', () => {
-    const req = new Request('http://localhost/api/analytics/cost?buckets=288');
-    expect(parseLensParams(req).buckets).toBe(288);
+  it('accepts exactly 2016 (the 7d ceiling) unchanged', () => {
+    const req = new Request('http://localhost/api/analytics/cost?buckets=2016');
+    expect(parseLensParams(req).buckets).toBe(2016);
   });
 });
 

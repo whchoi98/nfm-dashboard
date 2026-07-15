@@ -1,7 +1,7 @@
 # Project Context
 
 ## Overview
-**NFM Dashboard** (v0.10.0, pre-1.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
+**NFM Dashboard** (v0.11.0, pre-1.0) — Pod-to-Pod network observability dashboard for AWS CloudWatch Network Flow Monitor (NFM), plus a Bedrock AgentCore AI chatbot.
 Live: https://dv4r4bnlhlpcx.cloudfront.net (Cognito login). AWS account `<ACCOUNT_ID>`, region `ap-northeast-2`.
 
 > The global `~/.claude/CLAUDE.md` (Korean-first responses) and the spec-driven workflow in `docs/superpowers/` take precedence for language and process. This file only adds project-specific context — keep it complementary and concise.

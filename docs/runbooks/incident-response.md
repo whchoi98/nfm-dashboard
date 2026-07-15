@@ -133,7 +133,8 @@ task, forever. Mitigations shipped as rev 27 / image `6af919b`: interactive
 lens ranges capped at 24h (`MAX_BUCKETS=288`, TimeRange '7d' removed — 7d+ is
 served by the Athena `/history` page) and target-group
 `unhealthyThresholdCount` 2→5 (75s tolerance). Interactive 7d returns only
-behind collector pre-aggregated rollups.
+behind collector pre-aggregated rollups. Interactive 7d was restored in
+v0.11.0 on hourly rollups (ADR-009).
 
 ### 4. Triage: `nfm-dashboard-alb-5xx`
 The ALB returned more than 10 ELB-generated 5xx in 5 minutes — viewers are
@@ -321,7 +322,8 @@ cgroup OOM 아님), ECS `CPUUtilization` 최대 100% 고정, ALB RequestCount는
 재유발하는 무한 루프. 조치는 rev 27 / 이미지 `6af919b`로 배포됨: 인터랙티브
 lens 범위 24h 상한(`MAX_BUCKETS=288`, TimeRange `7d` 제거 — 7d+는 Athena
 `/history` 페이지 담당) + 타깃 그룹 `unhealthyThresholdCount` 2→5 (75초 유예).
-인터랙티브 7d는 collector 사전 집계(rollup) 이후에만 복원한다.
+인터랙티브 7d는 collector 사전 집계(rollup) 이후에만 복원한다. 인터랙티브 7d는
+v0.11.0에서 시간별 rollup(ADR-009) 기반으로 복원되었다.
 
 ### 4. 트리아지: `nfm-dashboard-alb-5xx`
 ALB가 5분간 10건 초과의 ELB 발생 5xx를 반환 — 뷰어가 오류를 받고 있다. 요청

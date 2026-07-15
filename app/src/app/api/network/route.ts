@@ -1,4 +1,4 @@
-import { cachedLens, getFlowsWindow, lensCacheKey, recentBuckets } from '@/lib/ddb';
+import { cachedLens, getFlowsWindow, lensCacheKey, windowPlan } from '@/lib/ddb';
 import { applyFlowFilters, parseLensParams } from '@/lib/analytics/filters';
 import {
   networkAnalyticsLens, NET_METRICS, SCOPES, type NetMetric, type Scope,
@@ -22,13 +22,14 @@ export async function GET(req: Request) {
     const destScope = parseScope(url.searchParams.get('dst'));
     const metric = parseMetric(url.searchParams.get('metric'));
     const data = await cachedLens(lensCacheKey('network', req.url), async () => {
+      const plan = windowPlan(buckets);
       const flows = applyFlowFilters(await getFlowsWindow(buckets), { namespace, category });
       return networkAnalyticsLens(flows, {
         sourceScope,
         destScope,
         metric,
-        windowSeconds: buckets * 300,
-        buckets: recentBuckets(buckets),
+        windowSeconds: plan.windowSeconds,
+        buckets: plan.buckets,
       });
     });
     return Response.json(data);

@@ -2,12 +2,10 @@
 // Every hub widget consumes AnalyticsFilters; 'all' is the no-filter sentinel.
 import type { FlowEdge, MetricName } from '../types';
 
-// 7d was removed from the interactive ranges (2026-07-15 incident): a
-// 2016-bucket cold fetch+compute blocks the 1-vCPU event loop for minutes,
-// fails the ALB health check and crash-loops the task. 7d+ queries belong to
-// the Athena-backed /history page. Restore only behind collector pre-aggregated
-// rollups (see the 2026-07-14/15 incident notes in docs/runbooks/incident-response.md).
-export type TimeRange = '15m' | '1h' | '3h' | '24h';
+// 7d is served by hour-grain HFLOW rollups + a live 5-min tail (~840 queries,
+// no event-loop-blocking compute) — see docs/superpowers/specs/
+// 2026-07-15-hourly-rollups-design.md; ADR-008's 24h cap is superseded.
+export type TimeRange = '15m' | '1h' | '3h' | '24h' | '7d';
 
 export interface AnalyticsFilters {
   range: TimeRange;
@@ -17,7 +15,7 @@ export interface AnalyticsFilters {
   metric: MetricName;
 }
 
-export const TIME_RANGES: TimeRange[] = ['15m', '1h', '3h', '24h'];
+export const TIME_RANGES: TimeRange[] = ['15m', '1h', '3h', '24h', '7d'];
 
 export const METRIC_NAMES: MetricName[] = [
   'DATA_TRANSFERRED',
@@ -45,11 +43,13 @@ export function rangeToBuckets(range: TimeRange): number {
       return 36;
     case '24h':
       return 288;
+    case '7d':
+      return 2016;
   }
 }
 
-/** Widest flows window a lens route will fetch: 24h of 5-minute buckets (24*12). */
-const MAX_BUCKETS = 288;
+/** Widest flows window a lens route will fetch: 7 days (hour-grain via rollups over 36 buckets). */
+const MAX_BUCKETS = 2016;
 const DEFAULT_BUCKETS = 12;
 
 function bucketsFrom(url: URL): number {
@@ -63,7 +63,7 @@ function bucketsFrom(url: URL): number {
 
 /**
  * Parse `?buckets=` for the /api/analytics/* flow routes: valid values are
- * floored and clamped to [1, 288]; missing/NaN/<1 falls back to 12 (1h).
+ * floored and clamped to [1, 2016]; missing/NaN/<1 falls back to 12 (1h).
  */
 export function parseBuckets(req: Request): number {
   return bucketsFrom(new URL(req.url));
@@ -107,6 +107,17 @@ export function applyFlowFilters(
     );
   }
   return out;
+}
+
+/**
+ * Fraction [0..1] of the expected prior-half hour buckets actually present in
+ * a window-pair's prior flows. The hourly-pair routes (movers, anomalies) use
+ * this to detect a partially-retained prior half (first ~7 days after the
+ * rollup deploy, or any retention hole) and serve an honest empty state
+ * instead of reporting fake spikes on every entity.
+ */
+export function priorCoverage(prior: FlowEdge[], expectedHours: number): number {
+  return new Set(prior.map((f) => f.bucket)).size / expectedHours;
 }
 
 /** Query string for /api/analytics/* lens routes derived from the hub filters. */

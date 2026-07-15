@@ -11,7 +11,7 @@
 
 ## Status
 
-Accepted — 2026-07-15. Shipped and deployed as image `6af919b` (task def rev 27). Marked provisional: the cap is lifted when collector pre-aggregated hourly rollups land.
+Superseded by ADR-009 (hourly rollups) — 2026-07-15; the cap shipped 6af919b and was lifted in v0.11.0.
 
 ## Context
 
@@ -40,7 +40,7 @@ Alternatives considered: keeping 7d behind `worker_threads` offload (protects th
 
 ## Status
 
-승인됨 — 2026-07-15. 이미지 `6af919b`(태스크 정의 rev 27)로 배포 완료. 잠정 조치: 수집기 시간별 사전 집계(rollup) 도입 시 상한 해제.
+ADR-009(시간별 rollup)로 대체됨 — 2026-07-15; 상한은 `6af919b`로 배포되었고 v0.11.0에서 해제되었습니다.
 
 ## Context
 

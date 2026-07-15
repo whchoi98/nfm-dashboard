@@ -1,6 +1,7 @@
 'use client';
 
 import Script from 'next/script';
+import { APP_VERSION } from '@/lib/version';
 
 // Real User Monitoring via aws-rum-pipeline. NEXT_PUBLIC_* values are inlined
 // at build time (Docker build args); when unset the provider renders nothing,
@@ -36,7 +37,7 @@ export default function RumProvider() {
           endpoint: RUM_ENDPOINT,
           apiKey: RUM_API_KEY,
           appName: 'nfm-dashboard', // rum-pipeline partition id (^[a-z0-9-]{1,64}$)
-          appVersion: '0.10.0',
+          appVersion: APP_VERSION,
         });
       }}
     />

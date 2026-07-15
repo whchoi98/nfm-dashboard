@@ -3,7 +3,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { recentBuckets, queryPodFlows, queryEdgeSeries, getFlowsWindow, getFlowsWindowPair,
   flowsCacheSize, ddbSocketAgent, getDns, getCollectionHistory, mapPool,
-  cachedLens, lensCacheKey } from './ddb';
+  cachedLens, lensCacheKey, windowPlan, windowPairPlan } from './ddb';
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
 
@@ -357,7 +357,7 @@ describe('getFlowsWindowPair cache', () => {
       return { Items: [] };
     });
 
-    await getFlowsWindowPair(60); // 120 buckets across the two halves
+    await getFlowsWindowPair(60); // n=60 > 36 -> 2x5 closed-hour HFLOW parts across the two halves
 
     // Two per-half pools would double the fan-out ceiling past the socket pool
     // (2 x BUCKET_QUERY_CONCURRENCY x monitors) — the halves must share one.
@@ -611,5 +611,158 @@ describe('queryEdgeSeries', () => {
     expect(input.ScanIndexForward).toBe(false);
     expect(input.Limit).toBe(50);
     expect(series).toHaveLength(1);
+  });
+});
+
+describe('windowPlan / windowPairPlan', () => {
+  it('n <= 36 stays raw and matches recentBuckets exactly', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T02:00:00.000Z'));
+    const plan = windowPlan(12);
+    expect(plan.parts.every(p => p.grain === 'raw')).toBe(true);
+    expect(plan.buckets).toEqual(recentBuckets(12));
+    expect(plan.windowSeconds).toBe(12 * 300);
+  });
+
+  it('n > 36 reads the newest closed hour at RAW grain: H-1 hourly parts + a 12-bucket-extended tail', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T02:17:33.000Z')); // open hour 02:00, tail = 01:00..02:15
+    const plan = windowPlan(288); // 24h -> H=24
+    const raw = plan.parts.filter(p => p.grain === 'raw');
+    const hourly = plan.parts.filter(p => p.grain === 'hourly');
+    // 4 open-hour buckets + the newest closed hour's 12 (its HFLOW row lags
+    // the collector by ~5-15 min every hour — raw rows exist immediately):
+    expect(raw.map(p => p.bucket)).toEqual(recentBuckets(16));
+    expect(raw[0].bucket).toBe('2026-07-09T02:15:00Z');
+    expect(raw[15].bucket).toBe('2026-07-09T01:00:00Z');
+    expect(hourly).toHaveLength(23); // hourly starts at the SECOND closed hour
+    expect(hourly[0].bucket).toBe('2026-07-09T00:00:00Z');
+    expect(hourly[22].bucket).toBe('2026-07-08T02:00:00Z');
+    expect(plan.buckets).toEqual(plan.parts.map(p => p.bucket)); // newest-first, tail then hours
+    expect(plan.windowSeconds).toBe(23 * 3600 + 16 * 300); // === 24h + 20min, unchanged in total
+  });
+
+  it('7d (2016) plans 167 hourly parts (newest closed hour stays raw)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T03:02:00.000Z'));
+    const plan = windowPlan(2016);
+    expect(plan.parts.filter(p => p.grain === 'hourly')).toHaveLength(167);
+    expect(plan.parts.filter(p => p.grain === 'raw')).toHaveLength(13); // 1 open + 12 newest-closed
+  });
+
+  it('pair plan over 36 buckets is symmetric closed hours, NO tail, shifted 1h off the newest closed hour', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T03:20:00.000Z')); // open hour 03:00
+    const pair = windowPairPlan(288); // H=24 per half
+    expect(pair.current).toHaveLength(24);
+    expect(pair.prior).toHaveLength(24);
+    expect(pair.current.every(p => p.grain === 'hourly')).toBe(true);
+    expect(pair.current[0].bucket).toBe('2026-07-09T01:00:00Z'); // skips 02:00 (may not be rolled up yet)
+    expect(pair.prior[0].bucket).toBe('2026-07-08T01:00:00Z');   // continues where current ends
+    expect(pair.windowSeconds).toBe(24 * 3600);
+  });
+
+  it('pair plan at or under 36 buckets keeps the raw split', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T04:00:00.000Z'));
+    const pair = windowPairPlan(6);
+    expect(pair.current.every(p => p.grain === 'raw')).toBe(true);
+    expect(pair.current.map(p => p.bucket)).toEqual(recentBuckets(12).slice(0, 6));
+    expect(pair.prior.map(p => p.bucket)).toEqual(recentBuckets(12).slice(6));
+  });
+
+  // NO fake timers on purpose (exempt from the file's monotonic-fake-time
+  // convention): the injectable `now` alone must determine every bucket string,
+  // including the raw tail that recentBuckets produces — otherwise callers
+  // passing a historical `now` would silently mix in wall-clock buckets.
+  it('an explicit now parameter determines every bucket without fake timers', () => {
+    const now = Date.parse('2026-07-01T10:17:00Z'); // open hour 10:00
+    const plan = windowPlan(288, now);
+    const raw = plan.parts.filter(p => p.grain === 'raw');
+    const hourly = plan.parts.filter(p => p.grain === 'hourly');
+    expect(raw.map(p => p.bucket)).toEqual(recentBuckets(16, now)); // 4 open + 12 newest-closed-hour
+    expect(raw[0].bucket).toBe('2026-07-01T10:15:00Z');
+    expect(raw[15].bucket).toBe('2026-07-01T09:00:00Z');
+    expect(hourly[0].bucket).toBe('2026-07-01T08:00:00Z'); // second closed hour
+  });
+});
+
+describe('grain-aware window fetch', () => {
+  const prevMonitors = process.env.MONITORS;
+  beforeEach(() => { process.env.MONITORS = 'nfm-eks-demo=eks-demo'; });
+  afterEach(() => {
+    if (prevMonitors === undefined) delete process.env.MONITORS;
+    else process.env.MONITORS = prevMonitors;
+  });
+
+  it('n > 36 queries HFLOW partitions for closed hours and FLOW for the extended tail', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T05:07:00.000Z')); // open-hour tail = 05:05, 05:00
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    await getFlowsWindow(288);
+
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string)
+      .filter(pk => pk?.startsWith('FLOW#') || pk?.startsWith('HFLOW#'));
+    const hflow = pks.filter(pk => pk.startsWith('HFLOW#'));
+    const flow = pks.filter(pk => pk.startsWith('FLOW#'));
+    expect(hflow).toHaveLength(23); // hourly from the SECOND closed hour x 1 monitor
+    expect(hflow).toContain('HFLOW#2026-07-09T03:00:00Z#nfm-eks-demo');
+    expect(hflow).not.toContain('HFLOW#2026-07-09T04:00:00Z#nfm-eks-demo'); // newest closed hour is raw
+    expect(flow).toHaveLength(14);  // 2 open-hour + 12 newest-closed-hour buckets
+    expect(flow).toContain('FLOW#2026-07-09T05:05:00Z#nfm-eks-demo');
+    expect(flow).toContain('FLOW#2026-07-09T04:00:00Z#nfm-eks-demo');
+  });
+
+  it('n <= 36 keeps today\'s raw path byte-identical', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T06:00:00.000Z'));
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+    await getFlowsWindow(12);
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string)
+      .filter(pk => pk?.startsWith('FLOW#'));
+    expect(pks).toHaveLength(12);
+  });
+
+  it('pair with n > 36 fetches 2H closed hours, split symmetrically, no tail', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T07:03:00.000Z'));
+    ddbMock.on(QueryCommand).callsFake((input) => {
+      const pk = (input.ExpressionAttributeValues ?? {})[':pk'] as string;
+      if (!pk?.startsWith('HFLOW#')) return { Items: [] };
+      return { Items: [{ edgeHash: `e-${pk}`, bucket: pk.split('#')[1],
+        monitor: 'nfm-eks-demo', value: 1 }] };
+    });
+
+    const { current, prior } = await getFlowsWindowPair(288);
+
+    expect(current).toHaveLength(24);
+    expect(prior).toHaveLength(24);
+    expect(current[0].bucket).toBe('2026-07-09T05:00:00Z'); // skips 06:00 (newest closed hour)
+    const pks = ddbMock.commandCalls(QueryCommand)
+      .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string);
+    expect(pks.filter(pk => pk?.startsWith('FLOW#'))).toHaveLength(0); // no tail
+  });
+
+  it('hourly pair shares one concurrency budget across 48 closed-hour parts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T08:00:30.000Z'));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    ddbMock.on(QueryCommand).callsFake(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve(); // yield so concurrent workers overlap
+      inFlight--;
+      return { Items: [] };
+    });
+
+    await getFlowsWindowPair(288); // 2 x 24 closed hours = 48 hourly parts
+
+    // Two per-half pools (24+24) could reach 48 in flight; ONE shared pool caps at 40.
+    expect(maxInFlight).toBeLessThanOrEqual(40);
+    expect(maxInFlight).toBeGreaterThan(1); // sanity: the pool did overlap work
   });
 });
