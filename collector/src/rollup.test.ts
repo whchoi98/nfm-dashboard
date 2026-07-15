@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { hourBucketOf, fiveMinBucketsOfHour, eligibleMissingHours } from './rollup.js';
+import { hourBucketOf, fiveMinBucketsOfHour, eligibleMissingHours, mergeHourEdges } from './rollup.js';
+import type { FlowEdge } from './types.js';
 
 describe('hourBucketOf', () => {
   it('floors to the hour in collector ISO format (no ms)', () => {
@@ -39,5 +40,50 @@ describe('eligibleMissingHours', () => {
     const now = Date.parse('2026-07-15T04:10:00Z');
     const hours = eligibleMissingHours(now, new Set(), 2, 10);
     expect(hours).toEqual(['2026-07-15T03:00:00Z', '2026-07-15T02:00:00Z']);
+  });
+});
+
+const mk = (over: Partial<FlowEdge>): FlowEdge => ({
+  edgeHash: 'e1', monitor: 'm1', metric: 'DATA_TRANSFERRED', category: 'INTER_AZ',
+  bucket: '2026-07-15T03:00:00Z', value: 10, unit: 'Bytes',
+  a: { podName: 'api-1', podNamespace: 'shop' }, b: { podName: 'db-0', podNamespace: 'shop' },
+  traversedConstructs: [], ...over });
+
+describe('mergeHourEdges', () => {
+  const HOUR = '2026-07-15T03:00:00Z';
+
+  it('sums counter values per (monitor, metric, category, edgeHash) and stamps the hour bucket', () => {
+    const out = mergeHourEdges([
+      mk({ bucket: '2026-07-15T03:00:00Z', value: 10 }),
+      mk({ bucket: '2026-07-15T03:05:00Z', value: 32 }),
+      mk({ bucket: '2026-07-15T03:05:00Z', value: 5, edgeHash: 'e2' }),
+    ], HOUR);
+    const e1 = out.find(e => e.edgeHash === 'e1')!;
+    expect(e1.value).toBe(42);
+    expect(e1.bucket).toBe(HOUR);
+    expect(out.find(e => e.edgeHash === 'e2')!.value).toBe(5);
+  });
+
+  it('averages ROUND_TRIP_TIME over present buckets only', () => {
+    const out = mergeHourEdges([
+      mk({ metric: 'ROUND_TRIP_TIME', bucket: '2026-07-15T03:00:00Z', value: 10, unit: 'Milliseconds' }),
+      mk({ metric: 'ROUND_TRIP_TIME', bucket: '2026-07-15T03:10:00Z', value: 30, unit: 'Milliseconds' }),
+    ], HOUR);
+    expect(out[0].value).toBe(20); // mean of 2 present buckets, NOT /12
+  });
+
+  it('carries endpoint info from the LATEST bucket of the edge', () => {
+    const out = mergeHourEdges([
+      mk({ bucket: '2026-07-15T03:00:00Z', a: { podName: 'api-1', podNamespace: 'shop', az: 'old' } }),
+      mk({ bucket: '2026-07-15T03:55:00Z', a: { podName: 'api-1', podNamespace: 'shop', az: 'new' } }),
+    ], HOUR);
+    expect(out[0].a.az).toBe('new');
+  });
+
+  it('caps each (monitor, metric, category) group at capPerGroup by value', () => {
+    const raw = Array.from({ length: 10 }, (_, i) => mk({ edgeHash: `e${i}`, value: i }));
+    const out = mergeHourEdges(raw, HOUR, 3);
+    expect(out).toHaveLength(3);
+    expect(out.map(e => e.edgeHash).sort()).toEqual(['e7', 'e8', 'e9']);
   });
 });
