@@ -27,6 +27,20 @@ it('hflowItem writes HFLOW keys with NO gsi attributes', () => {
   expect(item.gsi3pk).toBeUndefined();
 });
 
+it('hflowItem strips GSI attributes carried by raw read-backs', () => {
+  const raw = { ...edge({ a: { podName: 'api-1', podNamespace: 'shop' } }),
+    gsi1pk: 'POD#shop/api-1', gsi1sk: '2026-07-15T02:00:00Z',
+    gsi2pk: 'POD#shop/db-0', gsi2sk: '2026-07-15T02:00:00Z',
+    gsi3pk: 'EDGE#e1', gsi3sk: '2026-07-15T02:00:00Z#DATA_TRANSFERRED' } as never;
+  const item = hflowItem(raw, 123);
+  expect(item.gsi1pk).toBeUndefined();
+  expect(item.gsi2pk).toBeUndefined();
+  expect(item.gsi3pk).toBeUndefined();
+  expect(item.gsi1sk).toBeUndefined();
+  expect(item.gsi2sk).toBeUndefined();
+  expect(item.gsi3sk).toBeUndefined();
+});
+
 describe('runRollupStep', () => {
   // now = 04:10 → newest eligible hour is 03:00; markers say 02:00 is done.
   const nowMs = Date.parse('2026-07-15T04:10:00Z');
@@ -38,7 +52,10 @@ describe('runRollupStep', () => {
           .toISOString().replace(/\.\d+Z/, 'Z') })) });
     ddbMock.on(QueryCommand, { TableName: tables.flows }).callsFake((input) => {
       const pk = input.ExpressionAttributeValues[':pk'] as string;
-      return { Items: [edge({ bucket: pk.split('#')[1], monitor: pk.split('#')[2], value: 2 })] };
+      // Raw read-backs carry flowItem's GSI keys — the pipeline must strip them.
+      return { Items: [{ ...edge({ bucket: pk.split('#')[1], monitor: pk.split('#')[2], value: 2 }),
+        gsi1pk: 'POD#shop/api-1', gsi1sk: pk.split('#')[1],
+        gsi3pk: 'EDGE#e1', gsi3sk: `${pk.split('#')[1]}#DATA_TRANSFERRED` }] };
     });
     ddbMock.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
     ddbMock.on(PutCommand).resolves({});
@@ -55,6 +72,10 @@ describe('runRollupStep', () => {
     expect(written).toHaveLength(2);
     expect(written[0].pk).toMatch(/^HFLOW#2026-07-15T03:00:00Z#/);
     expect(written[0].value).toBe(24);
+    // No HFLOW item may carry ANY gsi key (index pollution — see hflowItem):
+    for (const item of written) {
+      expect(Object.keys(item).filter(k => k.startsWith('gsi'))).toEqual([]);
+    }
     const marker = ddbMock.commandCalls(PutCommand).find(c =>
       c.args[0].input.Item!.pk === 'HROLL#done')!.args[0].input.Item!;
     expect(marker.sk).toBe('2026-07-15T03:00:00Z');

@@ -13,9 +13,15 @@ const RAW_QUERY_CONCURRENCY = 8;
 /** HFLOW item: FlowEdge payload at hour grain. NO gsi attrs — the pod/edge
  *  indexes stay 5-min-only concerns. */
 export function hflowItem(e: FlowEdge, ttlEpoch: number): Record<string, unknown> {
-  return { ...e,
+  const item: Record<string, unknown> = { ...e,
     pk: `HFLOW#${e.bucket}#${e.monitor}`, sk: `${e.metric}#${e.category}#${e.edgeHash}`,
     ttl: ttlEpoch };
+  // Raw items read back from DynamoDB carry flowItem's GSI keys (and old
+  // pk/sk) through the FlowEdge cast + merge spread — HFLOW rows must never
+  // be indexed (pod/edge lookups are 5-min-grain-only; a leaked hour-sum row
+  // would double-count drilldowns with a 12x spike).
+  for (const k of ['gsi1pk', 'gsi1sk', 'gsi2pk', 'gsi2sk', 'gsi3pk', 'gsi3sk']) delete item[k];
+  return item;
 }
 
 async function listDoneHours(ddb: DynamoDBDocumentClient, metaTable: string): Promise<Set<string>> {
