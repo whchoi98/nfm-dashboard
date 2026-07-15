@@ -666,4 +666,17 @@ describe('windowPlan / windowPairPlan', () => {
     expect(pair.current.map(p => p.bucket)).toEqual(recentBuckets(12).slice(0, 6));
     expect(pair.prior.map(p => p.bucket)).toEqual(recentBuckets(12).slice(6));
   });
+
+  // NO fake timers on purpose (exempt from the file's monotonic-fake-time
+  // convention): the injectable `now` alone must determine every bucket string,
+  // including the raw tail that recentBuckets produces — otherwise callers
+  // passing a historical `now` would silently mix in wall-clock buckets.
+  it('an explicit now parameter determines every bucket without fake timers', () => {
+    const plan = windowPlan(288, Date.parse('2026-07-01T10:17:00Z')); // open hour 10:00
+    const raw = plan.parts.filter(p => p.grain === 'raw');
+    const hourly = plan.parts.filter(p => p.grain === 'hourly');
+    expect(raw.map(p => p.bucket)).toEqual(
+      ['2026-07-01T10:15:00Z', '2026-07-01T10:10:00Z', '2026-07-01T10:05:00Z', '2026-07-01T10:00:00Z']);
+    expect(hourly[0].bucket).toBe('2026-07-01T09:00:00Z');
+  });
 });

@@ -29,10 +29,9 @@ function ddb(): DynamoDBDocumentClient {
  * MUST match the collector bucket formula exactly:
  * new Date(Math.floor(t/300000)*300000).toISOString().replace(/\.\d+Z/,'Z')
  */
-export function recentBuckets(n: number): string[] {
-  const t = Date.now();
+export function recentBuckets(n: number, now = Date.now()): string[] {
   return Array.from({ length: n }, (_, i) =>
-    new Date(Math.floor(t / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'));
+    new Date(Math.floor(now / 300000) * 300000 - i * 300000).toISOString().replace(/\.\d+Z/, 'Z'));
 }
 
 export type WindowPart = { grain: 'raw' | 'hourly'; bucket: string };
@@ -52,14 +51,14 @@ function closedHourBuckets(hoursBack: number, openHourStartMs: number): string[]
 
 export function windowPlan(n: number, now = Date.now()): WindowPlan {
   if (n <= GRAIN_SWITCH_BUCKETS) {
-    const buckets = recentBuckets(n);
+    const buckets = recentBuckets(n, now);
     return { parts: buckets.map(b => ({ grain: 'raw' as const, bucket: b })),
       buckets, windowSeconds: n * 300 };
   }
   const H = Math.round(n / 12);
   const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
   const tailCount = Math.floor((Math.floor(now / 300_000) * 300_000 - openHourStart) / 300_000) + 1;
-  const tail = recentBuckets(tailCount);
+  const tail = recentBuckets(tailCount, now);
   const hours = closedHourBuckets(H, openHourStart);
   const parts: WindowPart[] = [
     ...tail.map(b => ({ grain: 'raw' as const, bucket: b })),
@@ -77,7 +76,7 @@ export function windowPlan(n: number, now = Date.now()): WindowPlan {
 export function windowPairPlan(n: number, now = Date.now()):
     { current: WindowPart[]; prior: WindowPart[]; windowSeconds: number } {
   if (n <= GRAIN_SWITCH_BUCKETS) {
-    const buckets = recentBuckets(2 * n);
+    const buckets = recentBuckets(2 * n, now);
     const part = (b: string): WindowPart => ({ grain: 'raw', bucket: b });
     return { current: buckets.slice(0, n).map(part), prior: buckets.slice(n).map(part),
       windowSeconds: n * 300 };
