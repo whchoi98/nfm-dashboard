@@ -14,9 +14,10 @@ The collector Lambda queries CloudWatch Network Flow Monitor every 5 minutes and
 ### 2. Components
 | Component | Path | Purpose |
 |---|---|---|
-| Dashboard read path | `app/src/lib/ddb.ts` | DynamoDB reads (topology snapshot, flow buckets); `recentBuckets()` 5-min grid keys; 512-socket keep-alive agent + version-aligned in-process cache (valid per collector cycle + 5-min grid) incl. the `cachedLens` lens-response cache (ADR-007) |
+| Dashboard read path | `app/src/lib/ddb.ts` | DynamoDB reads (topology snapshot, flow buckets); `recentBuckets()` 5-min grid keys; 512-socket keep-alive agent + version-aligned in-process cache (valid per collector cycle + 5-min grid) incl. the `cachedLens` lens-response cache (ADR-007); `windowPlan`/`windowPairPlan` route windows >36 buckets (>3h) to HFLOW rollups (ADR-009) |
+| Hourly rollup rows | `collector/src/rollup.ts` + `collector/src/rollup-store.ts` | Hour-grain `HFLOW#<hour>#<monitor>` rows written by the collector's hour-close step after each closed hour (marker `HROLL#done` in meta), read by `windowPlan` for windows >3h |
 | Collector write path | `collector/src/storage.ts` | `writeCycle` / `buildTopology`: persists edges, snapshots, cycle stats |
-| Collector entry | `collector/src/handler.ts` | Lambda handler: NFM query matrix, workload insights, DNS collection per cycle |
+| Collector entry | `collector/src/handler.ts` | Lambda handler: NFM query matrix, workload insights, DNS collection, hourly rollup per cycle |
 | NFM queries | `collector/src/nfm-query.ts` | `runQueryMatrix` — top-contributor queries per metric |
 | CloudWatch metrics | `app/src/lib/cw-metrics.ts` | Monitor metrics reads (`listMonitorNames`, series) |
 | Archive transform | `collector/src/archive-transform.ts` | DDB Stream (`NEW_IMAGE`) → `flattenFlowImage` (→ `FlatFlowRow`) → Firehose `PutRecordBatch` |
@@ -49,9 +50,10 @@ collector Lambda가 5분마다 CloudWatch Network Flow Monitor를 조회해 flow
 ### 2. 구성요소
 | 구성요소 | 경로 | 목적 |
 |---|---|---|
-| 대시보드 읽기 경로 | `app/src/lib/ddb.ts` | DynamoDB 읽기(토폴로지 스냅샷, flow 버킷); `recentBuckets()` 5분 그리드 키 |
+| 대시보드 읽기 경로 | `app/src/lib/ddb.ts` | DynamoDB 읽기(토폴로지 스냅샷, flow 버킷); `recentBuckets()` 5분 그리드 키; 512-소켓 keep-alive agent + 버전 정렬 인프로세스 캐시(수집기 사이클 + 5분 그리드 단위 유효) 및 `cachedLens` lens 응답 캐시(ADR-007); `windowPlan`/`windowPairPlan`이 36버킷(3시간) 초과 윈도우를 HFLOW rollup으로 라우팅(ADR-009) |
+| 시간별 rollup row | `collector/src/rollup.ts` + `collector/src/rollup-store.ts` | 매 시간 마감 후 수집기의 hour-close 단계가 기록하는 시간 단위 `HFLOW#<hour>#<monitor>` row(meta의 `HROLL#done` 마커), 3시간 초과 윈도우에서 `windowPlan`이 읽음 |
 | collector 쓰기 경로 | `collector/src/storage.ts` | `writeCycle` / `buildTopology`: edge·스냅샷·사이클 통계 저장 |
-| collector 엔트리 | `collector/src/handler.ts` | Lambda 핸들러: 사이클마다 NFM query matrix, workload insights, DNS 수집 |
+| collector 엔트리 | `collector/src/handler.ts` | Lambda 핸들러: 사이클마다 NFM query matrix, workload insights, DNS 수집, 시간별 rollup |
 | NFM 쿼리 | `collector/src/nfm-query.ts` | `runQueryMatrix` — 메트릭별 top-contributor 쿼리 |
 | CloudWatch 메트릭 | `app/src/lib/cw-metrics.ts` | 모니터 메트릭 조회(`listMonitorNames`, 시계열) |
 | 아카이브 transform | `collector/src/archive-transform.ts` | DDB 스트림(`NEW_IMAGE`) → `flattenFlowImage`(→ `FlatFlowRow`) → Firehose `PutRecordBatch` |

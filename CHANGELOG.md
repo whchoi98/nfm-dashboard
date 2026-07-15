@@ -39,8 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Production 502/504 outage (2026-07-14): the 2 GB task was OOM-killed (exit 137) under analytics load — the DynamoDB bucket-query fan-out queued hundreds of requests on the SDK's default 50-socket agent (stalling every menu) while multi-day raw flow windows filled the heap. Fixed with a 512-socket keep-alive agent, `getFlowsWindowPair` joining the shared window cache with a single concurrency pool across both halves, settle-based cache eviction, and the 4096 MiB task.
 - CPU crash loop (2026-07-15): opening a 7d lens view cold ran minutes of synchronous fetch+aggregation on the 1-vCPU task, blocking the event loop until ALB health checks killed the task; the in-process cache died with it and browser polling immediately re-triggered the same cold compute on the replacement. Fixed by the 24h interactive cap and the health-check tolerance above.
-
-### Fixed
 - Intermittent login failure ("first attempt fails, retry works"): concurrent `/api/auth/login` calls (stale tabs after re-enabling auth, or a double button press) overwrote the one-shot `state`/`pkce`/`nonce` cookies, so the first callback failed CSRF `state` validation. The callback now transparently auto-restarts the login once on a transient/CSRF failure (guarded by an `nfm_auth_retry` marker against loops); token-exchange / id_token-verification failures are not retried. The failing step is now logged (step name only, no secret values).
 
 ## [0.10.0] - 2026-07-12
@@ -226,8 +224,6 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 ### Fixed
 - 프로덕션 502/504 장애 (2026-07-14): 분석 부하에서 2 GB 태스크가 OOM으로 사살(exit 137)되던 문제 — DynamoDB 버킷 쿼리 fan-out이 SDK 기본 50소켓 agent에 수백 요청을 큐잉(전 메뉴 지연)하는 동안 다일(multi-day) 원시 flow 윈도우가 힙을 채움. 512소켓 keep-alive agent, `getFlowsWindowPair`의 공유 윈도우 캐시 합류 + 양쪽 half 단일 동시성 풀, settle 기준 캐시 축출, 4096 MiB 태스크로 수정.
 - CPU 크래시 루프 (2026-07-15): 7d lens 뷰 콜드 조회가 1 vCPU 태스크에서 수 분간 동기 fetch+집계를 실행해 이벤트 루프를 블록, ALB 헬스체크가 태스크를 사살하고 인프로세스 캐시가 함께 소실되어 브라우저 폴링이 교체 태스크에 동일한 콜드 계산을 즉시 재유발하던 문제. 위의 24h 인터랙티브 상한과 헬스체크 완화로 수정.
-
-### Fixed
 - 간헐적 로그인 실패("첫 시도 실패, 재시도 성공"): 동시 `/api/auth/login` 호출(인증 재활성화 후 남은 stale 탭, 또는 버튼 중복 클릭)이 1회성 `state`/`pkce`/`nonce` 쿠키를 덮어써 첫 콜백이 CSRF `state` 검증에 실패하던 문제. 이제 콜백이 transient/CSRF 실패 시 로그인을 1회 투명하게 자동 재시작(`nfm_auth_retry` 마커로 루프 방지)하며, 토큰 교환·id_token 검증 실패는 재시도하지 않는다. 실패 단계는 로그로 남긴다(단계명만, 시크릿 값 없음).
 
 ## [0.10.0] - 2026-07-12
