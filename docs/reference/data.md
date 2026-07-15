@@ -14,7 +14,7 @@ The collector Lambda queries CloudWatch Network Flow Monitor every 5 minutes and
 ### 2. Components
 | Component | Path | Purpose |
 |---|---|---|
-| Dashboard read path | `app/src/lib/ddb.ts` | DynamoDB reads (topology snapshot, flow buckets); `recentBuckets()` 5-min grid keys |
+| Dashboard read path | `app/src/lib/ddb.ts` | DynamoDB reads (topology snapshot, flow buckets); `recentBuckets()` 5-min grid keys; 512-socket keep-alive agent + version-aligned in-process cache (valid per collector cycle + 5-min grid) incl. the `cachedLens` lens-response cache (ADR-007) |
 | Collector write path | `collector/src/storage.ts` | `writeCycle` / `buildTopology`: persists edges, snapshots, cycle stats |
 | Collector entry | `collector/src/handler.ts` | Lambda handler: NFM query matrix, workload insights, DNS collection per cycle |
 | NFM queries | `collector/src/nfm-query.ts` | `runQueryMatrix` — top-contributor queries per metric |

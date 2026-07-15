@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The middleware now honors an explicit `AUTH_DISABLED=1` in production, injected only via the `authDisabled` CDK context (default OFF — login enforced). Only the Cognito session gate is skipped when set; the `x-origin-verify` CloudFront perimeter and all Cognito resources stay either way (ADR-005). `scripts/smoke.sh` / e2e mirror the toggle via `E2E_AUTH_DISABLED`.
+- Align the flows/lens cache to the collector cycle: cached windows and computed lens responses (`cachedLens`, wired into the 8 pure flow-lens routes) stay valid until the collector writes a new cycle or the 5-minute bucket grid rolls, so polling serves from memory between cycles (measured: `/api/network?buckets=72` 4.5 s → 0.02 s, `/api/anomalies?buckets=288` 40 s → 0.13 s warm) while new data still appears within ~15 s of a cycle write. ElastiCache Serverless was evaluated and declined for the single-task topology (ADR-007).
+- Cap interactive lens time ranges at 24h (`MAX_BUCKETS` 288): the 7d option moves off the lens pages until collector pre-aggregated rollups land — 7d+ queries are served by the Athena-backed `/history` page (ADR-008). Legacy `?buckets=2016` requests clamp to 288, and a persisted 7d default range falls back to 1h.
+- Raise the app task to 4096 MiB (with a V8 heap ceiling via `NODE_OPTIONS=--max-old-space-size=3072`) and the ALB target group `unhealthyThresholdCount` to 5, so a slow cold 24h window compute can no longer get the task killed mid-computation.
+
+### Fixed
+- Production 502/504 outage (2026-07-14): the 2 GB task was OOM-killed (exit 137) under analytics load — the DynamoDB bucket-query fan-out queued hundreds of requests on the SDK's default 50-socket agent (stalling every menu) while multi-day raw flow windows filled the heap. Fixed with a 512-socket keep-alive agent, `getFlowsWindowPair` joining the shared window cache with a single concurrency pool across both halves, settle-based cache eviction, and the 4096 MiB task.
+- CPU crash loop (2026-07-15): opening a 7d lens view cold ran minutes of synchronous fetch+aggregation on the 1-vCPU task, blocking the event loop until ALB health checks killed the task; the in-process cache died with it and browser polling immediately re-triggered the same cold compute on the replacement. Fixed by the 24h interactive cap and the health-check tolerance above.
 
 ### Fixed
 - Intermittent login failure ("first attempt fails, retry works"): concurrent `/api/auth/login` calls (stale tabs after re-enabling auth, or a double button press) overwrote the one-shot `state`/`pkce`/`nonce` cookies, so the first callback failed CSRF `state` validation. The callback now transparently auto-restarts the login once on a transient/CSRF failure (guarded by an `nfm_auth_retry` marker against loops); token-exchange / id_token-verification failures are not retried. The failing step is now logged (step name only, no secret values).
@@ -203,6 +210,13 @@ First full release: AWS Network Flow Monitor (NFM) Pod-to-Pod observability dash
 
 ### Changed
 - 미들웨어가 프로덕션에서도 명시적 `AUTH_DISABLED=1`을 허용 — `authDisabled` CDK 컨텍스트로만 주입 (기본 OFF — 로그인 강제). 설정 시 Cognito 세션 게이트만 스킵되며 `x-origin-verify` CloudFront 경계와 Cognito 리소스는 어느 경우든 유지 (ADR-005). `scripts/smoke.sh`/e2e는 `E2E_AUTH_DISABLED`로 토글을 미러링.
+- flows/lens 캐시를 수집기 사이클에 정렬: 캐시된 윈도우와 계산된 lens 응답(`cachedLens`, 순수 flow-lens 라우트 8개에 적용)이 수집기가 새 사이클을 기록하거나 5분 버킷 그리드가 넘어갈 때까지 유효 — 사이클 사이 폴링은 메모리에서 응답 (실측: `/api/network?buckets=72` 4.5초 → 0.02초, `/api/anomalies?buckets=288` 40초 → 0.13초 warm), 새 데이터는 사이클 기록 후 ~15초 내 반영. 단일 태스크 토폴로지에서 ElastiCache Serverless는 검토 후 미채택 (ADR-007).
+- 인터랙티브 lens 시간 범위를 24h로 상한 (`MAX_BUCKETS` 288): 수집기 사전 집계(rollup) 도입 전까지 7d 옵션을 lens 페이지에서 제거 — 7d+ 조회는 Athena 기반 `/history` 페이지가 담당 (ADR-008). 레거시 `?buckets=2016` 요청은 288로 클램프, 저장된 7d 기본 범위는 1h로 폴백.
+- 앱 태스크를 4096 MiB로 증설 (`NODE_OPTIONS=--max-old-space-size=3072` V8 힙 상한 포함) 및 ALB 타깃 그룹 `unhealthyThresholdCount`를 5로 상향 — 느린 콜드 24h 윈도우 계산 도중 태스크가 사살되지 않도록 조치.
+
+### Fixed
+- 프로덕션 502/504 장애 (2026-07-14): 분석 부하에서 2 GB 태스크가 OOM으로 사살(exit 137)되던 문제 — DynamoDB 버킷 쿼리 fan-out이 SDK 기본 50소켓 agent에 수백 요청을 큐잉(전 메뉴 지연)하는 동안 다일(multi-day) 원시 flow 윈도우가 힙을 채움. 512소켓 keep-alive agent, `getFlowsWindowPair`의 공유 윈도우 캐시 합류 + 양쪽 half 단일 동시성 풀, settle 기준 캐시 축출, 4096 MiB 태스크로 수정.
+- CPU 크래시 루프 (2026-07-15): 7d lens 뷰 콜드 조회가 1 vCPU 태스크에서 수 분간 동기 fetch+집계를 실행해 이벤트 루프를 블록, ALB 헬스체크가 태스크를 사살하고 인프로세스 캐시가 함께 소실되어 브라우저 폴링이 교체 태스크에 동일한 콜드 계산을 즉시 재유발하던 문제. 위의 24h 인터랙티브 상한과 헬스체크 완화로 수정.
 
 ### Fixed
 - 간헐적 로그인 실패("첫 시도 실패, 재시도 성공"): 동시 `/api/auth/login` 호출(인증 재활성화 후 남은 stale 탭, 또는 버튼 중복 클릭)이 1회성 `state`/`pkce`/`nonce` 쿠키를 덮어써 첫 콜백이 CSRF `state` 검증에 실패하던 문제. 이제 콜백이 transient/CSRF 실패 시 로그인을 1회 투명하게 자동 재시작(`nfm_auth_retry` 마커로 루프 방지)하며, 토큰 교환·id_token 검증 실패는 재시도하지 않는다. 실패 단계는 로그로 남긴다(단계명만, 시크릿 값 없음).
