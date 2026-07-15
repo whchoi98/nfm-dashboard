@@ -58,20 +58,27 @@ export function windowPlan(n: number, now = Date.now()): WindowPlan {
   const H = Math.round(n / 12);
   const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
   const tailCount = Math.floor((Math.floor(now / 300_000) * 300_000 - openHourStart) / 300_000) + 1;
-  const tail = recentBuckets(tailCount, now);
-  const hours = closedHourBuckets(H, openHourStart);
+  // The newest CLOSED hour is ALWAYS read at raw 5-min grain: its HFLOW row
+  // lands ~5-15 min after the hour closes (collector rollup lag), so reading
+  // it hourly would drop that hour from every >3h view once per hour (the
+  // sawtooth). Its raw rows exist immediately and the 7d raw TTL covers it.
+  const tail = recentBuckets(tailCount + 12, now);
+  const hours = closedHourBuckets(H - 1, openHourStart - HOUR_MS);
   const parts: WindowPart[] = [
     ...tail.map(b => ({ grain: 'raw' as const, bucket: b })),
     ...hours.map(b => ({ grain: 'hourly' as const, bucket: b }))];
   return { parts, buckets: parts.map(p => p.bucket),
-    windowSeconds: H * 3600 + tailCount * 300 };
+    // (H-1)*3600 + (tailCount+12)*300 === H*3600 + tailCount*300 — unchanged in total.
+    windowSeconds: (H - 1) * 3600 + (tailCount + 12) * 300 };
 }
 
 /**
  * Pair plan: 2H CLOSED hours split symmetrically H/H — no tail on either half.
  * An asymmetric tail would bias every window-over-window delta (movers,
  * anomalies) toward the current window; the pair path trades <=1h of
- * freshness for symmetry (spec 2026-07-15-hourly-rollups).
+ * freshness for symmetry (spec 2026-07-15-hourly-rollups). Both halves start
+ * at the SECOND newest closed hour — the newest one may not be rolled up yet
+ * (collector lag), and a mixed-grain half would break symmetry.
  */
 export function windowPairPlan(n: number, now = Date.now()):
     { current: WindowPart[]; prior: WindowPart[]; windowSeconds: number } {
@@ -83,7 +90,7 @@ export function windowPairPlan(n: number, now = Date.now()):
   }
   const H = Math.round(n / 12);
   const openHourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
-  const hours = closedHourBuckets(2 * H, openHourStart);
+  const hours = closedHourBuckets(2 * H, openHourStart - HOUR_MS);
   const part = (b: string): WindowPart => ({ grain: 'hourly', bucket: b });
   return { current: hours.slice(0, H).map(part), prior: hours.slice(H).map(part),
     windowSeconds: H * 3600 };

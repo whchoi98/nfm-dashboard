@@ -624,37 +624,41 @@ describe('windowPlan / windowPairPlan', () => {
     expect(plan.windowSeconds).toBe(12 * 300);
   });
 
-  it('n > 36 quantizes to H=round(n/12) closed hours plus the open-hour 5-min tail', () => {
+  it('n > 36 reads the newest closed hour at RAW grain: H-1 hourly parts + a 12-bucket-extended tail', () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-09T02:17:33.000Z')); // open hour 02:00, tail = 02:00..02:15
+    vi.setSystemTime(new Date('2026-07-09T02:17:33.000Z')); // open hour 02:00, tail = 01:00..02:15
     const plan = windowPlan(288); // 24h -> H=24
     const raw = plan.parts.filter(p => p.grain === 'raw');
     const hourly = plan.parts.filter(p => p.grain === 'hourly');
-    expect(raw.map(p => p.bucket)).toEqual(
-      ['2026-07-09T02:15:00Z', '2026-07-09T02:10:00Z', '2026-07-09T02:05:00Z', '2026-07-09T02:00:00Z']);
-    expect(hourly).toHaveLength(24);
-    expect(hourly[0].bucket).toBe('2026-07-09T01:00:00Z'); // newest CLOSED hour
-    expect(hourly[23].bucket).toBe('2026-07-08T02:00:00Z');
+    // 4 open-hour buckets + the newest closed hour's 12 (its HFLOW row lags
+    // the collector by ~5-15 min every hour — raw rows exist immediately):
+    expect(raw.map(p => p.bucket)).toEqual(recentBuckets(16));
+    expect(raw[0].bucket).toBe('2026-07-09T02:15:00Z');
+    expect(raw[15].bucket).toBe('2026-07-09T01:00:00Z');
+    expect(hourly).toHaveLength(23); // hourly starts at the SECOND closed hour
+    expect(hourly[0].bucket).toBe('2026-07-09T00:00:00Z');
+    expect(hourly[22].bucket).toBe('2026-07-08T02:00:00Z');
     expect(plan.buckets).toEqual(plan.parts.map(p => p.bucket)); // newest-first, tail then hours
-    expect(plan.windowSeconds).toBe(24 * 3600 + 4 * 300);
+    expect(plan.windowSeconds).toBe(23 * 3600 + 16 * 300); // === 24h + 20min, unchanged in total
   });
 
-  it('7d (2016) plans 168 closed hours', () => {
+  it('7d (2016) plans 167 hourly parts (newest closed hour stays raw)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-09T03:02:00.000Z'));
     const plan = windowPlan(2016);
-    expect(plan.parts.filter(p => p.grain === 'hourly')).toHaveLength(168);
+    expect(plan.parts.filter(p => p.grain === 'hourly')).toHaveLength(167);
+    expect(plan.parts.filter(p => p.grain === 'raw')).toHaveLength(13); // 1 open + 12 newest-closed
   });
 
-  it('pair plan over 36 buckets is symmetric closed hours with NO tail', () => {
+  it('pair plan over 36 buckets is symmetric closed hours, NO tail, shifted 1h off the newest closed hour', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-09T03:20:00.000Z')); // open hour 03:00
     const pair = windowPairPlan(288); // H=24 per half
     expect(pair.current).toHaveLength(24);
     expect(pair.prior).toHaveLength(24);
     expect(pair.current.every(p => p.grain === 'hourly')).toBe(true);
-    expect(pair.current[0].bucket).toBe('2026-07-09T02:00:00Z'); // newest closed hour
-    expect(pair.prior[0].bucket).toBe('2026-07-08T02:00:00Z');   // continues where current ends
+    expect(pair.current[0].bucket).toBe('2026-07-09T01:00:00Z'); // skips 02:00 (may not be rolled up yet)
+    expect(pair.prior[0].bucket).toBe('2026-07-08T01:00:00Z');   // continues where current ends
     expect(pair.windowSeconds).toBe(24 * 3600);
   });
 
@@ -672,12 +676,14 @@ describe('windowPlan / windowPairPlan', () => {
   // including the raw tail that recentBuckets produces — otherwise callers
   // passing a historical `now` would silently mix in wall-clock buckets.
   it('an explicit now parameter determines every bucket without fake timers', () => {
-    const plan = windowPlan(288, Date.parse('2026-07-01T10:17:00Z')); // open hour 10:00
+    const now = Date.parse('2026-07-01T10:17:00Z'); // open hour 10:00
+    const plan = windowPlan(288, now);
     const raw = plan.parts.filter(p => p.grain === 'raw');
     const hourly = plan.parts.filter(p => p.grain === 'hourly');
-    expect(raw.map(p => p.bucket)).toEqual(
-      ['2026-07-01T10:15:00Z', '2026-07-01T10:10:00Z', '2026-07-01T10:05:00Z', '2026-07-01T10:00:00Z']);
-    expect(hourly[0].bucket).toBe('2026-07-01T09:00:00Z');
+    expect(raw.map(p => p.bucket)).toEqual(recentBuckets(16, now)); // 4 open + 12 newest-closed-hour
+    expect(raw[0].bucket).toBe('2026-07-01T10:15:00Z');
+    expect(raw[15].bucket).toBe('2026-07-01T09:00:00Z');
+    expect(hourly[0].bucket).toBe('2026-07-01T08:00:00Z'); // second closed hour
   });
 });
 
@@ -689,9 +695,9 @@ describe('grain-aware window fetch', () => {
     else process.env.MONITORS = prevMonitors;
   });
 
-  it('n > 36 queries HFLOW partitions for closed hours and FLOW for the tail', async () => {
+  it('n > 36 queries HFLOW partitions for closed hours and FLOW for the extended tail', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-09T05:07:00.000Z')); // tail = 05:05, 05:00
+    vi.setSystemTime(new Date('2026-07-09T05:07:00.000Z')); // open-hour tail = 05:05, 05:00
     ddbMock.on(QueryCommand).resolves({ Items: [] });
 
     await getFlowsWindow(288);
@@ -701,10 +707,12 @@ describe('grain-aware window fetch', () => {
       .filter(pk => pk?.startsWith('FLOW#') || pk?.startsWith('HFLOW#'));
     const hflow = pks.filter(pk => pk.startsWith('HFLOW#'));
     const flow = pks.filter(pk => pk.startsWith('FLOW#'));
-    expect(hflow).toHaveLength(24); // 24 closed hours x 1 monitor
-    expect(hflow).toContain('HFLOW#2026-07-09T04:00:00Z#nfm-eks-demo');
-    expect(flow).toHaveLength(2);   // 05:05 + 05:00 tail
+    expect(hflow).toHaveLength(23); // hourly from the SECOND closed hour x 1 monitor
+    expect(hflow).toContain('HFLOW#2026-07-09T03:00:00Z#nfm-eks-demo');
+    expect(hflow).not.toContain('HFLOW#2026-07-09T04:00:00Z#nfm-eks-demo'); // newest closed hour is raw
+    expect(flow).toHaveLength(14);  // 2 open-hour + 12 newest-closed-hour buckets
     expect(flow).toContain('FLOW#2026-07-09T05:05:00Z#nfm-eks-demo');
+    expect(flow).toContain('FLOW#2026-07-09T04:00:00Z#nfm-eks-demo');
   });
 
   it('n <= 36 keeps today\'s raw path byte-identical', async () => {
@@ -732,7 +740,7 @@ describe('grain-aware window fetch', () => {
 
     expect(current).toHaveLength(24);
     expect(prior).toHaveLength(24);
-    expect(current[0].bucket).toBe('2026-07-09T06:00:00Z'); // newest closed hour
+    expect(current[0].bucket).toBe('2026-07-09T05:00:00Z'); // skips 06:00 (newest closed hour)
     const pks = ddbMock.commandCalls(QueryCommand)
       .map(c => (c.args[0].input.ExpressionAttributeValues ?? {})[':pk'] as string);
     expect(pks.filter(pk => pk?.startsWith('FLOW#'))).toHaveLength(0); // no tail
